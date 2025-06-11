@@ -1,6 +1,5 @@
 from Agent.graph import create_agent_graph
 from RAG.Retrieval import MockRetriever
-from utils import logger
 
 
 def run_agent():
@@ -18,21 +17,27 @@ def run_agent():
     }
 
     # Run until interrupt
-    result = graph.invoke(state, config)
+    graph.invoke(state, config)
 
-    while result.get("next_node") != "END":
-        logger.info(result)
+    while True:
+        # logger.info(f"Graph state result: {result}")
         # Show feedback request
-        if "feedback_request" in result:
-            print(result["feedback_request"])
+        current_state = graph.get_state(config)
+
+        if current_state.next == ():  # Execution finished
+            break
 
         # Get user input
-        user_input = input("\nTwój feedback: ")
+        print(current_state.values.get("feedback_request", ""))
+        user_input = input("\nYour feedback: ")
 
         # Continue with user input
-        result = graph.invoke({**result, "user_input": user_input}, config)
+        graph.update_state(config, {"user_input": user_input})
+        graph.invoke(None, config)
 
-    print(f"\nFinal topics: {result.get('confirmed_topics', [])}")
+    print(
+        f"\nFinal topics: {graph.get_state(config).values.get('confirmed_topics', [])}"
+    )
 
 
 if __name__ == "__main__":

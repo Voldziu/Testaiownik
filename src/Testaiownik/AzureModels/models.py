@@ -1,5 +1,4 @@
 import os
-from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 from typing import Optional
 from utils.logger import logger
@@ -47,7 +46,7 @@ def get_llm(
     )
 
     # Log comprehensive LLM status
-    logger.info(f"✅ LLM instance created successfully")
+    logger.info("✅ LLM instance created successfully")
     logger.info(f"LLM Endpoint: {getattr(llm, 'azure_endpoint', 'Unknown')}")
     logger.info(f"LLM Deployment: {getattr(llm, 'deployment_name', 'Unknown')}")
     logger.info(f"LLM API Version: {getattr(llm, 'openai_api_version', 'Unknown')}")

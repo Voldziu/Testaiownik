@@ -28,3 +28,8 @@ class BatchAnalysis(BaseModel):
         description="Summary of all content processed so far"
     )
     batch_summary: str = Field(description="Summary of current batch only")
+
+
+class TopicConsolidation(BaseModel):
+    consolidated_topics: List[str] = Field(description="Final consolidated topic list")
+    reasoning: str = Field(description="How topics were consolidated")

@@ -1,6 +1,6 @@
 # src/testaiownik/agent/graph.py - remove subtopics node
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from functools import partial
 from RAG.Retrieval import DocumentRetriever
