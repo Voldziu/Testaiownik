@@ -1,5 +1,5 @@
-
-from ..RAG import MockRetriever
+from RAG.Retrieval import MockRetriever
+from utils import logger
 
 mr = MockRetriever()
-print(mr.retrieve("test query"))
+logger.info(mr.get_all_chunks())
