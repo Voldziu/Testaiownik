@@ -14,7 +14,7 @@ from Agent.nodes import (
 from utils import logger
 
 
-def create_agent_graph(retriever: DocumentRetriever = None):
+def create_agent_graph(retriever: DocumentRetriever = None) -> StateGraph:
     workflow = StateGraph(AgentState)
     logger.info("Creating agent graph")
 
