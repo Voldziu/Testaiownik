@@ -56,7 +56,7 @@ AI-powered learning assistant that automatically generates test questions from e
 
 3. **Test the current main (for tests)**
    ```bash
-   uv run python src/main.py
+   uv run python src/Testaiownik/main.py
    ```
 
 ### Infrastructure Deployment (Optional)
@@ -120,7 +120,7 @@ uv add package-name
 uv add --group dev package-name
 
 # Run Python scripts
-uv run python src/main.py
+uv run python src/Testaiownik/main.py
 
 # Create virtual environment
 uv venv
@@ -232,7 +232,7 @@ This is an active development project in Sprint 1. Key areas needing attention:
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature/amazing-feature`
 3. Install dependencies: `uv sync --group dev`
-4. Make changes and test: `uv run python src/main.py`
+4. Make changes and test: `uv run python src/Testaiownik/main.py`
 5. Format code: `uv run black src/`
 6. Commit changes: `git commit -m 'Add amazing feature'`
 7. Push branch: `git push origin feature/amazing-feature`
@@ -240,7 +240,7 @@ This is an active development project in Sprint 1. Key areas needing attention:
 
 ## 📚 Documentation
 
-- **Architecture**: Check `src/Testaiownik/Agent/` for current implementation
+- **Agent Architecture**: Check `src/Testaiownik/Agent/` for current implementation
 - **Infrastructure**: Review `IaaC/` for Azure deployment details
 
 
