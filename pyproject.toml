@@ -21,5 +21,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "mypy>=1.16.0",
     "ruff>=0.11.13",
 ]
