@@ -67,16 +67,37 @@ def get_embedding_model(
     deployment_name: Optional[str] = None,
     api_version: Optional[str] = None,
 ):
-    """Get the embedding model instance."""
+    """Get the embedding model instance with improved error handling."""
 
-    azure_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
-    api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
-    deployment_name = deployment_name or os.getenv("EMBEDDING_MODEL_NAME")
-    api_version = api_version or os.getenv("EMBEDDING_MODEL_VERSION")
+    azure_endpoint = azure_endpoint or config.AZURE_ENDPOINT
+    api_key = api_key or config.API_KEY
+    deployment_name = deployment_name or config.EMBEDDING_MODEL_NAME
+    api_version = api_version or config.EMBEDDING_MODEL_VERSION
 
-    return AzureOpenAIEmbeddings(
-        azure_endpoint=azure_endpoint,
-        api_key=api_key,
-        deployment_name=deployment_name,
-        api_version=api_version,
-    )
+    logger.info(f"Creating embedding model with:")
+    logger.info(f"  Endpoint: {azure_endpoint}")
+    logger.info(f"  Deployment: {deployment_name}")
+    logger.info(f"  API Version: {api_version}")
+
+    try:
+        embedding_model = AzureOpenAIEmbeddings(
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
+            azure_deployment=deployment_name,  
+            api_version=api_version,
+        )
+        
+       
+        logger.info("Testing embedding model...")
+        test_embedding = embedding_model.embed_query("test")
+        logger.info(f"Embedding model test successful. Vector size: {len(test_embedding)}")
+        
+        return embedding_model
+        
+    except Exception as e:
+        logger.error(f"Failed to create embedding model: {e}")
+        logger.error(f"Check your Azure OpenAI configuration:")
+        logger.error(f"  - Endpoint: {azure_endpoint}")
+        logger.error(f"  - Deployment name: {deployment_name}")
+        logger.error(f"  - API version: {api_version}")
+        raise
