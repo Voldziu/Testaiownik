@@ -1,11 +1,7 @@
 # src/testaiownik/agent/models.py
 from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional, Literal, Self
-
-
-class WeightedTopic(BaseModel):
-    topic: str = Field(description="Topic name")
-    weight: float = Field(description="Topic weight between 0 and 1", ge=0, le=1)
+from Agent.Shared import WeightedTopic
 
 
 class UserFeedback(BaseModel):

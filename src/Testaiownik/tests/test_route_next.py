@@ -1,5 +1,5 @@
 # src/Testaiownik/tests/test_route_next.py
-from Agent.nodes import route_next
+from Agent.TopicSelection.nodes import route_next
 
 
 class TestRouteNext:

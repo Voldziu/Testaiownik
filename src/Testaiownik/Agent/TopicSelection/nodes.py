@@ -1,7 +1,7 @@
 from trustcall import create_extractor
 from typing import Dict, Any, List
-from Agent.state import AgentState
-from Agent.models import BatchAnalysis, FeedbackInterpretation, TopicConsolidation
+from .state import AgentState
+from .models import BatchAnalysis, FeedbackInterpretation, TopicConsolidation
 from AzureModels import get_llm
 from RAG.Retrieval import DocumentRetriever, MockRetriever
 from utils.logger import logger

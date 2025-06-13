@@ -1,4 +1,4 @@
-from Agent.nodes import request_feedback
+from Agent.TopicSelection.nodes import request_feedback
 
 
 class TestRequestFeedback:

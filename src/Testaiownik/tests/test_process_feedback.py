@@ -1,6 +1,6 @@
 # src/Testaiownik/tests/test_process_feedback.py
 from unittest.mock import Mock, patch
-from Agent.nodes import process_feedback
+from Agent.TopicSelection.nodes import process_feedback
 
 
 class TestProcessFeedbackStateLogic:
@@ -33,7 +33,7 @@ class TestProcessFeedbackStateLogic:
         }
 
         # Mock LLM to return accept action
-        with patch("Agent.nodes.get_llm") as mock_get_llm:
+        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
@@ -63,7 +63,7 @@ class TestProcessFeedbackStateLogic:
             "user_input": "I accept these topics",
         }
 
-        with patch("Agent.nodes.get_llm") as mock_get_llm:
+        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
@@ -87,7 +87,7 @@ class TestProcessFeedbackStateLogic:
             "user_input": "Please modify these topics",
         }
 
-        with patch("Agent.nodes.get_llm") as mock_get_llm:
+        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
@@ -111,7 +111,7 @@ class TestProcessFeedbackStateLogic:
             "user_input": "I accept",
         }
 
-        with patch("Agent.nodes.get_llm") as mock_get_llm:
+        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
@@ -132,7 +132,7 @@ class TestProcessFeedbackStateLogic:
         """Test error handling for invalid LLM action response"""
         state = {"suggested_topics": ["Topic1"], "user_input": "Confusing input"}
 
-        with patch("Agent.nodes.get_llm") as mock_get_llm:
+        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(

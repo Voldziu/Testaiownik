@@ -4,13 +4,8 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from functools import partial
 from RAG.Retrieval import DocumentRetriever
-from Agent.state import AgentState
-from Agent.nodes import (
-    analyze_documents,
-    request_feedback,
-    process_feedback,
-    route_next,
-)
+from .state import AgentState
+from .nodes import analyze_documents, request_feedback, process_feedback, route_next
 from utils import logger
 
 

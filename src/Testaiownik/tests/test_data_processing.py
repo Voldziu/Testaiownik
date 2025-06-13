@@ -1,6 +1,6 @@
 # Import the helper functions
 from unittest.mock import Mock, patch
-from Agent.nodes import (
+from Agent.TopicSelection.nodes import (
     _process_batch,
     _consolidate_topics_with_history,
 )
@@ -9,7 +9,7 @@ from Agent.nodes import (
 class TestProcessBatch:
     """Test the REAL process_batch function from your code"""
 
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_prompt_creation(self, mock_extractor):
         """Test how your process_batch creates prompts"""
         # Mock the extractor
@@ -46,7 +46,7 @@ class TestProcessBatch:
         assert "accumulated_summary" in result
         assert result["current_topics"] == ["Algorithm", "Sorting"]
 
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_with_empty_previous_context(self, mock_extractor):
         """Test process_batch with first batch (no previous context)"""
         mock_extract_instance = Mock()
@@ -68,7 +68,7 @@ class TestProcessBatch:
         assert "This is the first batch." in prompt
         assert "First batch content" in prompt
 
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_return_structure(self, mock_extractor):
         """Test that process_batch returns the correct structure"""
         expected_response = {
@@ -91,7 +91,7 @@ class TestProcessBatch:
         assert result["accumulated_summary"] == expected_response["accumulated_summary"]
         assert result["batch_summary"] == expected_response["batch_summary"]
 
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_with_empty_batch_text(self, mock_extractor):
         """Test process_batch with empty or minimal batch text"""
         mock_extract_instance = Mock()
@@ -107,7 +107,7 @@ class TestProcessBatch:
         assert result["current_topics"] == []
         mock_extract_instance.invoke.assert_called_once()
 
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_with_very_long_content(self, mock_extractor):
         """Test process_batch with very long batch content"""
         mock_extract_instance = Mock()
@@ -151,7 +151,7 @@ class TestConsolidateTopicsWithHistory:
         assert set(result) == topics
         assert len(result) == 3
 
-    @patch("Agent.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.get_llm")
     def test_consolidate_with_history_present(self, mock_get_llm):
         """Test your function when conversation history exists"""
         topics = {"Algorithm", "Sorting", "Trees"}
@@ -198,7 +198,7 @@ class TestConsolidateTopicsWithHistory:
             "Tree Structures",
         ]
 
-    @patch("Agent.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.get_llm")
     def test_consolidate_uses_latest_feedback(self, mock_get_llm):
         """Test that your function highlights latest user feedback"""
         topics = {"Topic1"}
@@ -221,7 +221,7 @@ class TestConsolidateTopicsWithHistory:
         prompt_arg = mock_llm.invoke.call_args[0][0]
         assert 'Latest user feedback: "This is the latest feedback"' in prompt_arg
 
-    @patch("Agent.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.get_llm")
     def test_consolidate_formats_history_correctly(self, mock_get_llm):
         """Test the exact history formatting in your function"""
         topics = {"Topic"}

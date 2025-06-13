@@ -1,14 +1,14 @@
 from unittest.mock import Mock, patch
-from Agent.nodes import analyze_documents
+from Agent.TopicSelection.nodes import analyze_documents
 
 
 class TestAnalyzeDocumentsWithHelpers:
     """Test how your analyze_documents uses the helper functions"""
 
-    @patch("Agent.nodes._consolidate_topics_with_history")
-    @patch("Agent.nodes._process_batch")
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes._consolidate_topics_with_history")
+    @patch("Agent.TopicSelection.nodes._process_batch")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_analyze_calls_process_batch_correctly(
         self, mock_extractor, mock_get_llm, mock_process_batch, mock_consolidate
     ):
@@ -56,10 +56,9 @@ class TestAnalyzeDocumentsWithHelpers:
         assert "Previous topics found: ['Topic1']" in previous_context_2
         assert "Previous summary: Summary1" in previous_context_2
 
-    @patch("Agent.nodes._consolidate_topics_with_history")
-    @patch("Agent.nodes._process_batch")
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes._process_batch")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_analyze_accumulates_topics_correctly(
         self, mock_extractor, mock_get_llm, mock_process_batch, mock_consolidate
     ):
@@ -95,10 +94,10 @@ class TestAnalyzeDocumentsWithHelpers:
         # Should be deduplicated: {"Algorithm", "Sorting", "Trees"}
         assert topics_passed == {"Algorithm", "Sorting", "Trees"}
 
-    @patch("Agent.nodes._consolidate_topics_with_history")
-    @patch("Agent.nodes._process_batch")
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes._consolidate_topics_with_history")
+    @patch("Agent.TopicSelection.nodes._process_batch")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_analyze_passes_history_to_consolidate(
         self, mock_extractor, mock_get_llm, mock_process_batch, mock_consolidate
     ):
@@ -126,9 +125,9 @@ class TestAnalyzeDocumentsWithHelpers:
         history_passed = mock_consolidate.call_args[0][1]  # Second argument
         assert history_passed == test_history
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
-    @patch("Agent.nodes.MockRetriever")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.MockRetriever")
     def test_mock_retriever_fallback(
         self, mock_retriever_class, mock_extractor, mock_get_llm
     ):
@@ -159,8 +158,8 @@ class TestAnalyzeDocumentsWithHelpers:
         mock_retriever_class.assert_called_once()
         assert result["next_node"] == "request_feedback"
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_user_input_clearing(self, mock_extractor, mock_get_llm):
         """Test that your code clears user_input"""
         # Mock LLM components
@@ -186,8 +185,8 @@ class TestAnalyzeDocumentsWithHelpers:
         # Your code returns: "user_input": None
         assert result["user_input"] is None
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_documents_storage(self, mock_extractor, mock_get_llm):
         """Test that your code stores chunks as documents"""
         # Mock LLM components
@@ -213,8 +212,8 @@ class TestAnalyzeDocumentsWithHelpers:
         # Your code: "documents": chunks
         assert result["documents"] == test_chunks
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_batch_size_usage(self, mock_extractor, mock_get_llm):
         """Test that your code uses batch_size parameter"""
         # Mock LLM
@@ -243,8 +242,8 @@ class TestAnalyzeDocumentsWithHelpers:
         # With batch_size=2 and 4 chunks, should call extractor 2 times
         assert mock_extract_instance.invoke.call_count == 2
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_batch_text_joining(self, mock_extractor, mock_get_llm):
         """Test your batch text joining logic"""
         mock_llm = Mock()
