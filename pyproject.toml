@@ -21,6 +21,17 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "coverage>=7.9.0",
     "mypy>=1.16.0",
+    "pytest>=8.4.0",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
     "ruff>=0.11.13",
 ]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+python_files = "test_*.py"
+addopts = "--cov=src/Testaiownik --cov-report=term-missing -v"

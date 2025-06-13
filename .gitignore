@@ -1,5 +1,6 @@
 .venv
 .env
+.env.test
 uv.lock
 .DS_Store
 .ruff_cache

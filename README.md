@@ -146,10 +146,10 @@ uv run mypy src/
 
 ```bash
 # Run tests (when implemented)
-uv run pytest tests/
+uv run pytest src/Testaiownik/tests/
 
 # Run specific test
-uv run python tests/main.py
+uv run python src/Testaiownik/tests/test_data_processing.py
 ```
 
 ## 🔄 Current Agent Workflow

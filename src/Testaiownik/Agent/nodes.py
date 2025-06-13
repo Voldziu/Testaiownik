@@ -1,15 +1,88 @@
-from utils import logger
 from trustcall import create_extractor
-
+from typing import Dict, Any, Set, List
 from Agent.state import AgentState
 from Agent.models import BatchAnalysis, FeedbackInterpretation, TopicConsolidation
 from AzureModels import get_llm
 from RAG.Retrieval import DocumentRetriever, MockRetriever
+from utils.logger import logger
+
+
+def _process_batch(batch_text: str, previous_context: str, extractor) -> Dict[str, Any]:
+    """Extract topics from a single batch of documents"""
+    prompt = f"""
+    {previous_context}
+    
+    Analyze this batch of educational documents:
+    {batch_text}
+    
+    Extract topics consistent with previous findings and create summaries.
+    """
+
+    result = extractor.invoke({"messages": [prompt]})
+    return result["responses"][0].__dict__
+
+
+def _process_batches(
+    chunks: List[str],
+    batch_size: int,
+    all_topics: Set[str],
+    extractor,
+    accumulated_summary: str,
+) -> None:
+    # Process in batches, returns to
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i : i + batch_size]
+        batch_text = "\n---\n".join(batch)
+
+        previous_context = (
+            f"Previous topics found: {list(all_topics)}\nPrevious summary: {accumulated_summary}"
+            if accumulated_summary
+            else "This is the first batch."
+        )
+
+        batch_analysis = _process_batch(batch_text, previous_context, extractor)
+        all_topics.update(batch_analysis["current_topics"])
+        accumulated_summary = batch_analysis["accumulated_summary"]
+
+        logger.info(
+            f"Batch {i//batch_size + 1}: found {len(batch_analysis['current_topics'])} topics"
+        )
+
+
+def _consolidate_topics_with_history(
+    all_topics: Set[str], history: List[Dict]
+) -> List[str]:
+    """Consolidate topics considering conversation history"""
+    if not history:
+        return list(all_topics)
+
+    consolidation_llm = get_llm().with_structured_output(TopicConsolidation)
+
+    history_context = "\n".join(
+        [
+            f"Iteration {i+1}: Generated {len(h['suggested_topics'])} topics, User said: '{h['user_feedback']}'"
+            for i, h in enumerate(history)
+        ]
+    )
+
+    prompt = f"""
+    CONVERSATION HISTORY:
+    {history_context}
+    
+    Current extracted topics: {list(all_topics)}
+    Latest user feedback: "{history[-1]['user_feedback']}"
+    
+    Generate topics considering the full conversation evolution.
+    """
+
+    consolidation_result = consolidation_llm.invoke(prompt)
+    return consolidation_result.consolidated_topics
 
 
 def analyze_documents(
     state: AgentState, retriever: DocumentRetriever = None, batch_size: int = 2
 ) -> AgentState:
+    """Main document analysis orchestrator"""
     if retriever is None:
         retriever = MockRetriever()
 
@@ -17,8 +90,7 @@ def analyze_documents(
         f"Processing {retriever.get_chunk_count()} chunks in batches of {batch_size}."
     )
 
-    # llm
-    # llm = get_llm().with_structured_output(BatchAnalysis)
+    # Setup extraction
     llm = get_llm()
     extractor = create_extractor(
         llm, tools=[BatchAnalysis], tool_choice="BatchAnalysis"
@@ -29,81 +101,18 @@ def analyze_documents(
     accumulated_summary = ""
 
     # Process in batches
-    for i in range(0, len(chunks), batch_size):
-        batch = chunks[i : i + batch_size]
-        batch_text = "\n---\n".join(batch)
 
-        previous_context = (
-            f"""
-        Previous topics found: {list(all_topics)}
-        Previous summary: {accumulated_summary}
-        """
-            if accumulated_summary
-            else "This is the first batch."
-        )
-
-        prompt = f"""
-        {previous_context}
-        
-        
-        Analyze this batch of educational documents:
-        {batch_text}
-        
-        Extract topics consistent with previous findings and create summaries.
-        """
-
-        result = extractor.invoke({"messages": [prompt]})
-        # logger.info(f"{result}")
-        # logger.info(f"{result.keys()}")
-        batch_analysis = result["responses"][0].__dict__
-        # logger.debug(f"Batch analysis: {type(batch_analysis)}")
-        current_topics = batch_analysis["current_topics"]
-        logger.info(f"Current topics: {current_topics}")
-        accumulated_summary = batch_analysis["accumulated_summary"]
-
-        # Update accumulated state
-        all_topics.update(current_topics)
-
-        logger.info(
-            f"Batch {i//batch_size + 1}: found {len(batch_analysis['current_topics'])} topics"
-        )
+    _process_batches(chunks, batch_size, all_topics, extractor, accumulated_summary)
 
     history = state.get("conversation_history", [])
-
-    # After all batches, consolidate with full history
-    if history:  # If we have conversation history
-        consolidation_llm = get_llm().with_structured_output(TopicConsolidation)
-
-        history_context = "\n".join(
-            [
-                f"Iteration {i+1}: Generated {len(h['suggested_topics'])} topics, User said: '{h['user_feedback']}'"
-                for i, h in enumerate(history)
-            ]
-        )
-
-        prompt = f"""
-        CONVERSATION HISTORY:
-        {history_context}
-        
-        Current extracted topics: {list(all_topics)}
-        Latest user feedback: "{history[-1]['user_feedback']}"
-        
-        Generate topics considering the full conversation evolution.
-        """
-
-        logger.info(f"Consolidation prompt: {prompt}")
-
-        consolidation_result = consolidation_llm.invoke(prompt)
-
-        final_topics = consolidation_result.consolidated_topics
-    else:
-        final_topics = list(all_topics)
+    # Consolidate topics with conversation history
+    final_topics = _consolidate_topics_with_history(all_topics, history)
 
     return {
         **state,
         "suggested_topics": final_topics,
         "documents": chunks,
-        "user_input": None,  # reset user input after processing
+        "user_input": None,
         "next_node": "request_feedback",
     }
 
