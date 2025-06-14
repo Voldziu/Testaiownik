@@ -62,6 +62,11 @@ def _process_batches(
         f"Total topics found: {len(all_topics)}. Accumulated summary: {accumulated_summary}"
     )
 
+    total_weight = sum(topic["weight"] for topic in all_topics)
+    if total_weight > 0:
+        for topic in all_topics:
+            topic["weight"] /= total_weight
+
 
 def _consolidate_topics_with_history(
     all_topics: List[Dict], history: List[Dict]
@@ -109,6 +114,8 @@ def _consolidate_topics_with_history(
     - Higher weights for topics that are more frequently mentioned or referenced.
     - Weights must sum to exactly 1.0
     - Consider original content coverage when assigning weights
+
+    PLEASE REASSIGN WEIGHTS TO TOPICS, DO NOT USE PREVIOUS WEIGHTS. YOU CAN SUM PREVIOUS WEIGHTS AND REASSIGN THEM PROPORTIONALLY SUMMING TO 1.0.
     """
 
     consolidation_result = consolidation_llm.invoke(prompt)

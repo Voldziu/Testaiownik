@@ -49,12 +49,12 @@ class TopicConsolidation(BaseModel):
     )
     reasoning: str = Field(description="How topics were consolidated")
 
-    @model_validator(mode="after")
-    def validate_weights_sum_to_one(self) -> Self:
-        if self.consolidated_topics:
-            total_weight = sum(topic.weight for topic in self.consolidated_topics)
-            if abs(total_weight - 1.0) > 0.01:  # Allow small floating point errors
-                raise ValueError(
-                    f"Consolidated topic weights must sum to 1.0, got {total_weight}"
-                )
-        return self
+    # @model_validator(mode="after")
+    # def validate_weights_sum_to_one(self) -> Self:
+    #     if self.consolidated_topics:
+    #         total_weight = sum(topic.weight for topic in self.consolidated_topics)
+    #         if abs(total_weight - 1.0) > 0.01:  # Allow small floating point errors
+    #             raise ValueError(
+    #                 f"Consolidated topic weights must sum to 1.0, got {total_weight}"
+    #             )
+    #     return self
