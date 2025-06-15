@@ -1,8 +1,7 @@
-import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
 from AzureModels.models import get_embedding_model
-from .pdf_processor import extract_text_from_pdf
+from .file_processor import extract_text_from_docx, extract_text_from_pdf, extract_text_from_txt, extract_text_from_pptx
 from typing import Optional, List
 import logging
 
@@ -12,6 +11,7 @@ class QdrantManager:
         self.vector_size = vector_size
         self.embedding_model = get_embedding_model(api_version="2024-12-01-preview")
         self.logger = logging.getLogger(__name__)
+        self.last_used_id = 0
 
     def create_collection(self, collection_name: str, distance_metric: str = "Dot") -> bool:
         """Creates a collection in Qdrant with error handling."""
@@ -36,7 +36,7 @@ class QdrantManager:
                 return False
 
     def safe_to_list(self, data):
-        """Bezpiecznie konwertuje dane do listy"""
+        """Convert safely to list"""
         if hasattr(data, 'tolist'):  
             return data.tolist()
         elif isinstance(data, list):  
@@ -67,53 +67,66 @@ class QdrantManager:
             start_idx = end_idx
         
         return chunks
+    
 
-    def index_pdf_to_qdrant(self, pdf_path: str, collection_name: str) -> bool:
-        """Indexes PDF content into Qdrant with better error handling."""
+    def process_file(self, file_path: str) -> Optional[str]:
+        """Determines the type of file (PDF/TXT) and processes it accordingly."""
+        if file_path.endswith('.pdf'):
+            return extract_text_from_pdf(file_path)
+        elif file_path.endswith('.txt'):
+            return extract_text_from_txt(file_path)
+        elif file_path.endswith('.pptx'):
+            return extract_text_from_pptx(file_path)
+        elif file_path.endswith('.docx'):
+            return extract_text_from_docx(file_path)
+        else:
+            self.logger.error(f"Nieobsługiwany typ pliku: {file_path}")
+            return None
+
+
+    def index_file_to_qdrant(self, file_path: str, collection_name: str) -> bool:
+        """Indexes content from a file (PDF or TXT) into Qdrant."""
         try:
-            # Extract text from PDF
-            text = extract_text_from_pdf(pdf_path)
+            # Process the file to extract text
+            text = self.process_file(file_path)
             if not text:
-                self.logger.warning("Nie udało się wyodrębnić tekstu z PDF")
+                self.logger.warning(f"Nie udało się wyodrębnić tekstu z pliku: {file_path}")
                 return False
 
             # Chunk the text into larger pieces
-            chunks = self.chunk_text(text, min_chunk_size=500)  # Adjust chunk size as needed
+            chunks = self.chunk_text(text, min_chunk_size=500)
             if not chunks:
                 self.logger.warning("Nie znaleziono fragmentów tekstu do indeksowania")
                 return False
 
             # Encoding chunks to vectors using the embedding model
             vectors = self.embedding_model.embed_documents(chunks)
-            
-            # Debug: Check the type and length of the first vector
+
             if vectors:
                 self.logger.info(f"Type of first vector: {type(vectors[0])}")
                 self.logger.info(f"Length of vectors: {len(vectors)}")
-            
-            # Create points with better ID management
+
             points = []
             for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
-                # Use safe conversion of vector to list
+                self.last_used_id += 1  
                 safe_vector = self.safe_to_list(vector)
-                
                 points.append(PointStruct(
-                    id=i, 
-                    vector=safe_vector, 
+                    id=self.last_used_id,  # sequential ID
+                    vector=safe_vector,
                     payload={
                         "text": chunk,
-                        "source": pdf_path,
+                        "source": file_path,
                         "chunk_id": i
                     }
                 ))
-            
-            # Upsert points into Qdrant collection
+
+            # Upsert points
             self.client.upsert(collection_name=collection_name, points=points)
-            self.logger.info(f"Dodano {len(points)} punktów do kolekcji '{collection_name}'.")
+            self.logger.info(f"Dodano {len(points)} punktów do kolekcji '{collection_name}' z ID od {self.last_used_id - len(points) + 1} do {self.last_used_id}.")
             return True
-            
+
         except Exception as e:
-            self.logger.error(f"Błąd podczas indeksowania PDF: {e}")
+            self.logger.error(f"Błąd podczas indeksowania pliku: {e}")
             return False
 
     def search_in_collection(self, query: str, collection_name: str, limit: int = 3):

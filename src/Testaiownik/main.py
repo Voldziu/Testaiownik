@@ -13,8 +13,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def main():
-    pdf_path = r"C:\Users\marci\OneDrive\Pulpit\accenture\testaiownik\testpdf.pdf"
-    collection_name = "pdf_documents_collection3"
+    pdf_path = r"C:\Users\marci\OneDrive\Pulpit\accenture\testaiownik\test_files\testpdf.pdf"
+    txt_path = r"C:\Users\marci\OneDrive\Pulpit\accenture\testaiownik\test_files\testtxt.txt"
+    pptx_path = r"C:\Users\marci\OneDrive\Pulpit\accenture\testaiownik\test_files\testpptx.pptx"
+    docx_path = r"C:\Users\marci\OneDrive\Pulpit\accenture\testaiownik\test_files\testdocx.docx"
+    collection_name = "all_documents_collection2"
 
     try:
         logger.info("Inicjalizacja QdrantManager...")
@@ -23,11 +26,33 @@ def main():
         logger.info(f"Tworzenie kolekcji '{collection_name}'...")
         qdrant_manager.create_collection(collection_name)
 
-        logger.info(f"Indeksowanie pliku PDF: {pdf_path}")
-        success = qdrant_manager.index_pdf_to_qdrant(pdf_path, collection_name)
+        logger.info(f"Indeksowanie pliku txt: {txt_path}")
+        success = qdrant_manager.index_file_to_qdrant(txt_path, collection_name)
         
         if not success:
-            logger.error("Nie udało się zindeksować pliku PDF")
+            logger.error("Nie udało się zindeksować pliku txt")
+            return
+        
+        logger.info(f"Indeksowanie pliku PDF: {pdf_path}")
+        success = qdrant_manager.index_file_to_qdrant(pdf_path, collection_name)
+        
+        if not success:
+            logger.error("Nie udało się zindeksować pliku pdf")
+            return
+        
+
+        logger.info(f"Indeksowanie pliku pptx: {pptx_path}")
+        success = qdrant_manager.index_file_to_qdrant(pptx_path, collection_name)
+        
+        if not success:
+            logger.error("Nie udało się zindeksować pliku pptx")
+            return
+        
+        logger.info(f"Indeksowanie pliku docx: {docx_path}")
+        success = qdrant_manager.index_file_to_qdrant(docx_path, collection_name)
+        
+        if not success:
+            logger.error("Nie udało się zindeksować pliku docx")
             return
 
         logger.info("Inicjalizacja RAGRetriever...")
@@ -47,7 +72,7 @@ def main():
 
         logger.info("\nTestowanie funkcji search_in_collection...")
 
-        query = "Jakie są rodzaje kwerend w Accessie?"
+        query = "Czym jest krontość?"
         search_result = qdrant_manager.search_in_collection(query, collection_name, limit=3)
 
         if search_result:
