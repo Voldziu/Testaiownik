@@ -122,23 +122,24 @@ class QdrantManager:
             raise ValueError("Query cannot be empty")
         if limit <= 0:
             raise ValueError("Limit must be positive")
-            
+
         try:
-            # Generate query vector using embed_query
             query_vector = self.embedding_model.embed_query(query)
             
-            # Use safe conversion here as well
             safe_query_vector = self.safe_to_list(query_vector)
-            
+
             search_result = self.client.query_points(
                 collection_name=collection_name,
                 query=safe_query_vector,
                 limit=limit,
-                with_payload=True
+                with_payload=True  
             )
-            
-            return search_result
-            
+
+            if hasattr(search_result, 'points'):
+                return search_result.points  
+            else:
+                raise ValueError("Brak punktów w wynikach zapytania.")
+
         except Exception as e:
             self.logger.error(f"Błąd podczas wyszukiwania: {e}")
             return None

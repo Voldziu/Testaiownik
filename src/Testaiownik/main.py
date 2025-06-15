@@ -44,6 +44,22 @@ def main():
             print(f"\n--- Fragment {i} ---")
             print(chunk[:200] + "..." if len(chunk) > 200 else chunk)
 
+
+        logger.info("\nTestowanie funkcji search_in_collection...")
+
+        query = "Jakie są rodzaje kwerend w Accessie?"
+        search_result = qdrant_manager.search_in_collection(query, collection_name, limit=3)
+
+        if search_result:
+            logger.info("Wyniki wyszukiwania:")
+           
+            for i, result in enumerate(search_result, 1):  
+                print(f"\n--- Wynik {i} ---")
+                print(result.payload['text'])  
+        else:
+            logger.error("Brak wyników wyszukiwania.")
+
+
     except Exception as e:
         logger.error(f"Błąd w main(): {e}")
         raise
