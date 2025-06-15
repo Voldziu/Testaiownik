@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Iterator
 from ..qdrant_manager import QdrantManager
+from utils.logger import logger
 
 
 # DocumentRetriever is an abstract base class for retrieving documents.
@@ -67,7 +68,7 @@ class RAGRetriever(DocumentRetriever):
                         yield point.payload['text']
                         
         except Exception as e:
-            print(f"Błąd podczas pobierania chunks: {e}")
+            logger.error(f"Błąd podczas pobierania chunks: {e}")
             return
 
     def get_chunk_count(self) -> int:
@@ -78,5 +79,5 @@ class RAGRetriever(DocumentRetriever):
             )
             return count_result.count
         except Exception as e:
-            print(f"Błąd podczas liczenia chunks: {e}")
+            logger.error(f"Błąd podczas liczenia chunks: {e}")
             return 0

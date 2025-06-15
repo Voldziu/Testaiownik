@@ -1,6 +1,6 @@
 from docx import Document
 import pdfplumber
-
+from utils.logger import logger
 from pptx import Presentation
 
 def extract_text_from_pdf(pdf_path: str) -> str:
@@ -18,7 +18,7 @@ def extract_text_from_txt(txt_path: str) -> str:
             text = file.read()
         return text
     except Exception as e:
-        print(f"Error reading the text file: {e}")
+        logger.error(f"Error reading the text file: {e}")
         return ""
     
 def extract_text_from_pptx(pptx_path: str) -> str:
@@ -32,22 +32,20 @@ def extract_text_from_pptx(pptx_path: str) -> str:
                         text += shape.text + "\n"  # Add the text from the shape to the final text
             return text.strip()
         except Exception as e:
-            print(f"Błąd podczas wczytywania pliku PPTX: {e}")
+            logger.error(f"Błąd podczas wczytywania pliku PPTX: {e}")
             return ""
         
 
 def extract_text_from_docx(docx_path: str) -> str:
     """Extracts text from a DOCX file."""
     try:
-        # Open the DOCX file
         doc = Document(docx_path)
         
-        # Extract text from each paragraph in the DOCX file
         text = '\n'.join([para.text for para in doc.paragraphs])
         
         return text
     except Exception as e:
-        print(f"Błąd podczas wczytywania pliku DOCX: {e}")
+        logger.error(f"Błąd podczas wczytywania pliku DOCX: {e}")
         return ""
 
 

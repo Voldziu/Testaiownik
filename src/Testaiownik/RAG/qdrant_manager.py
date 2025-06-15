@@ -3,14 +3,13 @@ from qdrant_client.models import PointStruct
 from AzureModels.models import get_embedding_model
 from .file_processor import extract_text_from_docx, extract_text_from_pdf, extract_text_from_txt, extract_text_from_pptx
 from typing import Optional, List
-import logging
+from utils.logger import logger
 
 class QdrantManager:
     def __init__(self, url: str = "http://localhost:6333", vector_size: int = 1536):
         self.client = QdrantClient(url=url)
         self.vector_size = vector_size
         self.embedding_model = get_embedding_model(api_version="2024-12-01-preview")
-        self.logger = logging.getLogger(__name__)
         self.last_used_id = 0
 
     def create_collection(self, collection_name: str, distance_metric: str = "Dot") -> bool:
@@ -20,19 +19,19 @@ class QdrantManager:
             
         try:
             self.client.get_collection(collection_name=collection_name)
-            self.logger.info(f"Kolekcja '{collection_name}' już istnieje.")
+            logger.info(f"Kolekcja '{collection_name}' już istnieje.")
             return True
         except Exception:
             try:
-                self.logger.info(f"Tworzę nową kolekcję '{collection_name}'...")
+                logger.info(f"Tworzę nową kolekcję '{collection_name}'...")
                 self.client.create_collection(
                     collection_name=collection_name,
                     vectors_config={"size": self.vector_size, "distance": distance_metric}
                 )
-                self.logger.info(f"Kolekcja '{collection_name}' została utworzona.")
+                logger.info(f"Kolekcja '{collection_name}' została utworzona.")
                 return True
             except Exception as e:
-                self.logger.error(f"Błąd podczas tworzenia kolekcji: {e}")
+                logger.error(f"Błąd podczas tworzenia kolekcji: {e}")
                 return False
 
     def safe_to_list(self, data):
@@ -80,7 +79,7 @@ class QdrantManager:
         elif file_path.endswith('.docx'):
             return extract_text_from_docx(file_path)
         else:
-            self.logger.error(f"Nieobsługiwany typ pliku: {file_path}")
+            logger.error(f"Nieobsługiwany typ pliku: {file_path}")
             return None
 
 
@@ -90,21 +89,21 @@ class QdrantManager:
             # Process the file to extract text
             text = self.process_file(file_path)
             if not text:
-                self.logger.warning(f"Nie udało się wyodrębnić tekstu z pliku: {file_path}")
+                logger.warning(f"Nie udało się wyodrębnić tekstu z pliku: {file_path}")
                 return False
 
             # Chunk the text into larger pieces
             chunks = self.chunk_text(text, min_chunk_size=500)
             if not chunks:
-                self.logger.warning("Nie znaleziono fragmentów tekstu do indeksowania")
+                logger.warning("Nie znaleziono fragmentów tekstu do indeksowania")
                 return False
 
             # Encoding chunks to vectors using the embedding model
             vectors = self.embedding_model.embed_documents(chunks)
 
             if vectors:
-                self.logger.info(f"Type of first vector: {type(vectors[0])}")
-                self.logger.info(f"Length of vectors: {len(vectors)}")
+                logger.info(f"Type of first vector: {type(vectors[0])}")
+                logger.info(f"Length of vectors: {len(vectors)}")
 
             points = []
             for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
@@ -122,11 +121,11 @@ class QdrantManager:
 
             # Upsert points
             self.client.upsert(collection_name=collection_name, points=points)
-            self.logger.info(f"Dodano {len(points)} punktów do kolekcji '{collection_name}' z ID od {self.last_used_id - len(points) + 1} do {self.last_used_id}.")
+            logger.info(f"Dodano {len(points)} punktów do kolekcji '{collection_name}' z ID od {self.last_used_id - len(points) + 1} do {self.last_used_id}.")
             return True
 
         except Exception as e:
-            self.logger.error(f"Błąd podczas indeksowania pliku: {e}")
+            logger.error(f"Błąd podczas indeksowania pliku: {e}")
             return False
 
     def search_in_collection(self, query: str, collection_name: str, limit: int = 3):
@@ -154,7 +153,7 @@ class QdrantManager:
                 raise ValueError("Brak punktów w wynikach zapytania.")
 
         except Exception as e:
-            self.logger.error(f"Błąd podczas wyszukiwania: {e}")
+            logger.error(f"Błąd podczas wyszukiwania: {e}")
             return None
 
     def collection_exists(self, collection_name: str) -> bool:
@@ -169,8 +168,8 @@ class QdrantManager:
         """Delete a collection."""
         try:
             self.client.delete_collection(collection_name=collection_name)
-            self.logger.info(f"Kolekcja '{collection_name}' została usunięta.")
+            logger.info(f"Kolekcja '{collection_name}' została usunięta.")
             return True
         except Exception as e:
-            self.logger.error(f"Błąd podczas usuwania kolekcji: {e}")
+            logger.error(f"Błąd podczas usuwania kolekcji: {e}")
             return False
