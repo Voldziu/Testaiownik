@@ -8,8 +8,10 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     with pdfplumber.open(pdf_path) as pdf:
         text = ""
         for page in pdf.pages:
-            text += page.extract_text()
-    return text
+            page_text = page.extract_text()
+            if page_text:  # Sprawdzamy, czy tekst nie jest None
+                text += page_text
+        return text
 
 def extract_text_from_txt(txt_path: str) -> str:
     """Extracts all text from a TXT file."""

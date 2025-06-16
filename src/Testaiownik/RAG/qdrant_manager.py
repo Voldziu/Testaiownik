@@ -45,6 +45,8 @@ class QdrantManager:
 
     def chunk_text(self, text: str, min_chunk_size: int = 500) -> List[str]:
         """Chunks the text into larger fragments of at least `min_chunk_size` characters."""
+        if not text:  
+            return [""]
         chunks = []
         start_idx = 0
 
