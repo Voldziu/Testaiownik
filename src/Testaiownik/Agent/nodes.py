@@ -80,7 +80,7 @@ def _consolidate_topics_with_history(
 
 
 def analyze_documents(
-    state: AgentState, retriever: DocumentRetriever = None, batch_size: int = 2
+    state: AgentState, retriever: DocumentRetriever = None, batch_size: int = 10
 ) -> AgentState:
     """Main document analysis orchestrator"""
     if retriever is None:

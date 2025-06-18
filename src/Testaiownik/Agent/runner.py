@@ -1,9 +1,9 @@
 from Agent.graph import create_agent_graph
-from RAG.Retrieval import MockRetriever
+from RAG.Retrieval import MockRetriever, RAGRetriever, DocumentRetriever
 
 
-def run_agent():
-    graph = create_agent_graph(MockRetriever())
+def run_agent(retriever: DocumentRetriever):
+    graph = create_agent_graph(retriever=retriever)
     config = {"configurable": {"thread_id": "test-run"}}
 
     state = {
