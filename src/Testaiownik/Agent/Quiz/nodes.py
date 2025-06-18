@@ -5,7 +5,6 @@ from .state import QuizState, prepare_state_for_persistence
 from .models import (
     QuizSession,
     Question,
-    QuestionType,
     QuestionChoice,
     QuestionGeneration,
     QuizResults,
@@ -67,7 +66,7 @@ def load_or_generate_questions(state: QuizState) -> QuizState:
         logger.info("Starting fresh question generation")
         return {**state, "next_node": "generate_all_questions"}
     elif session.quiz_mode in ["retry_same", "retry_failed"]:
-        # TODO: Implement loading from previous session
+        # TODO: Implement loading from previous session when RAG is implemented
         logger.info(
             f"Quiz mode {session.quiz_mode} - would load from previous session TODO."
         )
@@ -174,9 +173,10 @@ def present_question(state: QuizState) -> QuizState:
 
 def process_answer(state: QuizState) -> QuizState:
     """Process user's answer and advance quiz"""
+
     session = state["quiz_session"]
     current_question = state["current_question"]
-    user_input = state.get("user_input", "")
+    user_input = state.get("user_input")  # Expecting list of ints
 
     if not session or not current_question:
         return {**state, "next_node": "present_question"}
@@ -185,27 +185,43 @@ def process_answer(state: QuizState) -> QuizState:
         logger.warning("No user input provided")
         return {**state, "next_node": "present_question"}
 
-    # Parse answer
-    try:
-        selected_index = int(user_input.strip()) - 1  # Convert to 0-based index
-        if selected_index < 0 or selected_index >= len(current_question.choices):
-            raise ValueError("Invalid choice index")
-    except (ValueError, IndexError):
-        logger.warning(f"Invalid answer format: {user_input}")
+    # Validate list of indices
+
+    if not isinstance(user_input, list):
+        logger.warning(f"User input not a list type")
         return {
             **state,
-            "feedback_request": "Invalid answer. Please enter a number corresponding to your choice.",
+            "feedback_request": "User input not a list type",
             "next_node": "present_question",
         }
 
-    # Check if answer is correct
-    is_correct = current_question.choices[selected_index].is_correct
+    selected_indices = []
+    for index in user_input:
+        if not isinstance(index, int):
+            raise ValueError(f"Invalid input type: {type(index)}, expected int")
+        if index < 0 or index >= len(current_question.choices):
+            raise ValueError(f"Index {index} out of range")
+        selected_indices.append(index)
+
+    # Remove duplicates and sort
+    selected_indices = sorted(list(set(selected_indices)))
+
+    if not selected_indices:
+        logger.warning(f"No valid answers provided")
+        return {
+            **state,
+            "feedback_request": "No valid answers provided",
+            "next_node": "present_question",
+        }
+
+    # Check if answer is correct using Question's built-in method
+    is_correct = current_question.is_answer_correct(selected_indices)
 
     # Create answer record
     attempt_number = session.incorrect_recycle_count.get(current_question.id, 0) + 1
     answer = UserAnswer(
         question_id=current_question.id,
-        selected_choice_index=selected_index,
+        selected_choice_indices=selected_indices,
         is_correct=is_correct,
         attempt_number=attempt_number,
     )
@@ -214,7 +230,7 @@ def process_answer(state: QuizState) -> QuizState:
     session.add_answer(answer)
 
     # Prepare feedback
-    feedback = _create_answer_feedback(current_question, selected_index, is_correct)
+    feedback = _create_answer_feedback(current_question, selected_indices, is_correct)
 
     # Move to next question
     session.get_next_question()
@@ -335,45 +351,46 @@ Available topics: {available_topics}
 Difficulty level: {difficulty}
 
 Determine:
-1. Whether this is naturally a True/False question or needs multiple choice options
-2. The correct answer
-3. If multiple choice: provide 3 plausible but incorrect options
-4. Detailed explanation of why the answer is correct
+1. The correct answer(s) - provide as a list even if single answer
+2. Provide 2-4 plausible but incorrect options
+3. Whether this question allows multiple correct answers (is_multi_select)
+4. Detailed explanation of why the answer(s) are correct
 5. Which topic from the available list best fits this question
+
+For simple True/False questions:
+- Provide exactly 2 options: the correct answer and its opposite
+- Set is_multi_select to False
+
+For complex questions:
+- Provide 3-4 total options
+- Can have multiple correct answers if the question naturally allows it
 
 Provide structured response."""
 
             response = llm.invoke(prompt)
 
-            # Create choices based on structured response
-            if response.is_true_false:
-                is_true_answer = response.correct_answer.lower() in [
-                    "true",
-                    "yes",
-                    "correct",
-                    "tak",
-                ]
-                choices = [
-                    QuestionChoice(text="True", is_correct=is_true_answer),
-                    QuestionChoice(text="False", is_correct=not is_true_answer),
-                ]
-                question_type = QuestionType.TRUE_FALSE
-            else:
-                choices = [
-                    QuestionChoice(text=response.correct_answer, is_correct=True)
-                ]
-                # Add up to 3 wrong options
-                for wrong_option in response.wrong_options[:3]:
-                    choices.append(QuestionChoice(text=wrong_option, is_correct=False))
-                question_type = QuestionType.MULTIPLE_CHOICE
+            # Create choices from structured response
+            choices = []
+
+            # Add correct answers
+            for correct_answer in response.correct_answers:
+                choices.append(QuestionChoice(text=correct_answer, is_correct=True))
+
+            # Add wrong options
+            for wrong_option in response.wrong_options:
+                choices.append(QuestionChoice(text=wrong_option, is_correct=False))
+
+            # Ensure at least 2 choices
+            if len(choices) < 2:
+                choices.append(QuestionChoice(text="False", is_correct=False))
 
             question = Question(
                 topic=response.assigned_topic,
-                type=question_type,
                 question_text=question_text,
                 choices=choices,
                 explanation=response.explanation,
                 difficulty=difficulty,
+                is_multi_select=response.is_multi_select,
             )
 
             processed_questions.append(question)
@@ -384,7 +401,6 @@ Provide structured response."""
             # Create fallback question
             fallback_question = Question(
                 topic=available_topics[0] if available_topics else "General",
-                type=QuestionType.TRUE_FALSE,
                 question_text=question_text,
                 choices=[
                     QuestionChoice(text="True", is_correct=True),
@@ -392,6 +408,7 @@ Provide structured response."""
                 ],
                 explanation="This question was provided by the user. Please verify the answer.",
                 difficulty=difficulty,
+                is_multi_select=False,
             )
             processed_questions.append(fallback_question)
 
@@ -408,20 +425,25 @@ def _generate_questions_for_topic(
     context_text = ""
     if context:
         context_text = f"\n\nRELEVANT DOCUMENT CONTEXT:\n{chr(10).join(context[:3])}"  # Limit to 3 chunks
-
-    # Determine question types distribution
-    mc_count = max(1, count // 2)  # At least 1 multiple choice
-    tf_count = count - mc_count
+        logger.info(f"Using document context for {topic} question generation")
+    else:
+        logger.info(f"Generating questions for {topic} without document context")
 
     prompt = f"""Generate {count} educational questions about: {topic}
 
 REQUIREMENTS:
 - Difficulty level: {difficulty}
-- Generate {mc_count} multiple choice questions (4 options each)
-- Generate {tf_count} true/false questions
+- Mix of question types: simple choice, multiple choice, and multi-select
+- Each question should have 2-5 answer options
+- Some questions can have multiple correct answers (set is_multi_select=True)
 - Questions should test understanding, not memorization
 - Include clear explanations for correct answers
-- Ensure variety in question types and concepts
+- Ensure variety in question complexity
+
+QUESTION DISTRIBUTION:
+- 30% simple choice questions (2 options, like True/False)
+- 50% multiple choice questions (3-4 options, single correct)
+- 20% multi-select questions (3-5 options, multiple correct)
 
 {context_text}
 
@@ -431,6 +453,7 @@ QUESTION QUALITY GUIDELINES:
 - Realistic distractors for multiple choice
 - Comprehensive explanations
 - Focus on key concepts and practical applications
+- For multi-select questions, ensure multiple answers are genuinely correct
 
 Generate exactly {count} questions total."""
 
@@ -439,22 +462,29 @@ Generate exactly {count} questions total."""
         questions = []
 
         for i, q in enumerate(result.questions):
-            # Ensure correct type assignment
-            if i < mc_count:
-                q.type = QuestionType.MULTIPLE_CHOICE
-            else:
-                q.type = QuestionType.TRUE_FALSE
-                # Ensure true/false has exactly 2 choices
-                if len(q.choices) != 2:
-                    q.choices = [
-                        QuestionChoice(text="True", is_correct=q.choices[0].is_correct),
-                        QuestionChoice(
-                            text="False", is_correct=not q.choices[0].is_correct
-                        ),
-                    ]
-
+            # Ensure proper structure
             q.topic = topic
             q.difficulty = difficulty
+
+            # Validate choices
+            if len(q.choices) < 2:
+                logger.warning(
+                    f"Question has fewer than 2 choices, adding fallback choices"
+                )
+                q.choices.extend(
+                    [
+                        QuestionChoice(text="Option A", is_correct=False),
+                        QuestionChoice(text="Option B", is_correct=False),
+                    ]
+                )
+
+            # Ensure at least one correct answer
+            if not any(choice.is_correct for choice in q.choices):
+                logger.warning(
+                    f"Question has no correct answer, marking first as correct"
+                )
+                q.choices[0].is_correct = True
+
             questions.append(q)
 
         logger.info(f"Generated {len(questions)} questions for {topic}")
@@ -472,33 +502,48 @@ def _create_fallback_questions(
     """Create fallback questions when LLM generation fails"""
     questions = []
     for i in range(count):
-        if i % 2 == 0:
-            # Multiple choice
+        if i % 3 == 0:
+            # Simple choice (like True/False)
             question = Question(
                 topic=topic,
-                type=QuestionType.MULTIPLE_CHOICE,
-                question_text=f"Which of the following is most relevant to {topic}?",
-                choices=[
-                    QuestionChoice(text="Option A", is_correct=True),
-                    QuestionChoice(text="Option B", is_correct=False),
-                    QuestionChoice(text="Option C", is_correct=False),
-                    QuestionChoice(text="Option D", is_correct=False),
-                ],
-                explanation=f"This is a fallback question about {topic}.",
-                difficulty=difficulty,
-            )
-        else:
-            # True/False
-            question = Question(
-                topic=topic,
-                type=QuestionType.TRUE_FALSE,
                 question_text=f"{topic} is an important concept in computer science.",
                 choices=[
                     QuestionChoice(text="True", is_correct=True),
                     QuestionChoice(text="False", is_correct=False),
                 ],
-                explanation=f"True, {topic} is indeed important.",
+                explanation=f"True, {topic} is indeed important in computer science.",
                 difficulty=difficulty,
+                is_multi_select=False,
+            )
+        elif i % 3 == 1:
+            # Multiple choice
+            question = Question(
+                topic=topic,
+                question_text=f"Which of the following is most relevant to {topic}?",
+                choices=[
+                    QuestionChoice(text="Correct option", is_correct=True),
+                    QuestionChoice(text="Incorrect option A", is_correct=False),
+                    QuestionChoice(text="Incorrect option B", is_correct=False),
+                    QuestionChoice(text="Incorrect option C", is_correct=False),
+                ],
+                explanation=f"The correct option is most relevant to {topic}.",
+                difficulty=difficulty,
+                is_multi_select=False,
+            )
+        else:
+            # Multi-select
+            question = Question(
+                topic=topic,
+                question_text=f"Which of the following are characteristics of {topic}? (Select all that apply)",
+                choices=[
+                    QuestionChoice(text="Characteristic A", is_correct=True),
+                    QuestionChoice(text="Characteristic B", is_correct=True),
+                    QuestionChoice(text="Unrelated option", is_correct=False),
+                    QuestionChoice(text="Another unrelated option", is_correct=False),
+                ],
+                explanation=f"Characteristics A and B are both relevant to {topic}.",
+                difficulty=difficulty,
+                is_multi_select=True,
             )
         questions.append(question)
 
@@ -511,25 +556,34 @@ def _format_question_for_user(question: Question) -> str:
         [f"{i+1}. {choice.text}" for i, choice in enumerate(question.choices)]
     )
 
+    instruction = ""
+    if question.is_multi_select:
+        instruction = "\n(Multiple answers allowed - enter numbers separated by commas, e.g., 1,3)"
+    else:
+        instruction = "\n(Select one answer)"
+
     return f"""
 Question: {question.question_text}
 
 {choices_text}
+{instruction}
 
-Enter your choice (number): """
+Enter your choice(s): """
 
 
 def _create_answer_feedback(
-    question: Question, selected_index: int, is_correct: bool
+    question: Question, selected_indices: List[int], is_correct: bool
 ) -> str:
     """Create feedback for user's answer"""
-    selected_choice = question.choices[selected_index]
+    selected_choices = [question.choices[i] for i in selected_indices]
+    selected_texts = [choice.text for choice in selected_choices]
 
     if is_correct:
-        feedback = f"✓ Correct! You selected: {selected_choice.text}"
+        feedback = f"✓ Correct! You selected: {', '.join(selected_texts)}"
     else:
-        correct_choice = next(c for c in question.choices if c.is_correct)
-        feedback = f"✗ Incorrect. You selected: {selected_choice.text}\nCorrect answer: {correct_choice.text}"
+        correct_choices = [choice for choice in question.choices if choice.is_correct]
+        correct_texts = [choice.text for choice in correct_choices]
+        feedback = f"✗ Incorrect. You selected: {', '.join(selected_texts)}\nCorrect answer(s): {', '.join(correct_texts)}"
 
     feedback += f"\n\nExplanation: {question.explanation}\n"
     return feedback

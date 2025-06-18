@@ -2,14 +2,8 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
 import uuid
 from datetime import datetime
-from enum import Enum
 
 from Agent.Shared import WeightedTopic
-
-
-class QuestionType(str, Enum):
-    MULTIPLE_CHOICE = "multiple_choice"
-    TRUE_FALSE = "true_false"
 
 
 class QuestionChoice(BaseModel):
@@ -22,21 +16,37 @@ class Question(BaseModel):
         default_factory=lambda: str(uuid.uuid4()), description="Unique question ID"
     )
     topic: str = Field(description="Topic this question belongs to")
-    type: QuestionType = Field(description="Type of question")
     question_text: str = Field(description="The actual question")
-    choices: List[QuestionChoice] = Field(description="Multiple choice options")
-    explanation: str = Field(description="Explanation of correct answer")
+    choices: List[QuestionChoice] = Field(
+        description="All possible choices (2+ options)"
+    )
+    explanation: str = Field(description="Explanation of correct answer(s)")
     difficulty: Literal["easy", "medium", "hard"] = Field(
         default="medium", description="Question difficulty"
+    )
+    is_multi_select: bool = Field(
+        default=False, description="Whether multiple choices can be selected"
     )
     generated_at: datetime = Field(
         default_factory=datetime.now, description="When question was generated"
     )
 
+    def get_correct_indices(self) -> List[int]:
+        """Get indices of all correct choices"""
+        return [i for i, choice in enumerate(self.choices) if choice.is_correct]
+
+    def is_answer_correct(self, selected_indices: List[int]) -> bool:
+        """Check if selected indices match exactly the correct answers"""
+        correct_indices = set(self.get_correct_indices())
+        selected_set = set(selected_indices)
+        return correct_indices == selected_set
+
 
 class UserAnswer(BaseModel):
     question_id: str = Field(description="ID of answered question")
-    selected_choice_index: int = Field(description="Index of selected choice")
+    selected_choice_indices: List[int] = Field(
+        description="Indices of selected choices"
+    )
     is_correct: bool = Field(description="Whether answer was correct")
     answered_at: datetime = Field(
         default_factory=datetime.now, description="When answered"
@@ -177,10 +187,12 @@ class QuizConfiguration(BaseModel):
 
 
 class UserQuestionResponse(BaseModel):
-    is_true_false: bool = Field(description="Whether this is a True/False question")
-    correct_answer: str = Field(description="The correct answer")
+    correct_answers: List[str] = Field(description="The correct answer(s)")
     wrong_options: List[str] = Field(
-        default_factory=list, description="Wrong answer options (empty for True/False)"
+        default_factory=list, description="Wrong answer options"
     )
     explanation: str = Field(description="Detailed explanation of the answer")
     assigned_topic: str = Field(description="Most relevant topic for this question")
+    is_multi_select: bool = Field(
+        default=False, description="Whether multiple answers can be selected"
+    )
