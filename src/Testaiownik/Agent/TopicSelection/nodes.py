@@ -1,7 +1,7 @@
 from trustcall import create_extractor
-from typing import Dict, Any, Set, List
-from Agent.state import AgentState
-from Agent.models import BatchAnalysis, FeedbackInterpretation, TopicConsolidation
+from typing import Dict, Any, List
+from .state import AgentState
+from .models import BatchAnalysis, FeedbackInterpretation, TopicConsolidation
 from AzureModels import get_llm
 from RAG.Retrieval import DocumentRetriever, MockRetriever
 from utils.logger import logger
@@ -16,16 +16,27 @@ def _process_batch(batch_text: str, previous_context: str, extractor) -> Dict[st
     {batch_text}
     
     Extract topics consistent with previous findings and create summaries.
+    
+    IMPORTANT FOR TOPIC WEIGHTS:
+    - Assign weights [0,1] to each topic based on its importance/coverage in the content
+    - Weights must sum to exactly 1.0
+    - More prominent/frequently discussed topics get higher weights
+    - Less important or briefly mentioned topics get lower weights
+    - Dont count duplicates, only unique topics
     """
 
     result = extractor.invoke({"messages": [prompt]})
-    return result["responses"][0].__dict__
+    logger.debug(f"Batch analysis result: {result}")
+    logger.debug(
+        f"Batch analysis return dict: {result['messages'][0].tool_calls[0]['args']}"
+    )
+    return result["messages"][0].tool_calls[0]["args"]
 
 
 def _process_batches(
     chunks: List[str],
     batch_size: int,
-    all_topics: Set[str],
+    all_topics: List[Dict],
     extractor,
     accumulated_summary: str,
 ) -> None:
@@ -35,26 +46,34 @@ def _process_batches(
         batch_text = "\n---\n".join(batch)
 
         previous_context = (
-            f"Previous topics found: {list(all_topics)}\nPrevious summary: {accumulated_summary}"
+            f"Previous topics found: {[t['topic'] for t in all_topics]}\nPrevious summary: {accumulated_summary}"
             if accumulated_summary
             else "This is the first batch."
         )
 
         batch_analysis = _process_batch(batch_text, previous_context, extractor)
-        all_topics.update(batch_analysis["current_topics"])
+        all_topics.extend(batch_analysis["current_topics"])
         accumulated_summary = batch_analysis["accumulated_summary"]
 
         logger.info(
             f"Batch {i//batch_size + 1}: found {len(batch_analysis['current_topics'])} topics"
         )
+    logger.info(
+        f"Total topics found: {len(all_topics)}. Accumulated summary: {accumulated_summary}"
+    )
+
+    total_weight = sum(topic["weight"] for topic in all_topics)
+    if total_weight > 0:
+        for topic in all_topics:
+            topic["weight"] /= total_weight
 
 
 def _consolidate_topics_with_history(
-    all_topics: Set[str], history: List[Dict]
-) -> List[str]:
+    all_topics: List[Dict], history: List[Dict]
+) -> List[Dict[str, Any]]:
     """Consolidate topics considering conversation history"""
     if not history:
-        return list(all_topics)
+        return [{"topic": t["topic"], "weight": t["weight"]} for t in all_topics]
 
     consolidation_llm = get_llm().with_structured_output(TopicConsolidation)
 
@@ -65,18 +84,45 @@ def _consolidate_topics_with_history(
         ]
     )
 
+    topics_with_weights = [
+        f"{t['topic']} (weight: {t['weight']:.2f})" for t in all_topics
+    ]
+
     prompt = f"""
     CONVERSATION HISTORY:
     {history_context}
     
-    Current extracted topics: {list(all_topics)}
+    Current extracted topics with weights: {topics_with_weights}
     Latest user feedback: "{history[-1]['user_feedback']}"
+
+    Information about topics:
+    1. They are extracted from indepentent batches of documents
+    2. They have weights assigned batch-wise.
     
-    Generate topics considering the full conversation evolution.
+    Generate consolidated topics considering:
+    1. Full conversation evolution
+    2. User feedback preferences
+    3. Topic importance weights from content analysis
+    4. Avoiding duplicates
+
+
+    OUTPUT FORMAT:
+    In "topic" section please include only topic name, nothing more, especially NO WEIGHTS.
+    
+    IMPORTANT FOR WEIGHTS:
+    - Assign weights [0,1] based on topic importance and user preferences
+    - Higher weights for topics that are more frequently mentioned or referenced.
+    - Weights must sum to exactly 1.0
+    - Consider original content coverage when assigning weights
+
+    PLEASE REASSIGN WEIGHTS TO TOPICS, DO NOT USE PREVIOUS WEIGHTS. YOU CAN SUM PREVIOUS WEIGHTS AND REASSIGN THEM PROPORTIONALLY SUMMING TO 1.0.
     """
 
     consolidation_result = consolidation_llm.invoke(prompt)
-    return consolidation_result.consolidated_topics
+    return [
+        {"topic": t.topic, "weight": t.weight}
+        for t in consolidation_result.consolidated_topics
+    ]
 
 
 def analyze_documents(
@@ -97,7 +143,7 @@ def analyze_documents(
     )
 
     chunks = list(retriever.get_all_chunks())
-    all_topics = set()
+    all_topics = []  # List to accumulate topics with weights
     accumulated_summary = ""
 
     # Process in batches

@@ -1,14 +1,14 @@
 from unittest.mock import Mock, patch
-from Agent.nodes import analyze_documents
+from Agent.TopicSelection.nodes import analyze_documents
 
 
 class TestAnalyzeDocumentsWithHelpers:
     """Test how your analyze_documents uses the helper functions"""
 
-    @patch("Agent.nodes._consolidate_topics_with_history")
-    @patch("Agent.nodes._process_batch")
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes._consolidate_topics_with_history")
+    @patch("Agent.TopicSelection.nodes._process_batch")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_analyze_calls_process_batch_correctly(
         self, mock_extractor, mock_get_llm, mock_process_batch, mock_consolidate
     ):
@@ -19,10 +19,19 @@ class TestAnalyzeDocumentsWithHelpers:
 
         # Mock process_batch calls
         mock_process_batch.side_effect = [
-            {"current_topics": ["Topic1"], "accumulated_summary": "Summary1"},
-            {"current_topics": ["Topic2"], "accumulated_summary": "Summary2"},
+            {
+                "current_topics": [{"topic": "Topic1", "weight": 1.0}],
+                "accumulated_summary": "Summary1",
+            },
+            {
+                "current_topics": [{"topic": "Topic2", "weight": 1.0}],
+                "accumulated_summary": "Summary2",
+            },
         ]
-        mock_consolidate.return_value = ["Final1", "Final2"]
+        mock_consolidate.return_value = [
+            {"topic": "Final1", "weight": 0.5},
+            {"topic": "Final2", "weight": 0.5},
+        ]
 
         # Setup retriever with 4 chunks
         mock_retriever = Mock()
@@ -56,10 +65,10 @@ class TestAnalyzeDocumentsWithHelpers:
         assert "Previous topics found: ['Topic1']" in previous_context_2
         assert "Previous summary: Summary1" in previous_context_2
 
-    @patch("Agent.nodes._consolidate_topics_with_history")
-    @patch("Agent.nodes._process_batch")
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes._consolidate_topics_with_history")
+    @patch("Agent.TopicSelection.nodes._process_batch")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_analyze_accumulates_topics_correctly(
         self, mock_extractor, mock_get_llm, mock_process_batch, mock_consolidate
     ):
@@ -70,15 +79,21 @@ class TestAnalyzeDocumentsWithHelpers:
         # Mock overlapping topics from different batches
         mock_process_batch.side_effect = [
             {
-                "current_topics": ["Algorithm", "Sorting"],
+                "current_topics": [
+                    {"topic": "Algorithm", "weight": 0.6},
+                    {"topic": "Sorting", "weight": 0.4},
+                ],
                 "accumulated_summary": "Summary1",
             },
             {
-                "current_topics": ["Algorithm", "Trees"],
+                "current_topics": [
+                    {"topic": "Algorithm", "weight": 0.5},
+                    {"topic": "Trees", "weight": 0.5},
+                ],
                 "accumulated_summary": "Summary2",
             },  # "Algorithm" repeated
         ]
-        mock_consolidate.return_value = ["Final Topics"]
+        mock_consolidate.return_value = [{"topic": "Final Topics", "weight": 1.0}]
 
         mock_retriever = Mock()
         mock_retriever.get_all_chunks.return_value = ["chunk1", "chunk2"]
@@ -88,17 +103,21 @@ class TestAnalyzeDocumentsWithHelpers:
 
         analyze_documents(state, mock_retriever, batch_size=1)
 
-        # Should call consolidate with deduplicated topics set
+        # Should call consolidate with all topics (including duplicates)
         mock_consolidate.assert_called_once()
-        topics_passed = mock_consolidate.call_args[0][0]  # all_topics set
+        topics_passed = mock_consolidate.call_args[0][0]  # all_topics list
 
-        # Should be deduplicated: {"Algorithm", "Sorting", "Trees"}
-        assert topics_passed == {"Algorithm", "Sorting", "Trees"}
+        # Should contain all topics from both batches
+        assert len(topics_passed) == 4  # All topics, including duplicates
+        topic_names = [t["topic"] for t in topics_passed]
+        assert topic_names.count("Algorithm") == 2  # Appears twice
+        assert "Sorting" in topic_names
+        assert "Trees" in topic_names
 
-    @patch("Agent.nodes._consolidate_topics_with_history")
-    @patch("Agent.nodes._process_batch")
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes._consolidate_topics_with_history")
+    @patch("Agent.TopicSelection.nodes._process_batch")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_analyze_passes_history_to_consolidate(
         self, mock_extractor, mock_get_llm, mock_process_batch, mock_consolidate
     ):
@@ -107,16 +126,21 @@ class TestAnalyzeDocumentsWithHelpers:
         mock_extractor.return_value = Mock()
 
         mock_process_batch.return_value = {
-            "current_topics": ["Topic"],
+            "current_topics": [{"topic": "Topic", "weight": 1.0}],
             "accumulated_summary": "Summary",
         }
-        mock_consolidate.return_value = ["Consolidated Topic"]
+        mock_consolidate.return_value = [{"topic": "Consolidated Topic", "weight": 1.0}]
 
         mock_retriever = Mock()
         mock_retriever.get_all_chunks.return_value = ["chunk"]
         mock_retriever.get_chunk_count.return_value = 1
 
-        test_history = [{"suggested_topics": ["Old"], "user_feedback": "Old feedback"}]
+        test_history = [
+            {
+                "suggested_topics": [{"topic": "Old", "weight": 1.0}],
+                "user_feedback": "Old feedback",
+            }
+        ]
         state = {"conversation_history": test_history}
 
         analyze_documents(state, mock_retriever)
@@ -126,9 +150,9 @@ class TestAnalyzeDocumentsWithHelpers:
         history_passed = mock_consolidate.call_args[0][1]  # Second argument
         assert history_passed == test_history
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
-    @patch("Agent.nodes.MockRetriever")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.MockRetriever")
     def test_mock_retriever_fallback(
         self, mock_retriever_class, mock_extractor, mock_get_llm
     ):
@@ -138,11 +162,18 @@ class TestAnalyzeDocumentsWithHelpers:
         mock_get_llm.return_value = mock_llm
 
         mock_extract_instance = Mock()
-        mock_response = Mock()
-        mock_response.current_topics = ["Test Topic"]
-        mock_response.accumulated_summary = "Test summary"
-
-        mock_extract_instance.invoke.return_value = {"responses": [mock_response]}
+        mock_message = Mock()
+        mock_message.tool_calls = [
+            {
+                "args": {
+                    "current_topics": [{"topic": "Test Topic", "weight": 1.0}],
+                    "accumulated_summary": "Test summary",
+                    "batch_summary": "Test batch",
+                }
+            }
+        ]
+        mock_tool_call_result = {"messages": [mock_message]}
+        mock_extract_instance.invoke.return_value = mock_tool_call_result
         mock_extractor.return_value = mock_extract_instance
 
         # Setup MockRetriever mock
@@ -159,8 +190,8 @@ class TestAnalyzeDocumentsWithHelpers:
         mock_retriever_class.assert_called_once()
         assert result["next_node"] == "request_feedback"
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_user_input_clearing(self, mock_extractor, mock_get_llm):
         """Test that your code clears user_input"""
         # Mock LLM components
@@ -168,11 +199,18 @@ class TestAnalyzeDocumentsWithHelpers:
         mock_get_llm.return_value = mock_llm
 
         mock_extract_instance = Mock()
-        mock_response = Mock()
-        mock_response.current_topics = []
-        mock_response.accumulated_summary = "summary"
-
-        mock_extract_instance.invoke.return_value = {"responses": [mock_response]}
+        mock_message = Mock()
+        mock_message.tool_calls = [
+            {
+                "args": {
+                    "current_topics": [],
+                    "accumulated_summary": "summary",
+                    "batch_summary": "batch summary",
+                }
+            }
+        ]
+        mock_tool_call_result = {"messages": [mock_message]}
+        mock_extract_instance.invoke.return_value = mock_tool_call_result
         mock_extractor.return_value = mock_extract_instance
 
         mock_retriever = Mock()
@@ -186,8 +224,8 @@ class TestAnalyzeDocumentsWithHelpers:
         # Your code returns: "user_input": None
         assert result["user_input"] is None
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_documents_storage(self, mock_extractor, mock_get_llm):
         """Test that your code stores chunks as documents"""
         # Mock LLM components
@@ -195,10 +233,18 @@ class TestAnalyzeDocumentsWithHelpers:
         mock_get_llm.return_value = mock_llm
 
         mock_extract_instance = Mock()
-        mock_response = Mock()
-        mock_response.current_topics = []
-        mock_response.accumulated_summary = "summary"
-        mock_extract_instance.invoke.return_value = {"responses": [mock_response]}
+        mock_message = Mock()
+        mock_message.tool_calls = [
+            {
+                "args": {
+                    "current_topics": [],
+                    "accumulated_summary": "summary",
+                    "batch_summary": "batch summary",
+                }
+            }
+        ]
+        mock_tool_call_result = {"messages": [mock_message]}
+        mock_extract_instance.invoke.return_value = mock_tool_call_result
         mock_extractor.return_value = mock_extract_instance
 
         test_chunks = ["chunk1", "chunk2", "chunk3"]
@@ -213,8 +259,8 @@ class TestAnalyzeDocumentsWithHelpers:
         # Your code: "documents": chunks
         assert result["documents"] == test_chunks
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_batch_size_usage(self, mock_extractor, mock_get_llm):
         """Test that your code uses batch_size parameter"""
         # Mock LLM
@@ -223,10 +269,18 @@ class TestAnalyzeDocumentsWithHelpers:
 
         # Mock extractor to be called for each batch
         mock_extract_instance = Mock()
-        mock_response = Mock()
-        mock_response.current_topics = ["Topic"]
-        mock_response.accumulated_summary = "summary"
-        mock_extract_instance.invoke.return_value = {"responses": [mock_response]}
+        mock_message = Mock()
+        mock_message.tool_calls = [
+            {
+                "args": {
+                    "current_topics": [{"topic": "Topic", "weight": 1.0}],
+                    "accumulated_summary": "summary",
+                    "batch_summary": "batch summary",
+                }
+            }
+        ]
+        mock_tool_call_result = {"messages": [mock_message]}
+        mock_extract_instance.invoke.return_value = mock_tool_call_result
         mock_extractor.return_value = mock_extract_instance
 
         # Create retriever with 4 chunks
@@ -243,18 +297,26 @@ class TestAnalyzeDocumentsWithHelpers:
         # With batch_size=2 and 4 chunks, should call extractor 2 times
         assert mock_extract_instance.invoke.call_count == 2
 
-    @patch("Agent.nodes.get_llm")
-    @patch("Agent.nodes.create_extractor")
+    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("Agent.TopicSelection.nodes.create_extractor")
     def test_batch_text_joining(self, mock_extractor, mock_get_llm):
         """Test your batch text joining logic"""
         mock_llm = Mock()
         mock_get_llm.return_value = mock_llm
 
         mock_extract_instance = Mock()
-        mock_response = Mock()
-        mock_response.current_topics = []
-        mock_response.accumulated_summary = "summary"
-        mock_extract_instance.invoke.return_value = {"responses": [mock_response]}
+        mock_message = Mock()
+        mock_message.tool_calls = [
+            {
+                "args": {
+                    "current_topics": [],
+                    "accumulated_summary": "summary",
+                    "batch_summary": "batch summary",
+                }
+            }
+        ]
+        mock_tool_call_result = {"messages": [mock_message]}
+        mock_extract_instance.invoke.return_value = mock_tool_call_result
         mock_extractor.return_value = mock_extract_instance
 
         chunks = ["First chunk", "Second chunk"]

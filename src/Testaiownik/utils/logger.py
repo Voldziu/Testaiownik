@@ -7,7 +7,7 @@ from opencensus.ext.azure.log_exporter import AzureLogHandler
 
 def setup_logger(
     name: str = "testaiownik",
-    level: str = "INFO",
+    level: str = "DEBUG",
     azure_app_insights_connection_string: Optional[str] = None,
 ) -> logging.Logger:
     """Setup global logger for the project."""

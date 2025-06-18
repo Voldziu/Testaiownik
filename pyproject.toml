@@ -40,3 +40,9 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 python_files = "test_*.py"
 addopts = "--cov=src/Testaiownik --cov-report=term-missing -v"
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+packages = ["Testaiownik"]
+explicit_package_bases = true

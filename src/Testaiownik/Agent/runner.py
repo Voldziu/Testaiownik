@@ -1,4 +1,4 @@
-from Agent.graph import create_agent_graph
+from Agent.TopicSelection import create_agent_graph
 from RAG.Retrieval import MockRetriever, RAGRetriever, DocumentRetriever
 
 
