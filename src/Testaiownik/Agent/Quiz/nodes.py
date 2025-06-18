@@ -328,6 +328,7 @@ def finalize_results(state: QuizState) -> QuizState:
 # Helper functions
 
 
+# TODO: optimze calling llm (batch it)
 def _process_user_questions(
     user_questions: List[str], topics: List[WeightedTopic], difficulty: str
 ) -> List[Question]:
@@ -353,7 +354,7 @@ Difficulty level: {difficulty}
 Determine:
 1. The correct answer(s) - provide as a list even if single answer
 2. Provide 2-4 plausible but incorrect options
-3. Whether this question allows multiple correct answers (is_multi_select)
+3. Whether this question allows multiple correct answers (is_multi_choice)
 4. Detailed explanation of why the answer(s) are correct
 5. Which topic from the available list best fits this question
 
@@ -433,7 +434,7 @@ def _generate_questions_for_topic(
 
 REQUIREMENTS:
 - Difficulty level: {difficulty}
-- Mix of question types: simple choice, multiple choice, and multi-select
+- Mix of question types: simple choice, multiple choice
 - Each question should have 2-5 answer options
 - Some questions can have multiple correct answers (set is_multi_select=True)
 - Questions should test understanding, not memorization
@@ -442,8 +443,7 @@ REQUIREMENTS:
 
 QUESTION DISTRIBUTION:
 - 30% simple choice questions (2 options, like True/False)
-- 50% multiple choice questions (3-4 options, single correct)
-- 20% multi-select questions (3-5 options, multiple correct)
+- 70% multiple choice questions (3-4 options, single and multi correct)
 
 {context_text}
 
@@ -453,7 +453,7 @@ QUESTION QUALITY GUIDELINES:
 - Realistic distractors for multiple choice
 - Comprehensive explanations
 - Focus on key concepts and practical applications
-- For multi-select questions, ensure multiple answers are genuinely correct
+- For multi-choice questions, ensure multiple answers are genuinely correct
 
 Generate exactly {count} questions total."""
 
@@ -515,23 +515,8 @@ def _create_fallback_questions(
                 difficulty=difficulty,
                 is_multi_select=False,
             )
-        elif i % 3 == 1:
-            # Multiple choice
-            question = Question(
-                topic=topic,
-                question_text=f"Which of the following is most relevant to {topic}?",
-                choices=[
-                    QuestionChoice(text="Correct option", is_correct=True),
-                    QuestionChoice(text="Incorrect option A", is_correct=False),
-                    QuestionChoice(text="Incorrect option B", is_correct=False),
-                    QuestionChoice(text="Incorrect option C", is_correct=False),
-                ],
-                explanation=f"The correct option is most relevant to {topic}.",
-                difficulty=difficulty,
-                is_multi_select=False,
-            )
         else:
-            # Multi-select
+            # Multi-choice
             question = Question(
                 topic=topic,
                 question_text=f"Which of the following are characteristics of {topic}? (Select all that apply)",

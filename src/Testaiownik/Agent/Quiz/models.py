@@ -24,7 +24,7 @@ class Question(BaseModel):
     difficulty: Literal["easy", "medium", "hard"] = Field(
         default="medium", description="Question difficulty"
     )
-    is_multi_select: bool = Field(
+    is_multi_choice: bool = Field(
         default=False, description="Whether multiple choices can be selected"
     )
     generated_at: datetime = Field(
@@ -193,6 +193,6 @@ class UserQuestionResponse(BaseModel):
     )
     explanation: str = Field(description="Detailed explanation of the answer")
     assigned_topic: str = Field(description="Most relevant topic for this question")
-    is_multi_select: bool = Field(
+    is_multi_choice: bool = Field(
         default=False, description="Whether multiple answers can be selected"
     )
