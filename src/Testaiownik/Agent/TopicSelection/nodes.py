@@ -48,7 +48,8 @@ def _process_batches(
 ) -> None:
     # Process in batches, returns to
     for i in range(0, len(chunks), batch_size):
-        batch = chunks[i : i + batch_size]
+        batch = [batch["text"] for batch in chunks[i : i + batch_size]]
+        logger.debug(f"Processing batch: {batch}")
         batch_text = "\n---\n".join(batch)
 
         previous_context = (
@@ -186,10 +187,7 @@ def _consolidate_topics_with_history(
     """
 
     consolidation_result = consolidation_llm.invoke(prompt)
-    return [
-        {"topic": t.topic, "weight": t.weight}
-        for t in consolidation_result.consolidated_topics
-    ]
+    return consolidation_result.consolidated_topics
 
 
 def analyze_documents(
@@ -324,7 +322,7 @@ def process_feedback(state: AgentState) -> AgentState:
     if feedback.action == "accept":
         return {
             **state,
-            "confirmed_topics": feedback.accepted_topics or suggested,
+            "confirmed_topics": suggested,
             "conversation_history": history,  # Because history is a copy
             "next_node": "END",
         }

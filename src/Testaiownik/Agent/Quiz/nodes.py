@@ -12,6 +12,7 @@ from .models import (
     WeightedTopic,
     UserQuestionResponse,
 )
+from RAG.Retrieval import DocumentRetriever
 
 from AzureModels import get_llm
 from utils.logger import logger
@@ -76,7 +77,9 @@ def load_or_generate_questions(state: QuizState) -> QuizState:
         raise ValueError(f"Unknown quiz mode: {session.quiz_mode}")
 
 
-def generate_all_questions(state: QuizState) -> QuizState:
+def generate_all_questions(
+    state: QuizState, retriever: DocumentRetriever = None
+) -> QuizState:
     """Generate ALL questions before starting quiz"""
     session = state["quiz_session"]
     questions_to_generate = state["questions_to_generate"]
@@ -111,7 +114,7 @@ def generate_all_questions(state: QuizState) -> QuizState:
                 topic=topic,
                 count=batch_size,
                 difficulty=session.difficulty,
-                context=state.get("document_context", []),
+                retriever=retriever,
             )
 
             all_generated.extend(batch_questions)
@@ -360,7 +363,7 @@ Determine:
 
 For simple True/False questions:
 - Provide exactly 2 options: the correct answer and its opposite
-- Set is_multi_select to False
+- Set is_multi_choice to False
 
 For complex questions:
 - Provide 3-4 total options
@@ -391,7 +394,7 @@ Provide structured response."""
                 choices=choices,
                 explanation=response.explanation,
                 difficulty=difficulty,
-                is_multi_select=response.is_multi_select,
+                is_multi_choice=response.is_multi_choice,
             )
 
             processed_questions.append(question)
@@ -409,7 +412,7 @@ Provide structured response."""
                 ],
                 explanation="This question was provided by the user. Please verify the answer.",
                 difficulty=difficulty,
-                is_multi_select=False,
+                is_multi_choice=False,
             )
             processed_questions.append(fallback_question)
 
@@ -417,18 +420,35 @@ Provide structured response."""
 
 
 def _generate_questions_for_topic(
-    topic: str, count: int, difficulty: str, context: List[str]
+    topic: str, count: int, difficulty: str, retriever: DocumentRetriever = None
 ) -> List[Question]:
-    """Generate questions for a specific topic using LLM"""
+    """Generate questions for a specific topic using LLM with RAG context"""
     llm = get_llm().with_structured_output(QuestionGeneration)
 
-    # Prepare context for RAG (if available)
+    # Get relevant context using RAG search
     context_text = ""
-    if context:
-        context_text = f"\n\nRELEVANT DOCUMENT CONTEXT:\n{chr(10).join(context[:3])}"  # Limit to 3 chunks
-        logger.info(f"Using document context for {topic} question generation")
+    if retriever:
+        # Search for topic-relevant chunks
+        search_results = retriever.search_in_collection(
+            query=f"{topic} concepts examples", limit=5
+        )
+
+        if search_results:
+            relevant_chunks = [
+                result.payload.get("text", "") for result in search_results
+            ]
+            context_text = (
+                f"\n\nRELEVANT DOCUMENT CONTEXT:\n{chr(10).join(relevant_chunks)}"
+            )
+            logger.info(
+                f"Using {len(relevant_chunks)} RAG chunks for {topic} questions"
+            )
+        else:
+            logger.info(f"No relevant chunks found for {topic}")
     else:
-        logger.info(f"Generating questions for {topic} without document context")
+        logger.info(
+            f"RAG not available, generating questions for {topic} without context"
+        )
 
     prompt = f"""Generate {count} educational questions about: {topic}
 
@@ -436,7 +456,7 @@ REQUIREMENTS:
 - Difficulty level: {difficulty}
 - Mix of question types: simple choice, multiple choice
 - Each question should have 2-5 answer options
-- Some questions can have multiple correct answers (set is_multi_select=True)
+- Some questions can have multiple correct answers (set is_multi_choice=True)
 - Questions should test understanding, not memorization
 - Include clear explanations for correct answers
 - Ensure variety in question complexity
@@ -513,7 +533,7 @@ def _create_fallback_questions(
                 ],
                 explanation=f"True, {topic} is indeed important in computer science.",
                 difficulty=difficulty,
-                is_multi_select=False,
+                is_multi_choice=False,
             )
         else:
             # Multi-choice
@@ -528,7 +548,7 @@ def _create_fallback_questions(
                 ],
                 explanation=f"Characteristics A and B are both relevant to {topic}.",
                 difficulty=difficulty,
-                is_multi_select=True,
+                is_multi_choice=True,
             )
         questions.append(question)
 
@@ -542,7 +562,7 @@ def _format_question_for_user(question: Question) -> str:
     )
 
     instruction = ""
-    if question.is_multi_select:
+    if question.is_multi_choice:
         instruction = "\n(Multiple answers allowed - enter numbers separated by commas, e.g., 1,3)"
     else:
         instruction = "\n(Select one answer)"

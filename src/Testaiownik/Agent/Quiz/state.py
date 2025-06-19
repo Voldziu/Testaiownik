@@ -1,6 +1,7 @@
 from typing import TypedDict, Optional, Dict, Any, List
 from .models import QuizSession, Question, QuizResults, QuizConfiguration
 from Agent.Shared import WeightedTopic
+from RAG.Retrieval import DocumentRetriever
 
 
 class QuizState(TypedDict):
@@ -25,9 +26,8 @@ class QuizState(TypedDict):
     quiz_config: Optional[QuizConfiguration]
     confirmed_topics: Optional[List[WeightedTopic]]  # From topic selection subgraph
 
-    # Context for RAG integration (if enabled. For test puropses this is always False - working without RAG)
-    document_context: Optional[List[str]]  # Chunks from vector store
-    rag_enabled: bool
+    # Context for RAG integration
+    retriever: Optional[DocumentRetriever]
 
 
 def create_initial_quiz_state(
@@ -70,9 +70,6 @@ def create_initial_quiz_state(
         # Configuration
         quiz_config=quiz_config,
         confirmed_topics=confirmed_topics,
-        # RAG
-        document_context=None,
-        rag_enabled=False,
     )
 
 

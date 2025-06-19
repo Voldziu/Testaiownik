@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Iterator
+from typing import Iterator, Optional, List
 from ..qdrant_manager import QdrantManager
+from qdrant_client.models import PointStruct
 from utils.logger import logger
 
 
@@ -14,6 +15,12 @@ class DocumentRetriever(ABC):
     @abstractmethod
     def get_chunk_count(self) -> int:
         """Total number of chunks."""
+        pass
+
+    @abstractmethod
+    def search_in_collection(
+        query: str, collection_name: str, limit: int = 10
+    ) -> Optional[List[PointStruct]]:
         pass
 
 
@@ -31,6 +38,11 @@ class MockRetriever(DocumentRetriever):
     def get_chunk_count(self) -> int:
         return 3
 
+    def search_in_collection(
+        query: str, collection_name: str, limit: int = 10
+    ) -> Optional[List[PointStruct]]:
+        pass
+
 
 class RAGRetriever(DocumentRetriever):
     def __init__(self, collection_name: str, vector_store: QdrantManager):
@@ -44,13 +56,13 @@ class RAGRetriever(DocumentRetriever):
                 collection_name=self.collection_name,
                 limit=100,
                 with_payload=True,
-                with_vectors=False
+                with_vectors=False,
             )
 
             points, next_page_offset = scroll_result
 
             for point in points:
-                if 'text' in point.payload:
+                if "text" in point.payload:
                     yield point.payload
 
             while next_page_offset is not None:
@@ -59,18 +71,17 @@ class RAGRetriever(DocumentRetriever):
                     limit=100,
                     offset=next_page_offset,
                     with_payload=True,
-                    with_vectors=False
+                    with_vectors=False,
                 )
                 points, next_page_offset = scroll_result
 
                 for point in points:
-                    if 'text' in point.payload:
+                    if "text" in point.payload:
                         yield point.payload
 
         except Exception as e:
             logger.error(f"Błąd podczas pobierania chunks: {e}")
             return
-
 
     def get_chunk_count(self) -> int:
         """Returns the total number of chunks in the collection."""
@@ -82,3 +93,10 @@ class RAGRetriever(DocumentRetriever):
         except Exception as e:
             logger.error(f"Błąd podczas liczenia chunks: {e}")
             return 0
+
+    def search_in_collection(
+        self, query: str, limit: int = 10
+    ) -> Optional[List[PointStruct]]:
+        return self.vector_store.search_in_collection(
+            query, self.collection_name, limit
+        )
