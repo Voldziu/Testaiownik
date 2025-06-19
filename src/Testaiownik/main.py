@@ -4,6 +4,11 @@ from Agent.runner import run_agent
 # if __name__ == "__main__":
 #     run_agent()
 
+###
+# docker run -p 6333:6333 -p 6334:6334 \
+#     -v "$(pwd)/qdrant_storage:/qdrant/storage:z" \
+#    qdrant/qdrant
+
 
 from RAG.qdrant_manager import QdrantManager
 from RAG.Retrieval.Retriever import RAGRetriever

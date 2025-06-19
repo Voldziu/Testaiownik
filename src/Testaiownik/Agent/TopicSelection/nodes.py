@@ -1,7 +1,13 @@
 from trustcall import create_extractor
 from typing import Dict, Any, List
+from collections import namedtuple
 from .state import AgentState
-from .models import BatchAnalysis, FeedbackInterpretation, TopicConsolidation
+from .models import (
+    BatchAnalysis,
+    FeedbackInterpretation,
+    TopicConsolidation,
+    UserFeedback,
+)
 from AzureModels import get_llm
 from RAG.Retrieval import DocumentRetriever, MockRetriever
 from utils.logger import logger
@@ -68,42 +74,103 @@ def _process_batches(
             topic["weight"] /= total_weight
 
 
-def _consolidate_topics_with_history(
-    all_topics: List[Dict], history: List[Dict]
-) -> List[Dict[str, Any]]:
-    """Consolidate topics considering conversation history"""
-    if not history:
-        return [{"topic": t["topic"], "weight": t["weight"]} for t in all_topics]
+# _prepare_history_fields output
+HistoryFields = namedtuple(
+    "HistoryFields",
+    [
+        "history_context",
+        "latest_user_feedback",
+        "information_about_feedback",
+        "additional_instructions",
+    ],
+)
 
-    consolidation_llm = get_llm().with_structured_output(TopicConsolidation)
 
-    history_context = "\n".join(
+def _prepare_history_fields(history: List[Dict]) -> HistoryFields:
+    history_context = "CONVERSATION HISTORY:\n".join(
         [
             f"Iteration {i+1}: Generated {len(h['suggested_topics'])} topics, User said: '{h['user_feedback']}'"
             for i, h in enumerate(history)
         ]
     )
+    latest_user_feedback = f"Latest user feedback: {history[-1]['user_feedback']}"
+    information_about_feedback = """  Information about feedback:
+                            1. User feedback preferences are provided in the conversation history.
+                            2. User feedback is used to refine topic selection and importance.
+                            3. User feedback can suggest adding a topic, deleting a topic, or modifying existing topics."""
+    additional_instructions = """ and
+                                        Full conversation evolution
+                                        User feedback preferences
+                                    """
+
+    return HistoryFields(
+        history_context,
+        latest_user_feedback,
+        information_about_feedback,
+        additional_instructions,
+    )
+
+
+def _consolidate_topics_with_history(
+    all_topics: List[Dict],
+    rejected_topics: List[str],
+    history: List[Dict],
+    desired_topic_count: int = 10,
+) -> List[Dict[str, Any]]:
+    """Consolidate topics considering conversation history"""
+
+    consolidation_llm = get_llm().with_structured_output(TopicConsolidation)
+
+    # History texts
+    history_context = ""
+    latest_user_feedback = ""
+    information_about_feedback = ""
+    additional_instructions = ""
+
+    logger.debug(f"History: {history}")
+    if history:
+        (
+            history_context,
+            latest_user_feedback,
+            information_about_feedback,
+            additional_instructions,
+        ) = _prepare_history_fields(history)
 
     topics_with_weights = [
         f"{t['topic']} (weight: {t['weight']:.2f})" for t in all_topics
     ]
 
     prompt = f"""
-    CONVERSATION HISTORY:
     {history_context}
     
     Current extracted topics with weights: {topics_with_weights}
-    Latest user feedback: "{history[-1]['user_feedback']}"
+    {latest_user_feedback}
+
+
+
+    {information_about_feedback}
+    
+
+    
 
     Information about topics:
     1. They are extracted from indepentent batches of documents
     2. They have weights assigned batch-wise.
+
+    Avoid those topics, they were blacklisted by a user:
+    {rejected_topics}
     
     Generate consolidated topics considering:
-    1. Full conversation evolution
-    2. User feedback preferences
-    3. Topic importance weights from content analysis
-    4. Avoiding duplicates
+    
+    1. Topic importance weights from content analysis
+    1. Avoiding duplicates
+
+    {additional_instructions}
+
+
+    IMPORTANT:
+    1. Try to match the number of topics to: {desired_topic_count}
+   
 
 
     OUTPUT FORMAT:
@@ -126,7 +193,7 @@ def _consolidate_topics_with_history(
 
 
 def analyze_documents(
-    state: AgentState, retriever: DocumentRetriever = None, batch_size: int = 10
+    state: AgentState, retriever: DocumentRetriever = None, batch_size: int = 15
 ) -> AgentState:
     """Main document analysis orchestrator"""
     if retriever is None:
@@ -151,8 +218,12 @@ def analyze_documents(
     _process_batches(chunks, batch_size, all_topics, extractor, accumulated_summary)
 
     history = state.get("conversation_history", [])
+    rejected_topics = state.get("rejected_topics", [])
+    desired_topic_count = state.get("desired_topic_count", 10)
     # Consolidate topics with conversation history
-    final_topics = _consolidate_topics_with_history(all_topics, history)
+    final_topics = _consolidate_topics_with_history(
+        all_topics, rejected_topics, history, desired_topic_count
+    )
 
     return {
         **state,
@@ -182,11 +253,33 @@ def request_feedback(state: AgentState) -> AgentState:
     }
 
 
+def _calculate_new_topic_count(
+    feedback: UserFeedback, current_topics: List[str]
+) -> int:
+    """Calculate new desired topic count based on user feedback"""
+
+    # Calculate based on modifications
+    # Start with topics user wants to keep
+    kept_topics = (
+        set(feedback.accepted_topics)
+        if feedback.accepted_topics
+        else set(current_topics)
+    )
+
+    # Remove rejected topics
+    if feedback.rejected_topics:
+        kept_topics -= set(feedback.rejected_topics)
+
+    # Add new topics user wants
+    total_wanted = len(kept_topics) + len(feedback.want_to_add_topics or [])
+
+    return max(1, total_wanted)
+
+
 def process_feedback(state: AgentState) -> AgentState:
     suggested = state.get("suggested_topics", [])
     user_input = state.get("user_input", "")
     history = state.get("conversation_history", [])
-
     logger.info(f"Processing user input: {user_input}")
 
     # Add current interaction to history
@@ -213,6 +306,11 @@ def process_feedback(state: AgentState) -> AgentState:
     
     
     Interpret user intent and extract structured feedback.
+
+    If user wants to accept the topics, return them in "accepted_topics".
+    If user wants to modify topics, return modification request in "modification_request":
+        1. If user want to reject a topic, consider changing the nummber of desired_topic_count
+        2. If user want to add a specific topic, consider changing the number of desired_topic_count
     """
 
     logger.info(f"Processing feedback with prompt: {prompt}")
@@ -220,6 +318,7 @@ def process_feedback(state: AgentState) -> AgentState:
     interpretation = llm.invoke(prompt)
 
     feedback = interpretation.user_feedback
+    logger.debug(f"Full feedback: {feedback}")
     logger.info(f"Action: {feedback.action}")
 
     if feedback.action == "accept":
@@ -230,10 +329,20 @@ def process_feedback(state: AgentState) -> AgentState:
             "next_node": "END",
         }
     elif feedback.action == "modify":
+
+        new_desired_count = _calculate_new_topic_count(
+            feedback=feedback,
+            current_topics=suggested,
+        )
+        rejected_topics = state.get("rejected_topics", []).copy()
+        rejected_topics.extend(feedback.rejected_topics or [])  # Extend black list
+
         return {
             **state,
             "feedback_request": feedback.modification_request,
+            "rejected_topics": rejected_topics,
             "conversation_history": history,  # Because history is a copy
+            "desired_topic_count": new_desired_count,
             "next_node": "analyze_documents",  # loop
         }
     else:
