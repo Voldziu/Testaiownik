@@ -23,7 +23,7 @@ def main():
     pdf_path = r"test_files/testpdf.pdf"
     txt_path = r"test_files/testtxt.txt"
     pptx_path = r"test_files/testpptx.pptx"
-    collection_name = "all_documents_collection2"
+    collection_name = "all_documents_collection3"
 
     try:
         logger.info("Inicjalizacja QdrantManager...")
@@ -70,25 +70,36 @@ def main():
         chunks = rag_retriever.get_all_chunks()
 
         print("\n=== ZNALEZIONE FRAGMENTY DOKUMENTÓW ===")
-        # for i, chunk in enumerate(chunks, 1):
-        #     print(f"\n--- Fragment {i} ---")
-        #     print(chunk[:200] + "..." if len(chunk) > 200 else chunk)
+        for i, payload in enumerate(chunks, 1):
+            text = payload.get("text", "")
+            source = payload.get("source", "Nieznane źródło")
 
-        # logger.info("\nTestowanie funkcji search_in_collection...")
+            print(f"\n--- Fragment {i} ---")
 
-        # query = "Czym jest krontość?"
-        # search_result = qdrant_manager.search_in_collection(query, collection_name, limit=3)
+            print(text[:200] + "..." if len(text) > 200 else text)
+            if "page" in payload:
+                print(f"Strona (PDF): {payload['page']}")
+            elif "slide" in payload:
+                print(f"Slajd (PPTX): {payload['slide']}")
+            print(f"Źródło: {source}")
 
-        # if search_result:
-        #     logger.info("Wyniki wyszukiwania:")
 
-        #     for i, result in enumerate(search_result, 1):
-        #         print(f"\n--- Wynik {i} ---")
-        #         print(result.payload['text'])
-        # else:
-        #     logger.error("Brak wyników wyszukiwania.")
 
-        run_agent(rag_retriever)
+        logger.info("\nTestowanie funkcji search_in_collection...")
+
+        query = "Czym jest krontość?"
+        search_result = qdrant_manager.search_in_collection(query, collection_name, limit=3)
+
+        if search_result:
+            logger.info("Wyniki wyszukiwania:")
+
+            for i, result in enumerate(search_result, 1):
+                print(f"\n--- Wynik {i} ---")
+                print(result.payload['text'])
+        else:
+            logger.error("Brak wyników wyszukiwania.")
+
+        # run_agent(rag_retriever)
 
     except Exception as e:
         logger.error(f"Błąd w main(): {e}")

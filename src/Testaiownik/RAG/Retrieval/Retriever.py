@@ -37,22 +37,22 @@ class RAGRetriever(DocumentRetriever):
         self.vector_store = vector_store
         self.collection_name = collection_name
 
-    def get_all_chunks(self) -> Iterator[str]:
-        """Streams all chunks from Qdrant."""
+    def get_all_chunks(self) -> Iterator[dict]:
+        """Streams all payloads (text + metadata) from Qdrant."""
         try:
             scroll_result = self.vector_store.client.scroll(
                 collection_name=self.collection_name,
-                limit=100,  
+                limit=100,
                 with_payload=True,
-                with_vectors=False  
+                with_vectors=False
             )
-            
+
             points, next_page_offset = scroll_result
-            
+
             for point in points:
                 if 'text' in point.payload:
-                    yield point.payload['text']
-            
+                    yield point.payload
+
             while next_page_offset is not None:
                 scroll_result = self.vector_store.client.scroll(
                     collection_name=self.collection_name,
@@ -62,14 +62,15 @@ class RAGRetriever(DocumentRetriever):
                     with_vectors=False
                 )
                 points, next_page_offset = scroll_result
-                
+
                 for point in points:
                     if 'text' in point.payload:
-                        yield point.payload['text']
-                        
+                        yield point.payload
+
         except Exception as e:
             logger.error(f"Błąd podczas pobierania chunks: {e}")
             return
+
 
     def get_chunk_count(self) -> int:
         """Returns the total number of chunks in the collection."""

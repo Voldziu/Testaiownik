@@ -70,58 +70,59 @@ class QdrantManager:
         return chunks
     
 
-    def process_file(self, file_path: str) -> Optional[str]:
-        """Determines the type of file (PDF/TXT) and processes it accordingly."""
+    def process_file(self, file_path: str) -> List[tuple[str, dict]]:
+        """Returns extracted text with optional metadata."""
         if file_path.endswith('.pdf'):
-            return extract_text_from_pdf(file_path)
-        elif file_path.endswith('.txt'):
-            return extract_text_from_txt(file_path)
+            return [(text, {"page": page}) for text, page in extract_text_from_pdf(file_path)]
         elif file_path.endswith('.pptx'):
-            return extract_text_from_pptx(file_path)
+            return [(text, {"slide": slide}) for text, slide in extract_text_from_pptx(file_path)]
+        elif file_path.endswith('.txt'):
+            return [(extract_text_from_txt(file_path), {})]
         elif file_path.endswith('.docx'):
-            return extract_text_from_docx(file_path)
+            return [(extract_text_from_docx(file_path), {})]
         else:
             logger.error(f"Nieobsługiwany typ pliku: {file_path}")
-            return None
+            return []
+
 
 
     def index_file_to_qdrant(self, file_path: str, collection_name: str) -> bool:
-        """Indexes content from a file (PDF or TXT) into Qdrant."""
+        """Indexes content from a file into Qdrant with optional metadata (e.g., page/slide)."""
         try:
-            # Process the file to extract text
-            text = self.process_file(file_path)
-            if not text:
+            # Process the file and get list of (text, metadata) tuples
+            text_sections = self.process_file(file_path)
+            if not text_sections:
                 logger.warning(f"Nie udało się wyodrębnić tekstu z pliku: {file_path}")
                 return False
 
-            # Chunk the text into larger pieces
-            chunks = self.chunk_text(text, min_chunk_size=500)
-            if not chunks:
-                logger.warning("Nie znaleziono fragmentów tekstu do indeksowania")
-                return False
-
-            # Encoding chunks to vectors using the embedding model
-            vectors = self.embedding_model.embed_documents(chunks)
-
-            if vectors:
-                logger.info(f"Type of first vector: {type(vectors[0])}")
-                logger.info(f"Length of vectors: {len(vectors)}")
-
             points = []
-            for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
-                self.last_used_id += 1  
-                safe_vector = self.safe_to_list(vector)
-                points.append(PointStruct(
-                    id=self.last_used_id,  # sequential ID
-                    vector=safe_vector,
-                    payload={
+            for section_text, metadata in text_sections:
+                chunks = self.chunk_text(section_text, min_chunk_size=500)
+                if not chunks:
+                    continue
+
+                vectors = self.embedding_model.embed_documents(chunks)
+
+                for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+                    self.last_used_id += 1
+
+                    payload = {
                         "text": chunk,
                         "source": file_path,
                         "chunk_id": i
                     }
-                ))
+                    payload.update(metadata)
 
-            # Upsert points
+                    points.append(PointStruct(
+                        id=self.last_used_id,
+                        vector=self.safe_to_list(vector),
+                        payload=payload
+                    ))
+
+            if not points:
+                logger.warning("Brak punktów do dodania.")
+                return False
+
             self.client.upsert(collection_name=collection_name, points=points)
             logger.info(f"Dodano {len(points)} punktów do kolekcji '{collection_name}' z ID od {self.last_used_id - len(points) + 1} do {self.last_used_id}.")
             return True
@@ -129,6 +130,7 @@ class QdrantManager:
         except Exception as e:
             logger.error(f"Błąd podczas indeksowania pliku: {e}")
             return False
+
 
     def search_in_collection(self, query: str, collection_name: str, limit: int = 3):
         """Search for similar documents in Qdrant with validation."""
