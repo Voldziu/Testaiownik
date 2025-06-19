@@ -9,11 +9,9 @@ class UserFeedback(BaseModel):
         description="User's chosen action for the topics"
     )
     accepted_topics: List[str] = Field(description="Topics user wants to keep")
+    want_to_add_topics: List[str] = Field(description="Topics user wants to add")
     rejected_topics: List[str] = Field(description="Topics user wants to remove")
     modification_request: str = Field(description="User's request for changes")
-    desired_topic_count: Optional[int] = Field(
-        default=None, description="Number of topics user wants"
-    )
 
 
 class FeedbackInterpretation(BaseModel):
@@ -48,6 +46,7 @@ class TopicConsolidation(BaseModel):
         description="Final consolidated topic list with weights"
     )
     reasoning: str = Field(description="How topics were consolidated")
+    desired_topic_count: Optional[int] = Field("Number of topics")
 
     # @model_validator(mode="after")
     # def validate_weights_sum_to_one(self) -> Self:

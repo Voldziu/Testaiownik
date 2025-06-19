@@ -10,10 +10,12 @@ def run_agent(retriever: DocumentRetriever):
         "materials": [],
         "suggested_topics": [],
         "confirmed_topics": [],
+        "rejected_topics": [],
         "user_input": None,
         "feedback_request": None,
         "next_node": "",
         "messages": [],
+        "wanted_topic_count": 10,  # Set the desired number of topics
     }
 
     # Run until interrupt
