@@ -22,7 +22,7 @@ class TestaiownikRunner:
     def run_complete_workflow(
         self,
         desired_topic_count: int = 10,
-        total_questions: int = 100,
+        total_questions: int = 20,
         difficulty: str = "very hard",  # Literal ["easy", "medium", "hard", "very hard"]
         user_questions: Optional[List[str]] = None,
     ) -> None:

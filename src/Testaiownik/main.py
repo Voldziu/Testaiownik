@@ -169,7 +169,7 @@ def main():
     )
     parser.add_argument(
         "--difficulty",
-        choices=["easy", "medium", "hard"],
+        choices=["easy", "medium", "hard", "very-hard"],
         default="medium",
         help="Quiz difficulty",
     )

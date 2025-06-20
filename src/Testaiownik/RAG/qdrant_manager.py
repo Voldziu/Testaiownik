@@ -210,7 +210,11 @@ class QdrantManager:
             return False
 
     def search_in_collection(
-        self, query: str, collection_name: str, limit: int = 3
+        self,
+        query: str,
+        collection_name: str,
+        limit: int = 3,
+        score_threshold: float = 0.6,
     ) -> Optional[List[PointStruct]]:
         """Search for similar documents in Qdrant with validation."""
         if not query.strip():
@@ -228,6 +232,7 @@ class QdrantManager:
                 query=safe_query_vector,
                 limit=limit,
                 with_payload=True,
+                score_threshold=score_threshold,
             )
 
             if hasattr(search_result, "points"):

@@ -101,9 +101,12 @@ def generate_all_questions(
         logger.info(f"Added {len(user_questions)} user questions")
 
     # 2. Generate LLM questions in batches for each topic
+    # Track questions per topic to prevent cross-batch duplicates
+    topic_questions_tracker = {}
     all_generated = []
     for topic, count in questions_to_generate.items():
         logger.info(f"Generating {count} questions for topic: {topic}")
+        topic_questions_tracker[topic] = []
 
         # Generate in batches to avoid token limits
         remaining = count
@@ -115,6 +118,14 @@ def generate_all_questions(
                 count=batch_size,
                 difficulty=session.difficulty,
                 retriever=retriever,
+                existing_questions=topic_questions_tracker[
+                    topic
+                ].copy(),  # Pass existing questions to avoid duplicates
+            )
+
+            # Update the tracker with newly generated questions
+            topic_questions_tracker[topic].extend(
+                [q.question_text for q in batch_questions]
             )
 
             all_generated.extend(batch_questions)
@@ -423,7 +434,11 @@ Provide structured response."""
 
 
 def _generate_questions_for_topic(
-    topic: str, count: int, difficulty: str, retriever: DocumentRetriever = None
+    topic: str,
+    count: int,
+    difficulty: str,
+    retriever: DocumentRetriever = None,
+    existing_questions: List[str] = [],
 ) -> List[Question]:
     """Generate questions for a specific topic using LLM with RAG context"""
     llm = get_llm().with_structured_output(QuestionGeneration)
@@ -431,10 +446,7 @@ def _generate_questions_for_topic(
     # Get relevant context using RAG search
     context_text = ""
     if retriever:
-        # Search for topic-relevant chunks
-        search_results = retriever.search_in_collection(
-            query=f"{topic} concepts examples", limit=10  # TO BE SET
-        )
+        search_results = retriever.search_in_collection(query=f"{topic}", limit=20)
 
         if search_results:
             relevant_chunks = [
@@ -453,33 +465,45 @@ def _generate_questions_for_topic(
             f"RAG not available, generating questions for {topic} without context"
         )
 
-    prompt = f"""Generate {count} educational questions about: {topic}
+    # Create blacklist section if we have existing questions
+    created_questions_text = ""
+    if existing_questions:
+        created_questions_text = f"""
+            AVOID THESE ALREADY CREATED QUESTIONS:
+            {chr(10).join([f"- {q}" for q in existing_questions])}
 
-REQUIREMENTS:
-- Difficulty level: {difficulty}
-- Mix of question types: simple choice, multiple choice
-- Each question should have 2-5 answer options
-- Some questions can have multiple correct answers (set is_multi_choice=True)
-- Questions should test understanding, not memorization
-- Include clear explanations for correct answers
-- Ensure variety in question complexity
-- Avoid duplicate questions
+            DO NOT create questions similar to the above. Focus on different concepts, angles, and wording.
+            """
 
-QUESTION DISTRIBUTION:
-- 30% simple choice questions (2 options, like True/False)
-- 70% multiple choice questions (3-4 options, single and multi correct)
+    prompt = f"""Create {count} educational assessment questions for: {topic}
+ 
+Purpose: Academic Assessment
+Level: {difficulty}
+
+Question Format:
+- 30% binary choice (2 options)
+- 70% multiple choice (3-4 options)
+- Include answer explanations
+- Mark multi-answer questions with is_multi_choice=True
+
+Quality Standards:
+- {difficulty}-appropriate content
+- Educational focus on {topic}
+- Clear question wording
+- Test comprehension over memorization
+- Provide realistic answer options
+
+DUPLICATE PREVENTION:
+- Each question must cover different concepts/aspects
+- Vary question wording and structure significantly
+- Focus on distinct learning objectives
+- Ensure no overlapping answer patterns
+
+{created_questions_text}
 
 {context_text}
 
-QUESTION QUALITY GUIDELINES:
-- {difficulty} level appropriate for educational assessment
-- Clear, unambiguous wording
-- Realistic distractors for multiple choice
-- Comprehensive explanations
-- Focus on key concepts and practical applications
-- For multi-choice questions, ensure multiple answers are genuinely correct
-
-Generate exactly {count} questions total."""
+Output exactly {count} unique questions following above specifications."""
 
     try:
         result = llm.invoke(prompt)
@@ -511,13 +535,48 @@ Generate exactly {count} questions total."""
 
             questions.append(q)
 
-        logger.info(f"Generated {len(questions)} questions for {topic}")
-        return questions
+        # Remove duplicates post-processing
+        unique_questions = _remove_duplicate_questions(questions)
+
+        # If we lost questions due to duplicates, log it
+        if len(unique_questions) < len(questions):
+            logger.warning(
+                f"Removed {len(questions) - len(unique_questions)} duplicate questions"
+            )
+
+        logger.info(f"Generated {len(unique_questions)} unique questions for {topic}")
+        return unique_questions
 
     except Exception as e:
         logger.error(f"Question generation failed for {topic}: {e}")
-        # Return fallback questions
         return _create_fallback_questions(topic, count, difficulty)
+
+
+def _remove_duplicate_questions(questions: List[Question]) -> List[Question]:
+    """Remove duplicate questions based on text similarity"""
+    from difflib import SequenceMatcher
+
+    unique_questions = []
+    seen_questions = []
+
+    for question in questions:
+        is_duplicate = False
+
+        for seen_q in seen_questions:
+            # Check question text similarity
+            similarity = SequenceMatcher(
+                None, question.question_text.lower().strip(), seen_q.lower().strip()
+            ).ratio()
+
+            if similarity > 0.9:  # 90% similarity threshold
+                is_duplicate = True
+                break
+
+        if not is_duplicate:
+            unique_questions.append(question)
+            seen_questions.append(question.question_text.lower().strip())
+
+    return unique_questions
 
 
 def _create_fallback_questions(
