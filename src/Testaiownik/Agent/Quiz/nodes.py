@@ -476,6 +476,10 @@ def _generate_questions_for_topic(
             """
 
     prompt = f"""Create {count} educational assessment questions for: {topic}
+Focus on:
+- Different concepts/subtopics
+- Different question types (definition, application, analysis)
+- Different difficulty angles
  
 Purpose: Academic Assessment
 Level: {difficulty}
@@ -489,6 +493,7 @@ Question Format:
 Quality Standards:
 - {difficulty}-appropriate content
 - Educational focus on {topic}
+- Questions can't be general, they must be very specific.
 - Clear question wording
 - Test comprehension over memorization
 - Provide realistic answer options
@@ -568,7 +573,7 @@ def _remove_duplicate_questions(questions: List[Question]) -> List[Question]:
                 None, question.question_text.lower().strip(), seen_q.lower().strip()
             ).ratio()
 
-            if similarity > 0.9:  # 90% similarity threshold
+            if similarity > 0.7:  # 70% similarity threshold
                 is_duplicate = True
                 break
 

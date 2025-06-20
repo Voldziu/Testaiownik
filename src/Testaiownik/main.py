@@ -165,12 +165,12 @@ def main():
         "--topics", type=int, default=10, help="Desired number of topics (default: 10)"
     )
     parser.add_argument(
-        "--questions", type=int, default=20, help="Total quiz questions (default: 20)"
+        "--questions", type=int, default=100, help="Total quiz questions (default: 20)"
     )
     parser.add_argument(
         "--difficulty",
         choices=["easy", "medium", "hard", "very-hard"],
-        default="medium",
+        default="very-hard",
         help="Quiz difficulty",
     )
     parser.add_argument(
