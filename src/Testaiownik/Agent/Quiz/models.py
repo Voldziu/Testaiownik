@@ -64,7 +64,7 @@ class QuizSession(BaseModel):
         description="Topics with weights from previous graph"
     )
     total_questions: int = Field(description="Total number of questions for this quiz")
-    difficulty: Literal["easy", "medium", "hard"] = Field(
+    difficulty: Literal["easy", "medium", "hard", "very hard"] = Field(
         default="medium", description="Global quiz difficulty"
     )
     batch_size: int = Field(default=5, description="Questions generated per batch")
@@ -169,7 +169,7 @@ class QuizConfiguration(BaseModel):
 
     topics: List[WeightedTopic] = Field(description="Topics with weights")
     total_questions: int = Field(default=20, description="Total questions to generate")
-    difficulty: Literal["easy", "medium", "hard"] = Field(
+    difficulty: Literal["easy", "medium", "hard", "very hard"] = Field(
         default="medium", description="Global difficulty"
     )
     batch_size: int = Field(default=5, description="Questions per generation batch")

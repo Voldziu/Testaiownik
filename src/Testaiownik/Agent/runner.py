@@ -4,7 +4,7 @@ Main runner for TESTAIOWNIK - handles both TopicSelection and Quiz phases
 
 from typing import List, Optional
 from Agent.TopicSelection import create_agent_graph
-from Agent.Quiz import create_quiz_graph, create_initial_quiz_state
+from Agent.Quiz import create_quiz_graph, create_initial_quiz_state, Question
 from Agent.Shared import WeightedTopic
 from RAG.Retrieval import MockRetriever, DocumentRetriever
 
@@ -22,8 +22,8 @@ class TestaiownikRunner:
     def run_complete_workflow(
         self,
         desired_topic_count: int = 10,
-        total_questions: int = 20,
-        difficulty: str = "medium",
+        total_questions: int = 100,
+        difficulty: str = "very hard",  # Literal ["easy", "medium", "hard", "very hard"]
         user_questions: Optional[List[str]] = None,
     ) -> None:
         """Run the complete workflow: TopicSelection -> Quiz"""
@@ -133,13 +133,6 @@ class TestaiownikRunner:
 
         while True:
             current_state = self.quiz_graph.get_state(config)
-            logger.debug(f"Current next node: {current_state.next}")
-            logger.debug(
-                f"Feedback request: {current_state.values.get('feedback_request', '')}"
-            )
-            logger.debug(
-                f"Current question: {current_state.values.get('current_question', None)}"
-            )
 
             # Check if finished
             if current_state.next == ():
@@ -147,6 +140,20 @@ class TestaiownikRunner:
                     f"\n{current_state.values.get('feedback_request', 'Quiz completed!')}"
                 )
                 break
+
+            # If we have a current question, display it nicely
+            current_question = current_state.values.get("current_question")
+            if current_question:
+                # Get quiz session for progress info
+                quiz_session = current_state.values.get("quiz_session")
+                if quiz_session:
+                    question_num = quiz_session.current_question_index + 1
+                    total_questions = len(quiz_session.active_question_pool)
+                    self._display_question_cli(
+                        current_question, question_num, total_questions
+                    )
+                else:
+                    self._display_question_cli(current_question)
 
             # Display current feedback (question or results)
             feedback = current_state.values.get("feedback_request", "")
@@ -166,6 +173,46 @@ class TestaiownikRunner:
                 self.quiz_graph.update_state(config, {"user_input": user_input})
 
             self.quiz_graph.invoke(None, config)
+
+    def _display_question_cli(
+        self,
+        question: Question,
+        question_number: int = None,
+        total_questions: int = None,
+    ) -> None:
+        # Header with progress
+        if question_number and total_questions:
+            progress = f"Question {question_number}/{total_questions}"
+            print(f"\n{'='*60}")
+            print(
+                f"📝 {progress} | Topic: {question.topic} | Difficulty: {question.difficulty.upper()}"
+            )
+            print(f"{'='*60}")
+        else:
+            print(f"\n{'='*60}")
+            print(
+                f"📝 Topic: {question.topic} | Difficulty: {question.difficulty.upper()}"
+            )
+            print(f"{'='*60}")
+
+        # Question text
+        print(f"\n❓ {question.question_text}")
+        print()
+
+        # Answer choices
+        for i, choice in enumerate(question.choices, 1):
+            print(f"   {i}. {choice.text}")
+
+        # Instructions
+        print()
+        if question.is_multi_choice:
+            print(
+                "💡 Multiple answers allowed - enter numbers separated by commas (e.g., 1,3)"
+            )
+        else:
+            print("💡 Select one answer - enter the number")
+
+        print(f"{'─'*60}")
 
     def _get_quiz_answer_input(self) -> Optional[List[int]]:
         """Get user's answer input for quiz questions"""

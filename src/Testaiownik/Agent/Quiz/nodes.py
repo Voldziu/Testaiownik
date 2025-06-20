@@ -135,6 +135,9 @@ def generate_all_questions(
         f"Generated total {len(session.all_generated_questions)} questions "
         f"({len(user_questions)} user + {len(all_generated)} LLM)"
     )
+    logger.debug(
+        f"All generated questions: {[q.question_text for q in session.all_generated_questions]}"
+    )
 
     return {
         **state,
@@ -430,7 +433,7 @@ def _generate_questions_for_topic(
     if retriever:
         # Search for topic-relevant chunks
         search_results = retriever.search_in_collection(
-            query=f"{topic} concepts examples", limit=5
+            query=f"{topic} concepts examples", limit=10  # TO BE SET
         )
 
         if search_results:
@@ -460,6 +463,7 @@ REQUIREMENTS:
 - Questions should test understanding, not memorization
 - Include clear explanations for correct answers
 - Ensure variety in question complexity
+- Avoid duplicate questions
 
 QUESTION DISTRIBUTION:
 - 30% simple choice questions (2 options, like True/False)
@@ -493,8 +497,8 @@ Generate exactly {count} questions total."""
                 )
                 q.choices.extend(
                     [
-                        QuestionChoice(text="Option A", is_correct=False),
-                        QuestionChoice(text="Option B", is_correct=False),
+                        QuestionChoice(text="Option A True", is_correct=True),
+                        QuestionChoice(text="Option B False", is_correct=False),
                     ]
                 )
 
@@ -526,7 +530,7 @@ def _create_fallback_questions(
             # Simple choice (like True/False)
             question = Question(
                 topic=topic,
-                question_text=f"{topic} is an important concept in computer science.",
+                question_text=f"{topic} Fallback true/false",
                 choices=[
                     QuestionChoice(text="True", is_correct=True),
                     QuestionChoice(text="False", is_correct=False),
@@ -539,12 +543,12 @@ def _create_fallback_questions(
             # Multi-choice
             question = Question(
                 topic=topic,
-                question_text=f"Which of the following are characteristics of {topic}? (Select all that apply)",
+                question_text=f"{topic} Fallback multi-choice",
                 choices=[
-                    QuestionChoice(text="Characteristic A", is_correct=True),
-                    QuestionChoice(text="Characteristic B", is_correct=True),
-                    QuestionChoice(text="Unrelated option", is_correct=False),
-                    QuestionChoice(text="Another unrelated option", is_correct=False),
+                    QuestionChoice(text="True", is_correct=True),
+                    QuestionChoice(text="True", is_correct=True),
+                    QuestionChoice(text="False", is_correct=False),
+                    QuestionChoice(text="False", is_correct=False),
                 ],
                 explanation=f"Characteristics A and B are both relevant to {topic}.",
                 difficulty=difficulty,
@@ -620,5 +624,5 @@ Topic Breakdown:
 def route_next(state: QuizState) -> str:
     """Route to next node based on state"""
     next_node = state.get("next_node", "END")
-    logger.info(f"Routing to: {next_node}")
+    logger.debug(f"Routing to: {next_node}")
     return next_node if next_node != "END" else "__end__"

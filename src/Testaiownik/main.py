@@ -16,7 +16,8 @@ from RAG.Retrieval.Retriever import RAGRetriever, MockRetriever
 from utils import logger
 
 
-def prepare_retriever() -> RAGRetriever:
+def prepare_test_retriever() -> RAGRetriever:
+
     docx_path = r"test_files/testdocx.docx"
     pdf_path = r"test_files/testpdf.pdf"
     txt_path = r"test_files/testtxt.txt"
@@ -104,6 +105,55 @@ def prepare_retriever() -> RAGRetriever:
         raise
 
 
+def prepare_retriever(*paths, collection_name: str = "TEST_COLLECTION") -> RAGRetriever:
+    """Path needs to be in src/Testaiownik/{path}"""
+    # Collection_name is keyword only!
+
+    try:
+        logger.info("Initialize QdrantManager...")
+        qdrant_manager = QdrantManager()
+
+        logger.info(f"Creating collection  '{collection_name}'...")
+        qdrant_manager.create_collection(collection_name)
+
+        # Index all provided paths
+        for path in paths:
+            logger.info(f"Indexing file: {path}")
+            success = qdrant_manager.index_file_to_qdrant(path, collection_name)
+
+            if not success:
+                logger.error(f"Can't index file: {path}")
+                return
+
+        logger.info("Initialize RAGRetriever...")
+        rag_retriever = RAGRetriever(collection_name, qdrant_manager)
+
+        chunk_count = rag_retriever.get_chunk_count()
+        logger.info(f"Number of chunks in collection: {chunk_count}")
+
+        logger.info("Fetching document chunks..")
+        chunks = rag_retriever.get_all_chunks()
+
+        logger.debug("\n=== Found document chunks ===")
+        for i, payload in enumerate(chunks, 1):
+            text = payload.get("text", "")
+            source = payload.get("source", "Nieznane źródło")
+
+            logger.debug(f"\n--- Fragment {i} ---")
+            logger.debug(text[:100] + "..." if len(text) > 100 else text)
+            if "page" in payload:
+                logger.debug(f"Page (PDF): {payload['page']}")
+            elif "slide" in payload:
+                logger.debug(f"Slide (PPTX): {payload['slide']}")
+            logger.debug(f"Source: {source}")
+
+        return rag_retriever
+
+    except Exception as e:
+        logger.error(f"Błąd w main(): {e}")
+        raise
+
+
 def main():
     """Main entry point with command line arguments"""
 
@@ -131,7 +181,14 @@ def main():
 
     # Prepare retriever and docs
     logger.info("Preparing retriever and indexing documents...")
-    retriever = prepare_retriever()
+
+    # retriever = prepare_retriever(
+    #     "test_files_big/zacho.pdf", collection_name="collection_zacho"
+    # )  # Pass paths for testing!
+
+    retriever = prepare_retriever(
+        collection_name="collection_zacho"
+    )  # use existing collection
     logger.info("Retriever prepared successfully.")
 
     # Create and run

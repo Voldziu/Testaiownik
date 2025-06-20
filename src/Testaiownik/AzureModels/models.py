@@ -5,7 +5,7 @@ from utils.logger import logger
 from config import config
 
 LLM_TEMPERATURE = 0.2
-LLM_MAX_TOKENS = 1000
+LLM_MAX_TOKENS = 10000
 
 
 def get_llm(
@@ -27,7 +27,7 @@ def get_llm(
     temperature = temperature if temperature is not None else LLM_TEMPERATURE
     max_tokens = max_tokens if max_tokens is not None else LLM_MAX_TOKENS
 
-    logger.info(
+    logger.debug(
         f"Instianting Azure Chat OpenAi with parameters: "
         f"endpoint={azure_endpoint}, "
         f"deployment={deployment_name}, "
@@ -46,15 +46,15 @@ def get_llm(
     )
 
     # Log comprehensive LLM status
-    logger.info("✅ LLM instance created successfully")
-    logger.info(f"LLM Endpoint: {getattr(llm, 'azure_endpoint', 'Unknown')}")
-    logger.info(f"LLM Deployment: {getattr(llm, 'deployment_name', 'Unknown')}")
-    logger.info(f"LLM API Version: {getattr(llm, 'openai_api_version', 'Unknown')}")
-    logger.info(f"Model Version: {getattr(llm, 'model_version', 'Unknown')}")
-    logger.info(f"LLM Model: {getattr(llm, 'model_name','Unknown')}")
-    logger.info(f"LLM Temperature: {getattr(llm, 'temperature', 'Unknown')}")
-    logger.info(f"LLM Max Tokens: {getattr(llm, 'max_tokens', 'Unknown')}")
-    logger.info(
+    logger.debug("✅ LLM instance created successfully")
+    logger.debug(f"LLM Endpoint: {getattr(llm, 'azure_endpoint', 'Unknown')}")
+    logger.debug(f"LLM Deployment: {getattr(llm, 'deployment_name', 'Unknown')}")
+    logger.debug(f"LLM API Version: {getattr(llm, 'openai_api_version', 'Unknown')}")
+    logger.debug(f"Model Version: {getattr(llm, 'model_version', 'Unknown')}")
+    logger.debug(f"LLM Model: {getattr(llm, 'model_name','Unknown')}")
+    logger.debug(f"LLM Temperature: {getattr(llm, 'temperature', 'Unknown')}")
+    logger.debug(f"LLM Max Tokens: {getattr(llm, 'max_tokens', 'Unknown')}")
+    logger.debug(
         f"LLM Client Type: {type(getattr(llm, 'client', None)).__name__ if hasattr(llm, 'client') else 'Unknown'}"
     )
 
@@ -74,26 +74,27 @@ def get_embedding_model(
     deployment_name = deployment_name or config.EMBEDDING_MODEL_NAME
     api_version = api_version or config.EMBEDDING_MODEL_VERSION
 
-    logger.info(f"Creating embedding model with:")
-    logger.info(f"  Endpoint: {azure_endpoint}")
-    logger.info(f"  Deployment: {deployment_name}")
-    logger.info(f"  API Version: {api_version}")
+    logger.debug(f"Creating embedding model with:")
+    logger.debug(f"  Endpoint: {azure_endpoint}")
+    logger.debug(f"  Deployment: {deployment_name}")
+    logger.debug(f"  API Version: {api_version}")
 
     try:
         embedding_model = AzureOpenAIEmbeddings(
             azure_endpoint=azure_endpoint,
             api_key=api_key,
-            azure_deployment=deployment_name,  
+            azure_deployment=deployment_name,
             api_version=api_version,
         )
-        
-       
-        logger.info("Testing embedding model...")
+
+        logger.debug("Testing embedding model...")
         test_embedding = embedding_model.embed_query("test")
-        logger.info(f"Embedding model test successful. Vector size: {len(test_embedding)}")
-        
+        logger.debug(
+            f"Embedding model test successful. Vector size: {len(test_embedding)}"
+        )
+
         return embedding_model
-        
+
     except Exception as e:
         logger.error(f"Failed to create embedding model: {e}")
         logger.error(f"Check your Azure OpenAI configuration:")

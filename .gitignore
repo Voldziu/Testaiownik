@@ -6,6 +6,7 @@ uv.lock
 .ruff_cache
 __pycache__/
 *.pyc
+test_files_big/
 
 qdrant_storage/
 

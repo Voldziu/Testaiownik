@@ -3,7 +3,6 @@ from .models import WeightedTopic
 
 
 class AgentState(TypedDict):
-    documents: List[str]
     suggested_topics: List[WeightedTopic]
     rejected_topics: List[str]
     confirmed_topics: List[WeightedTopic]
