@@ -8,7 +8,7 @@ from utils.logger import logger
 # DocumentRetriever is an abstract base class for retrieving documents.
 class DocumentRetriever(ABC):
     @abstractmethod
-    def get_all_chunks(self) -> Iterator[str]:
+    def get_all_chunks(self) -> Iterator[dict]:
         """Stream all indexed chunks."""
         pass
 
@@ -26,14 +26,24 @@ class DocumentRetriever(ABC):
 
 # MockRetriever is a mock implementation of DocumentRetriever for testing purposes.
 class MockRetriever(DocumentRetriever):
-    def get_all_chunks(self) -> Iterator[str]:
-        chunks = [
-            "Algorytmy sortowania to fundamentalne narzędzia w informatyce...",
-            "Struktury danych to sposoby organizacji i przechowywania informacji...",
-            "Złożoność obliczeniowa to miara efektywności algorytmów...",
-        ]
-        for chunk in chunks:
-            yield chunk
+    class MockRetriever(DocumentRetriever):
+        def get_all_chunks(self) -> Iterator[dict]:  # Changed return type annotation
+            chunks = [
+                {
+                    "text": "Algorytmy sortowania to fundamentalne narzędzia w informatyce...",
+                    "source": "mock",
+                },
+                {
+                    "text": "Struktury danych to sposoby organizacji i przechowywania informacji...",
+                    "source": "mock",
+                },
+                {
+                    "text": "Złożoność obliczeniowa to miara efektywności algorytmów...",
+                    "source": "mock",
+                },
+            ]
+            for chunk in chunks:
+                yield chunk
 
     def get_chunk_count(self) -> int:
         return 3
