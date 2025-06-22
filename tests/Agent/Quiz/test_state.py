@@ -14,6 +14,7 @@ from src.Testaiownik.Agent.Quiz.models import (
     Question,
     QuestionChoice,
     QuizConfiguration,
+    WeightedTopic,  # I dont know why this is needed, but it must be like this
 )
 
 
@@ -21,8 +22,8 @@ class TestCreateInitialQuizState:
     @pytest.fixture
     def sample_topics(self):
         return [
-            {"topic": "Algorithms", "weight": 0.6},
-            {"topic": "Data Structures", "weight": 0.4},
+            WeightedTopic(topic="Algorithms", weight=0.6),
+            WeightedTopic(topic="Data Structures", weight=0.4),
         ]
 
     def test_create_initial_state_defaults(self, sample_topics):
@@ -95,7 +96,7 @@ class TestPrepareStateForPersistence:
         session = QuizSession(
             session_id="test-session-123",
             topics=[
-                {"topic": "Test", "weight": 1.0},
+                WeightedTopic(topic="Test", weight=1.0),
             ],
             total_questions=5,
             questions_per_topic={"Test": 5},
@@ -148,7 +149,7 @@ class TestPrepareStateForPersistence:
         assert result["session_id"] == quiz_session.session_id
         snapshot = result["snapshot"]
         assert snapshot["quiz_complete"] == True
-        assert snapshot.get("questions_to_generate") is None
+        assert snapshot["questions_to_generate"] == {}
 
 
 class TestRestoreStateFromPersistence:
@@ -168,7 +169,7 @@ class TestRestoreStateFromPersistence:
     def db_data(self, sample_question):
         quiz_session_data = {
             "session_id": "restored-session",
-            "topics": [{"topic": "Test", "weight": 1.0}],
+            "topics": [WeightedTopic(topic="Test", weight=1.0)],
             "total_questions": 5,
             "difficulty": "medium",
             "batch_size": 5,
@@ -242,11 +243,9 @@ class TestQuizStateIntegration:
 
     def test_full_state_lifecycle(self):
         # 1. Create initial state
-        topics = (
-            [
-                {"topic": "Algorithms", "weight": 1.0},
-            ],
-        )
+        topics = [
+            WeightedTopic(topic="Algorithms", weight=1.0),
+        ]
         initial_state = create_initial_quiz_state(
             topics, total_questions=3, user_id="test-user"
         )
@@ -302,7 +301,7 @@ class TestQuizStateIntegration:
     def test_state_validation_requirements(self):
         """Test that state meets QuizState type requirements"""
         topics = [
-            {"topic": "Test", "weight": 1.0},
+            WeightedTopic(topic="Test", weight=1.0),
         ]
         state = create_initial_quiz_state(topics)
 
@@ -319,7 +318,7 @@ class TestQuizStateIntegration:
     def test_state_immutability_patterns(self):
         """Test that state updates follow immutable patterns"""
         topics = [
-            {"topic": "Test", "weight": 1.0},
+            WeightedTopic(topic="Test", weight=1.0),
         ]
         original_state = create_initial_quiz_state(topics)
 

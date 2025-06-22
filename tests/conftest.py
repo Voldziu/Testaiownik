@@ -39,11 +39,12 @@ def real_llm():
 @pytest.fixture
 def sample_weighted_topics():
     """Sample WeightedTopic objects for testing"""
+    from src.Testaiownik.Agent.Shared import WeightedTopic
 
     return [
-        {"topic": "Algorithms", "weight": 0.4},
-        {"topic": "Data Structures", "weight": 0.3},
-        {"topic": "Complexity Analysis", "weight": 0.3},
+        WeightedTopic(topic="Algorithms", weight=0.4),
+        WeightedTopic(topic="Data Structures", weight=0.3),
+        WeightedTopic(topic="Complexity Analysis", weight=0.3),
     ]
 
 

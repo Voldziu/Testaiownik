@@ -12,6 +12,7 @@ from src.Testaiownik.Agent.Quiz.models import (
     QuestionGeneration,
     QuizConfiguration,
     UserQuestionResponse,
+    WeightedTopic,  # TO ENSURE THAT WE HAVE THE CORRECT MODEL
 )
 
 
@@ -131,8 +132,8 @@ class TestQuizSession:
     @pytest.fixture
     def sample_topics(self):
         return [
-            {"topic": "Algorithms", "weight": 0.6},
-            {"topic": "Data Structures", "weight": 0.4},
+            WeightedTopic(topic="Algorithms", weight=0.6),
+            WeightedTopic(topic="Data Structures", weight=0.4),
         ]
 
     @pytest.fixture
@@ -294,7 +295,7 @@ class TestQuizResults:
 
 class TestQuizConfiguration:
     def test_creation_with_defaults(self):
-        topics = [{"topic": "Algorithms", "weight": 1.0}]
+        topics = [WeightedTopic(topic="Algorithms", weight=1.0)]
 
         config = QuizConfiguration(topics=topics)
 
@@ -308,7 +309,7 @@ class TestQuizConfiguration:
         assert config.user_id is None
 
     def test_creation_with_custom_values(self):
-        topics = [{"topic": "Advanced", "weight": 1.0}]
+        topics = [WeightedTopic(topic="Advanced", weight=1.0)]
         user_questions = ["What is recursion?", "Explain Big O notation"]
 
         config = QuizConfiguration(

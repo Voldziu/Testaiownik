@@ -37,6 +37,7 @@ def create_initial_quiz_state(
     batch_size: int = 5,
     max_incorrect_recycles: int = 2,
     quiz_mode: str = "fresh",
+    user_questions: Optional[List[str]] = [],
     user_id: Optional[str] = None,
     previous_session_id: Optional[str] = None,
 ) -> QuizState:
@@ -49,6 +50,7 @@ def create_initial_quiz_state(
         batch_size=batch_size,
         max_incorrect_recycles=max_incorrect_recycles,
         quiz_mode=quiz_mode,
+        user_questions=user_questions,
         user_id=user_id,
         previous_session_id=previous_session_id,
     )
@@ -70,6 +72,7 @@ def create_initial_quiz_state(
         # Configuration
         quiz_config=quiz_config,
         confirmed_topics=confirmed_topics,
+        retriever=None,  # Will be set in initialize_quiz node
     )
 
 
@@ -83,10 +86,9 @@ def prepare_state_for_persistence(state: QuizState) -> Dict[str, Any]:
         "user_id": state["quiz_session"].user_id,
         "quiz_data": state["quiz_session"].model_dump(),
         "snapshot": {
-            "quiz_complete": state["quiz_complete"],
-            "questions_to_generate": state["questions_to_generate"],
-            "current_topic_batch": state["current_topic_batch"],
-            "rag_enabled": state["rag_enabled"],
+            "quiz_complete": state.get("quiz_complete", False),
+            "questions_to_generate": state.get("questions_to_generate", {}),
+            "current_topic_batch": state.get("current_topic_batch", None),
         },
         "last_activity": state["quiz_session"].last_activity,
         "status": state["quiz_session"].status,
@@ -119,4 +121,5 @@ def restore_state_from_persistence(db_data: Dict[str, Any]) -> QuizState:
         # Configuration
         quiz_config=None,  # Not needed after initialization
         confirmed_topics=quiz_session.topics,
+        retriever=None,  # Will be set in initialize_quiz node
     )
