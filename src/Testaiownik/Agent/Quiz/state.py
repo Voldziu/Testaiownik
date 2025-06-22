@@ -119,7 +119,4 @@ def restore_state_from_persistence(db_data: Dict[str, Any]) -> QuizState:
         # Configuration
         quiz_config=None,  # Not needed after initialization
         confirmed_topics=quiz_session.topics,
-        # RAG
-        document_context=None,
-        rag_enabled=snapshot.get("rag_enabled", False),
     )

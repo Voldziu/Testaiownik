@@ -1,6 +1,6 @@
 # test_data_processing.py - REGENERATED
 from unittest.mock import Mock, patch
-from Agent.TopicSelection.nodes import (
+from src.Testaiownik.Agent.TopicSelection.nodes import (
     _process_batch,
     _consolidate_topics_with_history,
 )
@@ -9,7 +9,7 @@ from Agent.TopicSelection.nodes import (
 class TestProcessBatch:
     """Test process_batch function from Agent.TopicSelection.nodes module"""
 
-    @patch("Agent.TopicSelection.nodes.create_extractor")
+    @patch("src.Testaiownik.Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_prompt_creation(self, mock_extractor):
         """Test how your process_batch creates prompts"""
         # Mock the extractor with tool_calls structure
@@ -58,7 +58,7 @@ class TestProcessBatch:
             {"topic": "Sorting", "weight": 0.4},
         ]
 
-    @patch("Agent.TopicSelection.nodes.create_extractor")
+    @patch("src.Testaiownik.Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_with_empty_previous_context(self, mock_extractor):
         """Test process_batch with first batch (no previous context)"""
         mock_extract_instance = Mock()
@@ -87,7 +87,7 @@ class TestProcessBatch:
         assert "This is the first batch." in prompt
         assert "First batch content" in prompt
 
-    @patch("Agent.TopicSelection.nodes.create_extractor")
+    @patch("src.Testaiownik.Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_return_structure(self, mock_extractor):
         """Test that process_batch returns the correct structure"""
         expected_response = {
@@ -135,7 +135,7 @@ class TestProcessBatch:
         assert result["current_topics"] == []
         mock_extract_instance.invoke.assert_called_once()
 
-    @patch("Agent.TopicSelection.nodes.create_extractor")
+    @patch("src.Testaiownik.Agent.TopicSelection.nodes.create_extractor")
     def test_process_batch_with_very_long_content(self, mock_extractor):
         """Test process_batch with very long batch content"""
         mock_extract_instance = Mock()
@@ -177,7 +177,7 @@ class TestProcessBatch:
 class TestConsolidateTopicsWithHistory:
     """Test the  consolidate_topics_with_history function from Agent.TopicSelection.nodes module"""
 
-    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("src.Testaiownik.Agent.TopicSelection.nodes.get_llm")
     def test_consolidate_with_empty_history(self, mock_get_llm):
         """Test your function with no conversation history"""
         topics = [
@@ -214,7 +214,7 @@ class TestConsolidateTopicsWithHistory:
         assert "Data Structure" in topic_names
         assert "Complexity" in topic_names
 
-    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("src.Testaiownik.Agent.TopicSelection.nodes.get_llm")
     def test_consolidate_with_history_present(self, mock_get_llm):
         """Test your function when conversation history exists"""
         topics = [
@@ -270,7 +270,7 @@ class TestConsolidateTopicsWithHistory:
         assert result[1].topic == "Sorting Algorithms"
         assert result[2].topic == "Tree Structures"
 
-    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("src.Testaiownik.Agent.TopicSelection.nodes.get_llm")
     def test_consolidate_uses_latest_feedback(self, mock_get_llm):
         """Test that your function highlights latest user feedback"""
         topics = [{"topic": "Topic1", "weight": 1.0}]
@@ -310,7 +310,9 @@ class TestConsolidateTopicsWithHistory:
         rejected_topics = []
         desired_topic_count = 50
 
-        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
+        with patch(
+            "src.Testaiownik.Agent.TopicSelection.nodes.get_llm"
+        ) as mock_get_llm:
             mock_llm = Mock()
             mock_consolidation_result = Mock()
             # Mock returns only 10 topics (default behavior based on desired_topic_count logic)
@@ -328,7 +330,7 @@ class TestConsolidateTopicsWithHistory:
             assert isinstance(result, list)
             assert len(result) == 10  # LLM consolidates down to 10
 
-    @patch("Agent.TopicSelection.nodes.get_llm")
+    @patch("src.Testaiownik.Agent.TopicSelection.nodes.get_llm")
     def test_consolidate_formats_history_correctly(self, mock_get_llm):
         """Test the exact history formatting in your function"""
         topics = [{"topic": "Topic", "weight": 1.0}]

@@ -1,5 +1,5 @@
 # test_request_feedback.py - REGENERATED
-from Agent.TopicSelection.nodes import request_feedback
+from src.Testaiownik.Agent.TopicSelection.nodes import request_feedback
 
 
 class TestRequestFeedback:

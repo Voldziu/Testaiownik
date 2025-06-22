@@ -14,7 +14,7 @@ class TestRAGRetriever:
     @pytest.fixture
     def rag_retriever(self, mock_vector_store):
         """Create RAGRetriever instance."""
-        from RAG.Retrieval.Retriever import RAGRetriever
+        from src.Testaiownik.RAG.Retrieval.Retriever import RAGRetriever
 
         return RAGRetriever("test_collection", mock_vector_store)
 

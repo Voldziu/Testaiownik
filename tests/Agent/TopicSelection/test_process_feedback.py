@@ -1,6 +1,6 @@
 # test_process_feedback.py - REGENERATED
 from unittest.mock import Mock, patch
-from Agent.TopicSelection.nodes import process_feedback
+from src.Testaiownik.Agent.TopicSelection.nodes import process_feedback
 
 
 class TestProcessFeedbackStateLogic:
@@ -42,7 +42,9 @@ class TestProcessFeedbackStateLogic:
         }
 
         # Mock LLM to return accept action
-        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
+        with patch(
+            "src.Testaiownik.Agent.TopicSelection.nodes.get_llm"
+        ) as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
@@ -75,7 +77,9 @@ class TestProcessFeedbackStateLogic:
             "user_input": "I accept these topics",
         }
 
-        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
+        with patch(
+            "src.Testaiownik.Agent.TopicSelection.nodes.get_llm"
+        ) as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
@@ -102,7 +106,9 @@ class TestProcessFeedbackStateLogic:
             "user_input": "Please modify these topics",
         }
 
-        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
+        with patch(
+            "src.Testaiownik.Agent.TopicSelection.nodes.get_llm"
+        ) as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
@@ -158,7 +164,9 @@ class TestProcessFeedbackStateLogic:
             "user_input": "Confusing input",
         }
 
-        with patch("Agent.TopicSelection.nodes.get_llm") as mock_get_llm:
+        with patch(
+            "src.Testaiownik.Agent.TopicSelection.nodes.get_llm"
+        ) as mock_get_llm:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(

@@ -3,7 +3,7 @@ import tempfile
 import os
 from unittest.mock import Mock, patch
 
-from RAG.file_processor import (
+from src.Testaiownik.RAG.file_processor import (
     extract_text_from_pdf,
     extract_text_from_txt,
     extract_text_from_pptx,
@@ -46,7 +46,7 @@ class TestFileProcessor:
         finally:
             os.unlink(temp_path)
 
-    @patch("RAG.file_processor.pdfplumber")
+    @patch("src.Testaiownik.RAG.file_processor.pdfplumber")
     def test_extract_text_from_pdf_success(self, mock_pdfplumber):
         """Test successful PDF text extraction."""
         # Mock PDF structure
@@ -68,7 +68,7 @@ class TestFileProcessor:
         assert result == [("Page 1 content\n", 1), ("Page 2 content\n", 2)]
         mock_pdfplumber.open.assert_called_once_with("test.pdf")
 
-    @patch("RAG.file_processor.pdfplumber")
+    @patch("src.Testaiownik.RAG.file_processor.pdfplumber")
     def test_extract_text_from_pdf_empty_pages(self, mock_pdfplumber):
         """Test PDF extraction with empty pages."""
         mock_page = Mock()
@@ -85,7 +85,7 @@ class TestFileProcessor:
 
         assert result == []
 
-    @patch("RAG.file_processor.Document")
+    @patch("src.Testaiownik.RAG.file_processor.Document")
     def test_extract_text_from_docx_success(self, mock_document_class):
         """Test successful DOCX text extraction."""
         # Mock paragraphs
@@ -105,7 +105,7 @@ class TestFileProcessor:
         assert result == "First paragraph\nSecond paragraph"
         mock_document_class.assert_called_once_with("test.docx")
 
-    @patch("RAG.file_processor.Document")
+    @patch("src.Testaiownik.RAG.file_processor.Document")
     def test_extract_text_from_docx_error(self, mock_document_class):
         """Test DOCX extraction with error."""
         mock_document_class.side_effect = Exception("File not found")
@@ -114,7 +114,7 @@ class TestFileProcessor:
 
         assert result == ""
 
-    @patch("RAG.file_processor.Presentation")
+    @patch("src.Testaiownik.RAG.file_processor.Presentation")
     def test_extract_text_from_pptx_success(self, mock_presentation_class):
         """Test successful PPTX text extraction."""
         # Mock shapes with text
@@ -145,7 +145,7 @@ class TestFileProcessor:
         expected = [("Slide 1 text\nSlide 1 more text", 1), ("Slide 2 text", 2)]
         assert result == expected
 
-    @patch("RAG.file_processor.Presentation")
+    @patch("src.Testaiownik.RAG.file_processor.Presentation")
     def test_extract_text_from_pptx_error(self, mock_presentation_class):
         """Test PPTX extraction with error."""
         mock_presentation_class.side_effect = Exception("File corrupted")
@@ -154,7 +154,7 @@ class TestFileProcessor:
 
         assert result == []
 
-    @patch("RAG.file_processor.Presentation")
+    @patch("src.Testaiownik.RAG.file_processor.Presentation")
     def test_extract_text_from_pptx_empty_slides(self, mock_presentation_class):
         """Test PPTX extraction with empty slides."""
         mock_slide = Mock()

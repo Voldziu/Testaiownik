@@ -1,7 +1,7 @@
 from unittest.mock import Mock, patch
 import pytest
 
-from RAG.qdrant_manager import QdrantManager
+from src.Testaiownik.RAG.qdrant_manager import QdrantManager
 
 
 class TestQdrantManager:
