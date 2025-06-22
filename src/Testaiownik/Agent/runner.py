@@ -203,6 +203,8 @@ class TestaiownikRunner:
         for i, choice in enumerate(question.choices, 1):
             print(f"   {i}. {choice.text}")
 
+        logger.debug(f"Question explanation: {question.explanation}")
+
         # Instructions
         print()
         if question.is_multi_choice:

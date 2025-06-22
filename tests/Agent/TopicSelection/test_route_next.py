@@ -1,5 +1,5 @@
 # test_route_next.py - REGENERATED
-from Agent.TopicSelection.nodes import route_next
+from src.Testaiownik.Agent.TopicSelection.nodes import route_next
 
 
 class TestRouteNext:

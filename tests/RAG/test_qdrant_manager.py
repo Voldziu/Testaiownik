@@ -1,7 +1,7 @@
 from unittest.mock import Mock, patch
 import pytest
 
-from RAG.qdrant_manager import QdrantManager
+from src.Testaiownik.RAG.qdrant_manager import QdrantManager
 
 
 class TestQdrantManager:
@@ -10,7 +10,6 @@ class TestQdrantManager:
     def mock_embedding_model(self):
         """Mock embedding model."""
         model = Mock()
-        model.embed_documents.return_value = [[0.1, 0.2, 0.3] * 512]
         model.embed_query.return_value = [0.1, 0.2, 0.3] * 512
         return model
 
@@ -18,9 +17,9 @@ class TestQdrantManager:
     def qdrant_manager(self, mock_embedding_model):
         """Create QdrantManager instance with mocked dependencies."""
         with (
-            patch("RAG.qdrant_manager.QdrantClient") as mock_client,
+            patch("src.Testaiownik.RAG.qdrant_manager.QdrantClient") as mock_client,
             patch(
-                "RAG.qdrant_manager.get_embedding_model",
+                "src.Testaiownik.RAG.qdrant_manager.get_embedding_model",
                 return_value=mock_embedding_model,
             ),
         ):
@@ -31,8 +30,10 @@ class TestQdrantManager:
 
     def test_init(self):
         with (
-            patch("RAG.qdrant_manager.QdrantClient") as mock_client,
-            patch("RAG.qdrant_manager.get_embedding_model") as mock_get_model,
+            patch("src.Testaiownik.RAG.qdrant_manager.QdrantClient") as mock_client,
+            patch(
+                "src.Testaiownik.RAG.qdrant_manager.get_embedding_model"
+            ) as mock_get_model,
         ):
 
             manager = QdrantManager(url="http://test:1234", vector_size=768)
@@ -139,7 +140,7 @@ class TestQdrantManager:
 
         # Mock returns list of (text, page_number) tuples
         with patch(
-            "RAG.qdrant_manager.extract_text_from_pdf",
+            "src.Testaiownik.RAG.qdrant_manager.extract_text_from_pdf",
             return_value=[("PDF content", 1)],
         ) as mock_extract:
             result = qdrant_manager.process_file("test.pdf")
@@ -150,7 +151,8 @@ class TestQdrantManager:
     def test_process_file_txt(self, qdrant_manager):
         """Test processing TXT file."""
         with patch(
-            "RAG.qdrant_manager.extract_text_from_txt", return_value="TXT content"
+            "src.Testaiownik.RAG.qdrant_manager.extract_text_from_txt",
+            return_value="TXT content",
         ) as mock_extract:
             result = qdrant_manager.process_file("test.txt")
 
@@ -160,7 +162,8 @@ class TestQdrantManager:
     def test_process_file_docx(self, qdrant_manager):
         """Test processing DOCX file."""
         with patch(
-            "RAG.qdrant_manager.extract_text_from_docx", return_value="DOCX content"
+            "src.Testaiownik.RAG.qdrant_manager.extract_text_from_docx",
+            return_value="DOCX content",
         ) as mock_extract:
             result = qdrant_manager.process_file("test.docx")
 
@@ -172,7 +175,7 @@ class TestQdrantManager:
 
         # Mock returns list of (text, slide_number) tuples
         with patch(
-            "RAG.qdrant_manager.extract_text_from_pptx",
+            "src.Testaiownik.RAG.qdrant_manager.extract_text_from_pptx",
             return_value=[("PPTX content", 1)],
         ) as mock_extract:
             result = qdrant_manager.process_file("test.pptx")

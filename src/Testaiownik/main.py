@@ -140,7 +140,8 @@ def prepare_retriever(*paths, collection_name: str = "TEST_COLLECTION") -> RAGRe
             source = payload.get("source", "Nieznane źródło")
 
             logger.debug(f"\n--- Fragment {i} ---")
-            logger.debug(text[:100] + "..." if len(text) > 100 else text)
+            # logger.debug(text[:100] + "..." if len(text) > 100 else text)
+            logger.debug(text)
             if "page" in payload:
                 logger.debug(f"Page (PDF): {payload['page']}")
             elif "slide" in payload:
@@ -183,11 +184,11 @@ def main():
     logger.info("Preparing retriever and indexing documents...")
 
     # retriever = prepare_retriever(
-    #     "test_files_big/zacho.pdf", collection_name="collection_zacho"
+    #     "test_files_big/history.pdf", collection_name="collection_history"
     # )  # Pass paths for testing!
 
     retriever = prepare_retriever(
-        collection_name="collection_zacho"
+        "test_files_big/zacho-mini.pdf", collection_name="collection_zacho_mini"
     )  # use existing collection
     logger.info("Retriever prepared successfully.")
 
