@@ -1,11 +1,11 @@
 from typing import List, Dict, Optional, TypedDict, Any
+from .models import WeightedTopic
 
 
 class AgentState(TypedDict):
-    documents: List[str]
-    suggested_topics: List[str]
+    suggested_topics: List[WeightedTopic]
     rejected_topics: List[str]
-    confirmed_topics: List[str]
+    confirmed_topics: List[WeightedTopic]
     subtopics: Dict[str, List[str]]
     user_input: Optional[str]
     feedback_request: Optional[str]

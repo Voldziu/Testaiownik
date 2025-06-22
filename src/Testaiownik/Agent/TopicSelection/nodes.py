@@ -39,35 +39,77 @@ def _process_batch(batch_text: str, previous_context: str, extractor) -> Dict[st
     return result["messages"][0].tool_calls[0]["args"]
 
 
+def _process_single_batch(
+    batch_chunks: List[Dict],
+    batch_number: int,
+    all_topics: List[Dict],
+    extractor,
+    accumulated_summary: str,
+) -> str:
+    """Process a single batch of chunks"""
+
+    # Extract text from chunk dictionaries
+    batch_texts = [chunk["text"] for chunk in batch_chunks]
+    batch_text = "\n---\n".join(batch_texts)
+
+    previous_context = (
+        f"Previous topics found: {[t['topic'] for t in all_topics]}\nPrevious summary: {accumulated_summary}"
+        if accumulated_summary
+        else "This is the first batch."
+    )
+
+    logger.debug(f"Processing batch {batch_number} with {len(batch_chunks)} chunks")
+
+    batch_analysis = _process_batch(batch_text, previous_context, extractor)
+    all_topics.extend(batch_analysis["current_topics"])
+
+    # Update accumulated summary
+    accumulated_summary = batch_analysis["accumulated_summary"]
+
+    logger.info(
+        f"Batch {batch_number}: found {len(batch_analysis['current_topics'])} topics"
+    )
+
+    return accumulated_summary
+
+
 def _process_batches(
-    chunks: List[str],
+    retriever: DocumentRetriever,
     batch_size: int,
     all_topics: List[Dict],
     extractor,
     accumulated_summary: str,
+    processed_chunks: List[Dict],
 ) -> None:
-    # Process in batches, returns to
-    for i in range(0, len(chunks), batch_size):
-        batch = chunks[i : i + batch_size]
-        batch_text = "\n---\n".join(batch)
+    """Process chunks in streaming batches without loading all into memory"""
 
-        previous_context = (
-            f"Previous topics found: {[t['topic'] for t in all_topics]}\nPrevious summary: {accumulated_summary}"
-            if accumulated_summary
-            else "This is the first batch."
+    current_batch = []
+    batch_number = 1
+
+    # Stream chunks and process in batches
+    for chunk in retriever.get_all_chunks():
+        current_batch.append(chunk)
+        processed_chunks.append(chunk)  # Keep track for final state
+
+        # When we have a full batch, process it
+        if len(current_batch) >= batch_size:
+            _process_single_batch(
+                current_batch, batch_number, all_topics, extractor, accumulated_summary
+            )
+            current_batch.clear()  # Free memory
+            batch_number += 1
+
+    # Process any remaining chunks in the last partial batch
+    if current_batch:
+        _process_single_batch(
+            current_batch, batch_number, all_topics, extractor, accumulated_summary
         )
 
-        batch_analysis = _process_batch(batch_text, previous_context, extractor)
-        all_topics.extend(batch_analysis["current_topics"])
-        accumulated_summary = batch_analysis["accumulated_summary"]
-
-        logger.info(
-            f"Batch {i//batch_size + 1}: found {len(batch_analysis['current_topics'])} topics"
-        )
     logger.info(
         f"Total topics found: {len(all_topics)}. Accumulated summary: {accumulated_summary}"
     )
 
+    # Normalize weights
     total_weight = sum(topic["weight"] for topic in all_topics)
     if total_weight > 0:
         for topic in all_topics:
@@ -186,22 +228,20 @@ def _consolidate_topics_with_history(
     """
 
     consolidation_result = consolidation_llm.invoke(prompt)
-    return [
-        {"topic": t.topic, "weight": t.weight}
-        for t in consolidation_result.consolidated_topics
-    ]
+    return consolidation_result.consolidated_topics
 
 
 def analyze_documents(
-    state: AgentState, retriever: DocumentRetriever = None, batch_size: int = 15
+    state: AgentState,
+    retriever: DocumentRetriever = None,
+    batch_size: int = 40,  # 50 is too much.
 ) -> AgentState:
     """Main document analysis orchestrator"""
     if retriever is None:
         retriever = MockRetriever()
 
-    logger.info(
-        f"Processing {retriever.get_chunk_count()} chunks in batches of {batch_size}."
-    )
+    chunk_count = retriever.get_chunk_count()
+    logger.info(f"Processing {chunk_count} chunks in batches of {batch_size}.")
 
     # Setup extraction
     llm = get_llm()
@@ -209,13 +249,20 @@ def analyze_documents(
         llm, tools=[BatchAnalysis], tool_choice="BatchAnalysis"
     )
 
-    chunks = list(retriever.get_all_chunks())
     all_topics = []  # List to accumulate topics with weights
     accumulated_summary = ""
+    processed_chunks = []
 
     # Process in batches
 
-    _process_batches(chunks, batch_size, all_topics, extractor, accumulated_summary)
+    _process_batches(
+        retriever,
+        batch_size,
+        all_topics,
+        extractor,
+        accumulated_summary,
+        processed_chunks,
+    )
 
     history = state.get("conversation_history", [])
     rejected_topics = state.get("rejected_topics", [])
@@ -228,7 +275,6 @@ def analyze_documents(
     return {
         **state,
         "suggested_topics": final_topics,
-        "documents": chunks,
         "user_input": None,
         "next_node": "request_feedback",
     }
@@ -324,7 +370,7 @@ def process_feedback(state: AgentState) -> AgentState:
     if feedback.action == "accept":
         return {
             **state,
-            "confirmed_topics": feedback.accepted_topics or suggested,
+            "confirmed_topics": suggested,
             "conversation_history": history,  # Because history is a copy
             "next_node": "END",
         }

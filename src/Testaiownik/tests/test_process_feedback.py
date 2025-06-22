@@ -90,10 +90,13 @@ class TestProcessFeedbackStateLogic:
             result = process_feedback(state)
 
             assert result["next_node"] == "END"
-            assert result["confirmed_topics"] == ["Topic1", "Topic2"]
+            assert result["confirmed_topics"] == [
+                {"topic": "Topic1", "weight": 0.6},
+                {"topic": "Topic2", "weight": 0.4},
+            ]
 
     def test_handles_modify_action_response(self):
-        """Test modify action leads to analyze_documents"""
+
         state = {
             "suggested_topics": [{"topic": "Topic1", "weight": 1.0}],
             "user_input": "Please modify these topics",
@@ -106,6 +109,7 @@ class TestProcessFeedbackStateLogic:
                 action="modify",
                 accepted_topics=["Topic1"],
                 rejected_topics=[],
+                want_to_add_topics=[],
                 modification_request="Add more specific topics",
             )
             mock_llm.invoke.return_value = mock_interpretation

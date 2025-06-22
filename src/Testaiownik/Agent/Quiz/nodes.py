@@ -12,6 +12,7 @@ from .models import (
     WeightedTopic,
     UserQuestionResponse,
 )
+from RAG.Retrieval import DocumentRetriever
 
 from AzureModels import get_llm
 from utils.logger import logger
@@ -76,7 +77,9 @@ def load_or_generate_questions(state: QuizState) -> QuizState:
         raise ValueError(f"Unknown quiz mode: {session.quiz_mode}")
 
 
-def generate_all_questions(state: QuizState) -> QuizState:
+def generate_all_questions(
+    state: QuizState, retriever: DocumentRetriever = None
+) -> QuizState:
     """Generate ALL questions before starting quiz"""
     session = state["quiz_session"]
     questions_to_generate = state["questions_to_generate"]
@@ -98,9 +101,12 @@ def generate_all_questions(state: QuizState) -> QuizState:
         logger.info(f"Added {len(user_questions)} user questions")
 
     # 2. Generate LLM questions in batches for each topic
+    # Track questions per topic to prevent cross-batch duplicates
+    topic_questions_tracker = {}
     all_generated = []
     for topic, count in questions_to_generate.items():
         logger.info(f"Generating {count} questions for topic: {topic}")
+        topic_questions_tracker[topic] = []
 
         # Generate in batches to avoid token limits
         remaining = count
@@ -111,7 +117,15 @@ def generate_all_questions(state: QuizState) -> QuizState:
                 topic=topic,
                 count=batch_size,
                 difficulty=session.difficulty,
-                context=state.get("document_context", []),
+                retriever=retriever,
+                existing_questions=topic_questions_tracker[
+                    topic
+                ].copy(),  # Pass existing questions to avoid duplicates
+            )
+
+            # Update the tracker with newly generated questions
+            topic_questions_tracker[topic].extend(
+                [q.question_text for q in batch_questions]
             )
 
             all_generated.extend(batch_questions)
@@ -131,6 +145,9 @@ def generate_all_questions(state: QuizState) -> QuizState:
     logger.info(
         f"Generated total {len(session.all_generated_questions)} questions "
         f"({len(user_questions)} user + {len(all_generated)} LLM)"
+    )
+    logger.debug(
+        f"All generated questions: {[q.question_text for q in session.all_generated_questions]}"
     )
 
     return {
@@ -360,7 +377,7 @@ Determine:
 
 For simple True/False questions:
 - Provide exactly 2 options: the correct answer and its opposite
-- Set is_multi_select to False
+- Set is_multi_choice to False
 
 For complex questions:
 - Provide 3-4 total options
@@ -391,7 +408,7 @@ Provide structured response."""
                 choices=choices,
                 explanation=response.explanation,
                 difficulty=difficulty,
-                is_multi_select=response.is_multi_select,
+                is_multi_choice=response.is_multi_choice,
             )
 
             processed_questions.append(question)
@@ -409,7 +426,7 @@ Provide structured response."""
                 ],
                 explanation="This question was provided by the user. Please verify the answer.",
                 difficulty=difficulty,
-                is_multi_select=False,
+                is_multi_choice=False,
             )
             processed_questions.append(fallback_question)
 
@@ -417,45 +434,81 @@ Provide structured response."""
 
 
 def _generate_questions_for_topic(
-    topic: str, count: int, difficulty: str, context: List[str]
+    topic: str,
+    count: int,
+    difficulty: str,
+    retriever: DocumentRetriever = None,
+    existing_questions: List[str] = [],
 ) -> List[Question]:
-    """Generate questions for a specific topic using LLM"""
+    """Generate questions for a specific topic using LLM with RAG context"""
     llm = get_llm().with_structured_output(QuestionGeneration)
 
-    # Prepare context for RAG (if available)
+    # Get relevant context using RAG search
     context_text = ""
-    if context:
-        context_text = f"\n\nRELEVANT DOCUMENT CONTEXT:\n{chr(10).join(context[:3])}"  # Limit to 3 chunks
-        logger.info(f"Using document context for {topic} question generation")
+    if retriever:
+        search_results = retriever.search_in_collection(query=f"{topic}", limit=20)
+
+        if search_results:
+            relevant_chunks = [
+                result.payload.get("text", "") for result in search_results
+            ]
+            context_text = (
+                f"\n\nRELEVANT DOCUMENT CONTEXT:\n{chr(10).join(relevant_chunks)}"
+            )
+            logger.info(
+                f"Using {len(relevant_chunks)} RAG chunks for {topic} questions"
+            )
+        else:
+            logger.info(f"No relevant chunks found for {topic}")
     else:
-        logger.info(f"Generating questions for {topic} without document context")
+        logger.info(
+            f"RAG not available, generating questions for {topic} without context"
+        )
 
-    prompt = f"""Generate {count} educational questions about: {topic}
+    # Create blacklist section if we have existing questions
+    created_questions_text = ""
+    if existing_questions:
+        created_questions_text = f"""
+            AVOID THESE ALREADY CREATED QUESTIONS:
+            {chr(10).join([f"- {q}" for q in existing_questions])}
 
-REQUIREMENTS:
-- Difficulty level: {difficulty}
-- Mix of question types: simple choice, multiple choice
-- Each question should have 2-5 answer options
-- Some questions can have multiple correct answers (set is_multi_select=True)
-- Questions should test understanding, not memorization
-- Include clear explanations for correct answers
-- Ensure variety in question complexity
+            DO NOT create questions similar to the above. Focus on different concepts, angles, and wording.
+            """
 
-QUESTION DISTRIBUTION:
-- 30% simple choice questions (2 options, like True/False)
-- 70% multiple choice questions (3-4 options, single and multi correct)
+    prompt = f"""Create {count} educational assessment questions for: {topic}
+Focus on:
+- Different concepts/subtopics
+- Different question types (definition, application, analysis)
+- Different difficulty angles
+ 
+Purpose: Academic Assessment
+Level: {difficulty}
+
+Question Format:
+- 30% binary choice (2 options)
+- 70% multiple choice (3-4 options)
+- Include answer explanations
+- Mark multi-answer questions with is_multi_choice=True
+
+Quality Standards:
+- {difficulty}-appropriate content
+- Educational focus on {topic}
+- Questions can't be general, they must be very specific.
+- Clear question wording
+- Test comprehension over memorization
+- Provide realistic answer options
+
+DUPLICATE PREVENTION:
+- Each question must cover different concepts/aspects
+- Vary question wording and structure significantly
+- Focus on distinct learning objectives
+- Ensure no overlapping answer patterns
+
+{created_questions_text}
 
 {context_text}
 
-QUESTION QUALITY GUIDELINES:
-- {difficulty} level appropriate for educational assessment
-- Clear, unambiguous wording
-- Realistic distractors for multiple choice
-- Comprehensive explanations
-- Focus on key concepts and practical applications
-- For multi-choice questions, ensure multiple answers are genuinely correct
-
-Generate exactly {count} questions total."""
+Output exactly {count} unique questions following above specifications."""
 
     try:
         result = llm.invoke(prompt)
@@ -473,8 +526,8 @@ Generate exactly {count} questions total."""
                 )
                 q.choices.extend(
                     [
-                        QuestionChoice(text="Option A", is_correct=False),
-                        QuestionChoice(text="Option B", is_correct=False),
+                        QuestionChoice(text="Option A True", is_correct=True),
+                        QuestionChoice(text="Option B False", is_correct=False),
                     ]
                 )
 
@@ -487,13 +540,48 @@ Generate exactly {count} questions total."""
 
             questions.append(q)
 
-        logger.info(f"Generated {len(questions)} questions for {topic}")
-        return questions
+        # Remove duplicates post-processing
+        unique_questions = _remove_duplicate_questions(questions)
+
+        # If we lost questions due to duplicates, log it
+        if len(unique_questions) < len(questions):
+            logger.warning(
+                f"Removed {len(questions) - len(unique_questions)} duplicate questions"
+            )
+
+        logger.info(f"Generated {len(unique_questions)} unique questions for {topic}")
+        return unique_questions
 
     except Exception as e:
         logger.error(f"Question generation failed for {topic}: {e}")
-        # Return fallback questions
         return _create_fallback_questions(topic, count, difficulty)
+
+
+def _remove_duplicate_questions(questions: List[Question]) -> List[Question]:
+    """Remove duplicate questions based on text similarity"""
+    from difflib import SequenceMatcher
+
+    unique_questions = []
+    seen_questions = []
+
+    for question in questions:
+        is_duplicate = False
+
+        for seen_q in seen_questions:
+            # Check question text similarity
+            similarity = SequenceMatcher(
+                None, question.question_text.lower().strip(), seen_q.lower().strip()
+            ).ratio()
+
+            if similarity > 0.7:  # 70% similarity threshold
+                is_duplicate = True
+                break
+
+        if not is_duplicate:
+            unique_questions.append(question)
+            seen_questions.append(question.question_text.lower().strip())
+
+    return unique_questions
 
 
 def _create_fallback_questions(
@@ -506,29 +594,29 @@ def _create_fallback_questions(
             # Simple choice (like True/False)
             question = Question(
                 topic=topic,
-                question_text=f"{topic} is an important concept in computer science.",
+                question_text=f"{topic} Fallback true/false",
                 choices=[
                     QuestionChoice(text="True", is_correct=True),
                     QuestionChoice(text="False", is_correct=False),
                 ],
                 explanation=f"True, {topic} is indeed important in computer science.",
                 difficulty=difficulty,
-                is_multi_select=False,
+                is_multi_choice=False,
             )
         else:
             # Multi-choice
             question = Question(
                 topic=topic,
-                question_text=f"Which of the following are characteristics of {topic}? (Select all that apply)",
+                question_text=f"{topic} Fallback multi-choice",
                 choices=[
-                    QuestionChoice(text="Characteristic A", is_correct=True),
-                    QuestionChoice(text="Characteristic B", is_correct=True),
-                    QuestionChoice(text="Unrelated option", is_correct=False),
-                    QuestionChoice(text="Another unrelated option", is_correct=False),
+                    QuestionChoice(text="True", is_correct=True),
+                    QuestionChoice(text="True", is_correct=True),
+                    QuestionChoice(text="False", is_correct=False),
+                    QuestionChoice(text="False", is_correct=False),
                 ],
                 explanation=f"Characteristics A and B are both relevant to {topic}.",
                 difficulty=difficulty,
-                is_multi_select=True,
+                is_multi_choice=True,
             )
         questions.append(question)
 
@@ -542,7 +630,7 @@ def _format_question_for_user(question: Question) -> str:
     )
 
     instruction = ""
-    if question.is_multi_select:
+    if question.is_multi_choice:
         instruction = "\n(Multiple answers allowed - enter numbers separated by commas, e.g., 1,3)"
     else:
         instruction = "\n(Select one answer)"
@@ -600,5 +688,5 @@ Topic Breakdown:
 def route_next(state: QuizState) -> str:
     """Route to next node based on state"""
     next_node = state.get("next_node", "END")
-    logger.info(f"Routing to: {next_node}")
+    logger.debug(f"Routing to: {next_node}")
     return next_node if next_node != "END" else "__end__"

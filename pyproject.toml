@@ -26,6 +26,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "colorlog>=6.9.0",
     "coverage>=7.9.0",
     "mypy>=1.16.0",
     "pytest>=8.4.0",
