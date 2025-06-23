@@ -48,7 +48,7 @@ AI-powered learning assistant that automatically generates test questions from e
 1. **Clone and install dependencies**
    ```bash
    git clone <repository-url>
-   cd testaiownik
+   cd src/testaiownik
    uv sync
    ```
 
@@ -64,10 +64,16 @@ AI-powered learning assistant that automatically generates test questions from e
    # CHAT_MODEL_VERSION_DEV=your-api-version
    ```
 
-3. **Test the current main (for tests)**
+3. **Test the current main**
    ```bash
    uv run python src/Testaiownik/main.py
    ```
+
+
+
+
+
+   
 
 ### Infrastructure Deployment (Optional)
 
@@ -91,25 +97,58 @@ cd IaaC
 ```
 testaiownik/
 ├── src/Testaiownik/
-│   ├── Agent/              # LangGraph agent implementation
-│   │   ├── graph.py        # Agent workflow definition
-│   │   ├── nodes.py        # Individual workflow nodes
-│   │   ├── models.py       # Pydantic models
-│   │   ├── state.py        # Agent state management
-│   │   └── runner.py       # CLI runner for testing
-│   ├── RAG/                # Document retrieval system
-│   │   └── Retrieval/      # Retriever implementations
-│   ├── AzureModels/        # Azure OpenAI integration
-│   ├── config/             # Configuration management
-│   └── utils/              # Shared utilities (logging)
-├── IaaC/                   # Infrastructure as Code
-│   ├── main.bicep          # Main Bicep template
-│   ├── modules/            # Bicep modules
-│   ├── parameters/         # Environment parameters
-│   └── deploy.ps1          # Deployment script
-├── tests/                  # Test files
-└── pyproject.toml          # UV project configuration
-└── main.py                 # Main file to run the current state of the project
+│   ├── Agent/                      # LangGraph agent implementation
+│   │   ├── TopicSelection/         # Topic selection subgraph
+│   │   │   ├── graph.py           # Topic selection workflow
+│   │   │   ├── nodes.py           # Topic selection nodes
+│   │   │   ├── models.py          # Topic selection models
+│   │   │   └── state.py           # Topic selection state
+│   │   ├── Quiz/                   # Quiz generation & execution subgraph
+│   │   │   ├── graph.py           # Quiz workflow
+│   │   │   ├── nodes.py           # Quiz nodes
+│   │   │   ├── models.py          # Quiz models
+│   │   │   └── state.py           # Quiz state
+│   │   ├── Shared/                 # Shared models between subgraphs
+│   │   │   └── models.py          # WeightedTopic model
+│   │   ├── main_graph.py          # Main orchestrating graph
+│   │   └── runner.py              # CLI runner for complete workflow
+│   ├── RAG/                        # Document retrieval system
+│   │   ├── Retrieval/             # Retriever implementations
+│   │   │   └── Retriever.py       # DocumentRetriever, MockRetriever, RAGRetriever
+│   │   ├── file_processor.py      # PDF/DOCX/PPTX/TXT extraction
+│   │   └── qdrant_manager.py      # Vector store management
+│   ├── AzureModels/               # Azure OpenAI integration
+│   │   └── models.py              # LLM and embedding model setup
+│   ├── config/                    # Configuration management
+│   │   └── config.py              # Environment variables & settings
+│   ├── utils/                     # Shared utilities
+│   │   └── logger.py              # Logging with Azure App Insights
+│   └── main.py                    # Main entry point with CLI args
+├── tests/                         # Test files
+│   ├── Agent/
+│   │   ├── Quiz/                  # Quiz component tests
+│   │   │   ├── test_models.py
+│   │   │   ├── test_nodes.py
+│   │   │   └── test_state.py
+│   │   └── TopicSelection/        # Topic selection tests
+│   │       ├── test_analyze_documents.py
+│   │       ├── test_data_processing.py
+│   │       ├── test_process_feedback.py
+│   │       ├── test_request_feedback.py
+│   │       └── test_route_next.py
+│   ├── RAG/                       # RAG component tests
+│   │   ├── test_file_processor.py
+│   │   ├── test_qdrant_manager.py
+│   │   └── test_RAGretriever.py
+│   └── conftest.py                # Pytest configuration & fixtures
+├── IaaC/                          # Infrastructure as Code (Azure)
+│   ├── main.bicep                 # Main Bicep template
+│   ├── modules/                   # Bicep modules
+│   ├── parameters/                # Environment parameters
+│   └── deploy.ps1                 # Deployment script
+├── pyproject.toml                 # UV project configuration
+├── README.md                      # Project documentation
+└── .env                          # Environment variables
 ```
 
 ## 🛠️ Development Workflow
@@ -156,10 +195,8 @@ uv run mypy src/
 
 ```bash
 # Run tests (when implemented)
-uv run pytest src/Testaiownik/tests/
+uv run pytest tests/
 
-# Run specific test
-uv run python src/Testaiownik/tests/test_data_processing.py
 ```
 
 ## 🔄 Current Agent Workflow
@@ -203,6 +240,8 @@ Documents → Vector Store → RAG Agent → FastAPI → Streamlit
 
 ## 🧪 What's Working Now
 
+### Sprint 1 - Basic Agent (Week 1)
+
 - ✅ **Document Processing**: MockRetriever with sample educational content
 - ✅ **LangGraph Agent**: Complete workflow with interrupts and state management
 - ✅ **Azure Integration**: GPT-4 calls with structured output
@@ -210,11 +249,11 @@ Documents → Vector Store → RAG Agent → FastAPI → Streamlit
 - ✅ **Logging**: Comprehensive logging setup
 - ✅ **Infrastructure**: Deployable Azure resources
 
-## 📋 Roadmap
-
 ### Sprint 2 - Full Agent (Week 2)
-- [ ] Question generation from topics
-- [ ] Complex questionaire (quiz) generation
+- ✅ Question generation from topics
+- ✅ Complex questionaire (quiz) generation
+
+## 📋 Roadmap
 
 ### Sprint 3 - Web Interface (Week 3)
 - [ ] FastAPI backend with endpoints
@@ -230,12 +269,7 @@ Documents → Vector Store → RAG Agent → FastAPI → Streamlit
 
 ## 🤝 Contributing
 
-This is an active development project in Sprint 1. Key areas needing attention:
-
-1. **Vector Store Selection** - Need to replace Azure AI Search
-2. **RAG Implementation** - Complete the RAGRetriever class
-3. **Question Generation** - Add question/answer generation nodes
-4. **Testing** - Expand test coverage
+This is an active development project in Sprint 3.
 
 ### Development Setup
 
