@@ -64,7 +64,18 @@ AI-powered learning assistant that automatically generates test questions from e
    # CHAT_MODEL_VERSION_DEV=your-api-version
    ```
 
-3. **Test the current main**
+3. **Deploy docker**
+   ```bash
+   docker pull qdrant/qdrant
+
+   docker run -p 6333:6333 -p 6334:6334 \
+    -v "$(pwd)/qdrant_storage:/qdrant/storage:z" \
+    qdrant/qdrant
+   ```
+
+
+
+4. **Test the current main**
    ```bash
    uv run python src/Testaiownik/main.py
    ```
