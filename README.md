@@ -64,7 +64,7 @@ AI-powered learning assistant that automatically generates test questions from e
    # CHAT_MODEL_VERSION_DEV=your-api-version
    ```
 
-3. **Deploy docker**
+3. **Deploy local Qdrant on docker**
    ```bash
    docker pull qdrant/qdrant
 
