@@ -504,6 +504,8 @@ DUPLICATE PREVENTION:
 - Focus on distinct learning objectives
 - Ensure no overlapping answer patterns
 
+Language: Same language as the topic.
+
 {created_questions_text}
 
 {context_text}
