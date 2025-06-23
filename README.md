@@ -14,14 +14,24 @@ AI-powered learning assistant that automatically generates test questions from e
 
 - ✅ Azure infrastructure setup with Bicep templates
 - ✅ Basic LangGraph agent with document analysis workflow
-- ✅ Azure OpenAI GPT-4 integration
+- ✅ Azure OpenAI GPT-4 integrationa
 - ✅ Topic extraction with user feedback loops
 - ✅ MockRetriever for document processing
-- 🔄 Vector store integration (planned)
+- ✅ Vector store integration 
 
-**Next Sprints:**
-- **Sprint 2**: RAG system with vector store, Full Agent functionalities 
-- **Sprint 3**: FastAPI backend + Streamlit frontend  
+
+**Sprint 2/4 - RAG System & Full Agent** ✅ Completed
+
+- ✅ Complete LangGraph agent workflow (Topic Selection + Quiz)
+- ✅ Azure OpenAI GPT-4 integration with structured output
+- ✅ Qdrant vector store integration for RAG
+- ✅ Document processing (PDF/PPTX/TXT/DOCX)
+- ✅ Comprehensive test suite
+
+**Current Sprint:**
+- **Sprint 3**: FastAPI backend + Streamlit frontend 🔄 In Progress
+
+**Next Sprint:**
 - **Sprint 4**: Testing & production polish
 
 ## 🚀 Quick Start
