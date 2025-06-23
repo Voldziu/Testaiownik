@@ -7,7 +7,7 @@ uv.lock
 __pycache__/
 *.pyc
 test_files_big/
-
+.vscode
 qdrant_storage/
 
 # 

@@ -29,6 +29,9 @@ def _process_batch(batch_text: str, previous_context: str, extractor) -> Dict[st
     - More prominent/frequently discussed topics get higher weights
     - Less important or briefly mentioned topics get lower weights
     - Dont count duplicates, only unique topics
+
+
+    LANGUAGE: Same as documents language, do not translate.
     """
 
     result = extractor.invoke({"messages": [prompt]})
@@ -223,6 +226,9 @@ def _consolidate_topics_with_history(
     - Higher weights for topics that are more frequently mentioned or referenced.
     - Weights must sum to exactly 1.0
     - Consider original content coverage when assigning weights
+
+
+    LANGUAGE: Same as documents language, do not translate.
 
     PLEASE REASSIGN WEIGHTS TO TOPICS, DO NOT USE PREVIOUS WEIGHTS. YOU CAN SUM PREVIOUS WEIGHTS AND REASSIGN THEM PROPORTIONALLY SUMMING TO 1.0.
     """
