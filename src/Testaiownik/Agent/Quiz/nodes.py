@@ -521,6 +521,38 @@ Output exactly {count} unique questions following above specifications."""
             q.topic = topic
             q.difficulty = difficulty
 
+            # Create explanation with chunk metadata
+            explanation = "Explanation generated from the context:\n"
+
+            # Use search_in_collection with the question as query
+            if retriever:
+                search_results = retriever.search_in_collection(query=q.question_text, limit=1)  # Search using question text and limit to 1 result
+
+                if search_results:
+                    # The best match is the first result (since limit=1)
+                    best_match = search_results[0].payload  # Get the metadata of the best match
+
+                    # Retrieve chunk metadata
+                    chunk_source = best_match.get("source", "Nieznane źródło")
+                    page = best_match.get("page", None)
+                    slide = best_match.get("slide", None)
+
+                    # Add chunk metadata to explanation
+                    explanation += f"\nŹródło: {chunk_source}"
+
+                    # Add page or slide if available
+                    if page:
+                        explanation += f"\nStrona (PDF): {page}"
+                    elif slide:
+                        explanation += f"\nSlajd (PPTX): {slide}"
+
+            # Adding the original explanation from the LLM
+            explanation += f"\n\nOriginal explanation: {q.explanation}"
+
+            # Update the explanation with chunk details
+            q.explanation = explanation
+
+
             # Validate choices
             if len(q.choices) < 2:
                 logger.warning(

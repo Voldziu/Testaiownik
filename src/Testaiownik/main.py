@@ -183,14 +183,14 @@ def main():
     # Prepare retriever and docs
     logger.info("Preparing retriever and indexing documents...")
 
-    # retriever = prepare_retriever(
-    #     "test_files_big/history.pdf", collection_name="collection_history"
-    # )  # Pass paths for testing!
-
     retriever = prepare_retriever(
-        "test_files_big/zacho-mini.pdf", collection_name="collection_zacho_mini"
-    )  # use existing collection
-    logger.info("Retriever prepared successfully.")
+        "test_files/zacho-mini.pdf", collection_name="collection_history"
+    )  # Pass paths for testing!
+
+    # retriever = prepare_retriever(
+    #     "test_files_big/zacho-mini.pdf", collection_name="collection_zacho_mini"
+    # )  # use existing collection
+    # logger.info("Retriever prepared successfully.")
 
     # Create and run
     runner = TestaiownikRunner(retriever)
