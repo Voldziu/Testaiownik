@@ -65,12 +65,21 @@ AI-powered learning assistant that automatically generates test questions from e
    ```
 
 3. **Deploy local Qdrant on docker**
+   Linux
    ```bash
    docker pull qdrant/qdrant
 
    docker run -p 6333:6333 -p 6334:6334 \
     -v "$(pwd)/qdrant_storage:/qdrant/storage:z" \
     qdrant/qdrant
+   ```
+   Windows
+   
+   ```Powershell
+   docker pull qdrant/qdrant
+   docker run -p 6333:6333 -p 6334:6334 `
+     -v "${PWD}/qdrant_storage:/qdrant/storage:z" `
+     qdrant/qdrant
    ```
 
 
