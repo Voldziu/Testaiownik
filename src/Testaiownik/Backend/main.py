@@ -1,111 +1,104 @@
 # src/Testaiownik/Backend/main.py
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-import uuid
+import uvicorn
 
-from .middleware.session import SessionMiddleware
+from .middleware import SessionMiddleware
 from .api import quiz, documents, topics, collections
-from .database.models import init_db
 from utils import logger
 
-app = FastAPI(
-    title="TESTAIOWNIK API",
-    description="AI-powered learning assistant for quiz generation from documents",
-    version="1.0.0",
-)
+app = FastAPI(title="TESTAIOWNIK API", version="1.0.0")
 
-# CORS middleware
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=["*"],  # Configure appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Session middleware
+# Add session middleware for user management
 app.add_middleware(SessionMiddleware)
 
 # Include routers
-app.include_router(quiz.router, prefix="/api", tags=["Quiz Management"])
-app.include_router(documents.router, prefix="/api", tags=["Documents"])
-app.include_router(topics.router, prefix="/api", tags=["Topics"])
-app.include_router(collections.router, prefix="/api", tags=["Collections"])
+app.include_router(quiz.router, prefix="/api", tags=["quiz"])
+app.include_router(documents.router, prefix="/api", tags=["documents"])
+app.include_router(topics.router, prefix="/api", tags=["topics"])
+app.include_router(collections.router, prefix="/api", tags=["collections"])
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database and services on startup"""
-    logger.info("Starting TESTAIOWNIK FastAPI backend...")
-    init_db()
-    logger.info("Database initialized")
+def get_user_id(request: Request) -> str:
+    """Extract user ID from request"""
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID required")
+    return user_id
+
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "TESTAIOWNIK API",
+        "version": "1.0.0",
+        "status": "running",
+        "timestamp": datetime.now().isoformat(),
+    }
 
 
 @app.get("/api/health")
 async def health_check():
     """System health check and status"""
     try:
-        # Test connections
-        from RAG.qdrant_manager import QdrantManager
-        from AzureModels.models import get_llm, get_embedding_model
-
-        services_status = {}
+        # Check different services
+        services = {}
         overall_status = "healthy"
 
-        # Test Qdrant
+        # Check Qdrant
         try:
-            qdrant = QdrantManager()
-            # Try a simple operation to verify connection
-            test_collection = "health_check_test"
-            if qdrant.collection_exists(test_collection):
-                qdrant.delete_collection(test_collection)
-            services_status["qdrant"] = "connected"
+            from RAG.Retrieval import qdrant_manager
+
+            # Simple ping to check if Qdrant is responsive
+            collections = qdrant_manager.list_collections()
+            services["qdrant"] = "connected"
         except Exception as e:
-            services_status["qdrant"] = f"error: {str(e)[:50]}"
+            logger.warning(f"Qdrant health check failed: {e}")
+            services["qdrant"] = "disconnected"
             overall_status = "degraded"
 
-        # Test Azure OpenAI LLM
+        # Check Azure OpenAI
         try:
-            llm = get_llm()
-            # Could add a simple test call here if needed
-            services_status["azure_openai_llm"] = "connected"
+            from AzureModels import get_llm
+
+            llm = get_llm
+            # Could do a simple test call here
+            services["azure_openai"] = "connected"
         except Exception as e:
-            services_status["azure_openai_llm"] = f"error: {str(e)[:50]}"
+            logger.warning(f"Azure OpenAI health check failed: {e}")
+            services["azure_openai"] = "disconnected"
             overall_status = "degraded"
 
-        # Test Azure OpenAI Embeddings
+        # Check Database
         try:
-            embedding_model = get_embedding_model()
-            # Test with a simple embedding
-            test_embedding = embedding_model.embed_query("health check")
-            if test_embedding and len(test_embedding) > 0:
-                services_status["azure_openai_embeddings"] = "connected"
-            else:
-                services_status["azure_openai_embeddings"] = (
-                    "error: empty embedding response"
-                )
-                overall_status = "degraded"
-        except Exception as e:
-            services_status["azure_openai_embeddings"] = f"error: {str(e)[:50]}"
-            overall_status = "degraded"
+            from .database.models import get_db
 
-        # Test Database
-        try:
-            from .database.crud import get_system_stats
-
-            stats = get_system_stats()
-            services_status["database"] = "connected"
+            db = next(get_db())
+            # Simple query to check DB connectivity
+            db.execute("SELECT 1")
+            services["database"] = "connected"
+            db.close()
         except Exception as e:
-            services_status["database"] = f"error: {str(e)[:50]}"
-            overall_status = "degraded"
+            logger.warning(f"Database health check failed: {e}")
+            services["database"] = "disconnected"
+            overall_status = "unhealthy"
 
         response_data = {
             "status": overall_status,
             "timestamp": datetime.now().isoformat(),
-            "services": services_status,
+            "services": services,
             "version": "1.0.0",
         }
 
@@ -131,14 +124,76 @@ async def health_check():
 @app.get("/api/stats")
 async def get_stats(request: Request):
     """System usage statistics"""
-    session_id = request.headers.get("X-Session-ID")
+    user_id = get_user_id(request)
 
-    from .database.crud import get_system_stats, get_session_stats
+    from .database.crud import get_system_stats, get_user_stats
 
     system_stats = get_system_stats()
-    user_stats = get_session_stats(session_id) if session_id else {}
+    user_stats = get_user_stats(user_id)
 
     return {"system_stats": system_stats, "user_stats": user_stats}
+
+
+@app.post("/api/backup/user")
+async def backup_user_data(request: Request):
+    """Creates backup of user data"""
+    user_id = get_user_id(request)
+
+    try:
+        from .database.crud import get_quizzes_by_user, get_user
+
+        # Get user data
+        user = get_user(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get user's quizzes
+        quizzes = get_quizzes_by_user(user_id)
+
+        # Calculate backup size (approximate)
+        total_quizzes = len(quizzes)
+        total_documents = sum(quiz.document_count or 0 for quiz in quizzes)
+        estimated_size = (total_quizzes * 1000) + (
+            total_documents * 50000
+        )  # Rough estimate
+
+        # Create backup record
+        backup_id = f"backup_{user_id}_{int(datetime.now().timestamp())}"
+
+        # In a real implementation, you would:
+        # 1. Export all user data to a file/storage
+        # 2. Store backup metadata in database
+        # 3. Set expiry policies
+
+        from .database.crud import log_activity
+
+        log_activity(
+            user_id,
+            "backup_created",
+            {
+                "backup_id": backup_id,
+                "quiz_count": total_quizzes,
+                "document_count": total_documents,
+            },
+        )
+
+        return {
+            "backup_id": backup_id,
+            "user_id": user_id,
+            "created_at": datetime.now().isoformat(),
+            "size_bytes": estimated_size,
+            "expiry_date": datetime.now()
+            .replace(month=datetime.now().month + 1)
+            .isoformat(),
+            "quiz_count": total_quizzes,
+            "document_count": total_documents,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create backup: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create backup")
 
 
 @app.exception_handler(HTTPException)

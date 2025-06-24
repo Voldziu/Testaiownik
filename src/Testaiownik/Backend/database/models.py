@@ -26,19 +26,17 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-class Session(Base):
-    """Browser session tracking"""
+class User(Base):
+    """User tracking"""
 
-    __tablename__ = "sessions"
+    __tablename__ = "users"
 
-    session_id = Column(String(50), primary_key=True, index=True)
+    user_id = Column(String(50), primary_key=True, index=True)
     created_at = Column(DateTime, default=datetime.now)
     last_activity = Column(DateTime, default=datetime.now)
 
     # Relationships
-    quizzes = relationship(
-        "Quiz", back_populates="session", cascade="all, delete-orphan"
-    )
+    quizzes = relationship("Quiz", back_populates="user", cascade="all, delete-orphan")
 
 
 class Quiz(Base):
@@ -47,7 +45,7 @@ class Quiz(Base):
     __tablename__ = "quizzes"
 
     quiz_id = Column(String(50), primary_key=True, index=True)
-    session_id = Column(String(50), ForeignKey("sessions.session_id"), index=True)
+    user_id = Column(String(50), ForeignKey("users.user_id"), index=True)
     status = Column(
         String(20), default="created"
     )  # created, analyzing, ready, active, completed
@@ -56,7 +54,7 @@ class Quiz(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     # Relationships
-    session = relationship("Session", back_populates="quizzes")
+    user = relationship("User", back_populates="quizzes")
     documents = relationship(
         "Document", back_populates="quiz", cascade="all, delete-orphan"
     )
@@ -139,7 +137,7 @@ class ActivityLog(Base):
     __tablename__ = "activity_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(50), index=True)
+    user_id = Column(String(50), index=True)
     action = Column(String(50))  # quiz_created, document_uploaded, etc.
     details = Column(JSON, nullable=True)
     timestamp = Column(DateTime, default=datetime.now)

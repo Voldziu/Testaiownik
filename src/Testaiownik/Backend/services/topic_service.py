@@ -28,7 +28,11 @@ class TopicService:
         return topics
 
     def add_topic(
-        self, topic_session_id: str, topic_name: str, weight: float, session_id: str
+        self,
+        topic_session_id: str,
+        topic_name: str,
+        weight: float,
+        user_id: str,  # ✅ Changed
     ) -> Dict:
         """Add a custom topic to suggestions"""
         try:
@@ -54,7 +58,7 @@ class TopicService:
             update_topic_session(topic_session_id, suggested_topics=normalized_topics)
 
             log_activity(
-                session_id,
+                user_id,  # ✅ Changed
                 "topic_added",
                 {"topic_session_id": topic_session_id, "topic_name": topic_name},
             )
@@ -74,7 +78,7 @@ class TopicService:
             raise
 
     def delete_topic(
-        self, topic_session_id: str, topic_name: str, session_id: str
+        self, topic_session_id: str, topic_name: str, user_id: str  # ✅ Changed
     ) -> Dict:
         """Remove a topic from suggestions"""
         try:
@@ -102,7 +106,7 @@ class TopicService:
             update_topic_session(topic_session_id, suggested_topics=normalized_topics)
 
             log_activity(
-                session_id,
+                user_id,  # ✅ Changed
                 "topic_deleted",
                 {"topic_session_id": topic_session_id, "topic_name": topic_name},
             )
@@ -124,7 +128,7 @@ class TopicService:
         current_topic_name: str,
         new_name: Optional[str] = None,
         new_weight: Optional[float] = None,
-        session_id: str = None,
+        user_id: str = None,  # ✅ Changed
     ) -> Dict:
         """Update topic name and/or weight"""
         try:
@@ -171,7 +175,7 @@ class TopicService:
             update_topic_session(topic_session_id, suggested_topics=normalized_topics)
 
             log_activity(
-                session_id,
+                user_id,  # ✅ Changed
                 "topic_updated",
                 {
                     "topic_session_id": topic_session_id,
@@ -193,9 +197,9 @@ class TopicService:
             raise
 
     def set_topic_count(
-        self, topic_session_id: str, desired_count: int, session_id: str
+        self, topic_session_id: str, desired_count: int, user_id: str  # ✅ Changed
     ) -> Dict:
-        """Set desired number of topics"""
+        """Set desired topic count for analysis"""
         try:
             topic_session = get_topic_session(topic_session_id)
             if not topic_session:
@@ -203,12 +207,12 @@ class TopicService:
 
             old_count = topic_session.desired_topic_count
 
-            # Update desired count
+            # Update database
             update_topic_session(topic_session_id, desired_topic_count=desired_count)
 
             log_activity(
-                session_id,
-                "topic_count_changed",
+                user_id,  # ✅ Changed
+                "topic_count_updated",
                 {
                     "topic_session_id": topic_session_id,
                     "old_count": old_count,
@@ -216,103 +220,95 @@ class TopicService:
                 },
             )
 
-            # Check if reanalysis is needed
-            current_topics = topic_session.suggested_topics or []
-            reanalysis_needed = len(current_topics) != desired_count
-
             return {
                 "success": True,
                 "new_count": desired_count,
-                "reanalysis_required": reanalysis_needed,
+                "reanalysis_required": desired_count != old_count,
             }
 
         except Exception as e:
             logger.error(f"Failed to set topic count: {e}")
             raise
 
-    def get_topic_suggestions(
-        self, topic_session_id: str, count: Optional[int] = None
-    ) -> Dict:
-        """Get AI-generated topic suggestions"""
+    def validate_topics(self, topics: List[Dict]) -> bool:
+        """Validate topic configuration"""
+        if not topics:
+            return False
+
+        total_weight = sum(topic.get("weight", 0) for topic in topics)
+
+        # Check if all topics have valid names and weights
+        for topic in topics:
+            if not topic.get("topic", "").strip():
+                return False
+            if topic.get("weight", 0) <= 0:
+                return False
+
+        # Check if weights are reasonable (sum close to 1.0)
+        return abs(total_weight - 1.0) < 0.01
+
+    async def generate_topic_suggestions(
+        self, quiz_id: str, count: int = 5
+    ) -> List[Dict]:
+        """Generate AI-based topic suggestions"""
+        try:
+            # This would integrate with your AI topic generation
+            # For now, return placeholder suggestions
+            suggestions = [
+                {"topic": "Machine Learning Basics", "weight": 1.0},
+                {"topic": "Data Structures", "weight": 1.0},
+                {"topic": "Algorithms", "weight": 1.0},
+                {"topic": "System Design", "weight": 1.0},
+                {"topic": "Database Concepts", "weight": 1.0},
+            ]
+
+            return suggestions[:count]
+
+        except Exception as e:
+            logger.error(f"Failed to generate topic suggestions: {e}")
+            return []
+
+    def get_latest_topic_session(self, quiz_id: str):
+        """Get the most recent topic session for a quiz"""
+        try:
+            # This would need a database function to get latest topic session by quiz_id
+            # For now, placeholder implementation
+            from ..database.crud import get_quiz
+
+            quiz = get_quiz(quiz_id)
+            if quiz and hasattr(quiz, "topic_sessions") and quiz.topic_sessions:
+                return quiz.topic_sessions[-1]  # Get the latest one
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to get latest topic session: {e}")
+            return None
+
+    def confirm_topic_selection(self, topic_session_id: str) -> Dict:
+        """Confirm topic selection and prepare for quiz generation"""
         try:
             topic_session = get_topic_session(topic_session_id)
             if not topic_session:
                 raise ValueError("Topic session not found")
 
-            # This is a simplified implementation
-            # In a real scenario, you might use the RAG system to analyze documents
-            # and suggest additional relevant topics
+            if not topic_session.suggested_topics:
+                raise ValueError("No topics available to confirm")
 
-            current_topics = topic_session.suggested_topics or []
-            current_names = [topic.get("topic", "") for topic in current_topics]
+            # Move topics from suggested to confirmed
+            confirmed_topics = topic_session.suggested_topics.copy()
 
-            # Sample suggestions based on common academic topics
-            # In practice, this would use your LLM and document analysis
-            sample_suggestions = [
-                {
-                    "topic": "Machine Learning",
-                    "confidence": 0.85,
-                    "reasoning": "Frequently mentioned in uploaded documents",
-                },
-                {
-                    "topic": "Data Structures",
-                    "confidence": 0.78,
-                    "reasoning": "Core computer science concept detected",
-                },
-                {
-                    "topic": "Algorithms",
-                    "confidence": 0.82,
-                    "reasoning": "Multiple algorithm examples found",
-                },
-                {
-                    "topic": "Database Systems",
-                    "confidence": 0.71,
-                    "reasoning": "SQL and database terms identified",
-                },
-                {
-                    "topic": "Software Engineering",
-                    "confidence": 0.76,
-                    "reasoning": "Development methodologies discussed",
-                },
-            ]
+            # Update database
+            update_topic_session(
+                topic_session_id, confirmed_topics=confirmed_topics, status="completed"
+            )
 
-            # Filter out existing topics
-            suggestions = [
-                sugg
-                for sugg in sample_suggestions
-                if sugg["topic"] not in current_names
-            ]
-
-            # Limit count if specified
-            if count:
-                suggestions = suggestions[:count]
-
-            return {"suggestions": suggestions, "total_suggestions": len(suggestions)}
+            return {
+                "confirmed_topics": confirmed_topics,
+                "total_topics": len(confirmed_topics),
+                "ready_for_quiz": True,
+                "quiz_id": topic_session.quiz_id,
+            }
 
         except Exception as e:
-            logger.error(f"Failed to get topic suggestions: {e}")
+            logger.error(f"Failed to confirm topic selection: {e}")
             raise
-
-    def validate_topics(self, topics: List[Dict]) -> bool:
-        """Validate topic list structure and weights"""
-        if not topics:
-            return False
-
-        try:
-            total_weight = 0
-            for topic in topics:
-                if not isinstance(topic, dict):
-                    return False
-                if "topic" not in topic or "weight" not in topic:
-                    return False
-                if not isinstance(topic["topic"], str) or not topic["topic"].strip():
-                    return False
-                if not isinstance(topic["weight"], (int, float)) or topic["weight"] < 0:
-                    return False
-                total_weight += topic["weight"]
-
-            # Check if weights sum to approximately 1.0
-            return abs(total_weight - 1.0) < 0.01
-
-        except Exception:
-            return False

@@ -1,4 +1,3 @@
-# src/Testaiownik/Backend/api/collections.py
 from fastapi import APIRouter, HTTPException, Request
 from typing import Optional
 from datetime import datetime
@@ -9,7 +8,7 @@ from ..models.responses import (
     CollectionDeleteResponse,
     BaseResponse,
 )
-from ..database.crud import get_quiz, get_quizzes_by_session, log_activity
+from ..database.crud import get_quiz, get_quizzes_by_user, log_activity
 from RAG.qdrant_manager import QdrantManager
 from utils import logger
 
@@ -18,25 +17,35 @@ document_service = DocumentService()
 qdrant_manager = QdrantManager()
 
 
-def get_session_id(request: Request) -> str:
-    """Extract session ID from request"""
-    session_id = getattr(request.state, "session_id", None)
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Session ID required")
-    return session_id
+def get_user_id(request: Request) -> str:
+    """Extract user ID from request"""
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID required")
+    return user_id
+
+
+def validate_quiz_access(quiz_id: str, user_id: str):
+    """Validate that quiz belongs to user"""
+    quiz = get_quiz(quiz_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    if quiz.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return quiz
 
 
 @router.get("/collections", response_model=CollectionsResponse)
 async def list_collections(request: Request, user_only: bool = True):
     """Lists all Qdrant collections"""
-    session_id = get_session_id(request)
+    user_id = get_user_id(request)
 
     try:
         collections = []
 
         if user_only:
             # Get collections for user's quizzes only
-            user_quizzes = get_quizzes_by_session(session_id)
+            user_quizzes = get_quizzes_by_user(user_id)
 
             for quiz in user_quizzes:
                 if quiz.collection_name:
@@ -60,25 +69,42 @@ async def list_collections(request: Request, user_only: bool = True):
                                 }
                             )
                         except Exception as e:
-                            logger.error(
-                                f"Failed to get collection info for {collection_name}: {e}"
-                            )
-                            collections.append(
-                                {
-                                    "name": collection_name,
-                                    "vector_count": 0,
-                                    "created_at": quiz.created_at,
-                                    "quiz_id": quiz.quiz_id,
-                                }
+                            logger.warning(
+                                f"Collection {collection_name} referenced but not accessible: {e}"
                             )
         else:
-            # List all collections (admin endpoint)
-            # This would require extending QdrantManager to list all collections
-            # For now, just return user collections
-            return await list_collections(request, user_only=True)
+            # Admin endpoint - list all collections
+            # Note: This should be protected with admin authentication in production
+            all_collections = qdrant_manager.list_collections()
+
+            for collection_name in all_collections:
+                try:
+                    from RAG.Retrieval import RAGRetriever
+
+                    retriever = RAGRetriever(collection_name, qdrant_manager)
+                    vector_count = retriever.get_chunk_count()
+
+                    # Try to find associated quiz
+                    quiz = None
+                    # Would need to implement get_quiz_by_collection_name or similar
+                    # For now, just list collection without quiz info
+
+                    collections.append(
+                        {
+                            "name": collection_name,
+                            "vector_count": vector_count,
+                            "created_at": datetime.now(),  # Placeholder
+                            "quiz_id": None,
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not get info for collection {collection_name}: {e}"
+                    )
 
         return CollectionsResponse(
-            collections=collections, total_collections=len(collections)
+            collections=collections,
+            total_collections=len(collections),
         )
 
     except Exception as e:
@@ -89,14 +115,8 @@ async def list_collections(request: Request, user_only: bool = True):
 @router.delete("/collections/{quiz_id}", response_model=CollectionDeleteResponse)
 async def delete_collection(quiz_id: str, request: Request):
     """Deletes Qdrant collection for specific quiz"""
-    session_id = get_session_id(request)
-
-    # Validate quiz access
-    quiz = get_quiz(quiz_id)
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    if quiz.session_id != session_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    user_id = get_user_id(request)
+    quiz = validate_quiz_access(quiz_id, user_id)
 
     if not quiz.collection_name:
         raise HTTPException(status_code=404, detail="Quiz has no associated collection")
@@ -107,48 +127,36 @@ async def delete_collection(quiz_id: str, request: Request):
         # Get vector count before deletion
         vector_count = 0
         if qdrant_manager.collection_exists(collection_name):
-            try:
-                from RAG.Retrieval import RAGRetriever
+            from RAG.Retrieval import RAGRetriever
 
-                retriever = RAGRetriever(collection_name, qdrant_manager)
-                vector_count = retriever.get_chunk_count()
-            except Exception as e:
-                logger.error(f"Failed to get vector count: {e}")
+            retriever = RAGRetriever(collection_name, qdrant_manager)
+            vector_count = retriever.get_chunk_count()
 
-        # Delete collection
-        success = qdrant_manager.delete_collection(collection_name)
+            # Delete the collection
+            qdrant_manager.delete_collection(collection_name)
 
-        if success:
-            # Update quiz to remove collection reference
-            from ..database.crud import update_quiz_collection
+        # Update quiz to remove collection reference
+        from ..database.crud import update_quiz_collection
 
-            update_quiz_collection(quiz_id, None)
+        update_quiz_collection(quiz_id, None)
 
-            # Mark all documents as not indexed
-            documents = document_service.get_quiz_documents(quiz_id)
-            for doc in documents:
-                from ..database.crud import update_document_indexed
+        # Log activity
+        log_activity(
+            user_id,
+            "collection_deleted",
+            {
+                "quiz_id": quiz_id,
+                "collection_name": collection_name,
+                "vectors_deleted": vector_count,
+            },
+        )
 
-                update_document_indexed(doc["doc_id"], False)
+        return CollectionDeleteResponse(
+            success=True,
+            deleted_collection=collection_name,
+            vector_count_deleted=vector_count,
+        )
 
-            log_activity(
-                session_id,
-                "collection_deleted",
-                {
-                    "quiz_id": quiz_id,
-                    "collection_name": collection_name,
-                    "vector_count": vector_count,
-                },
-            )
-
-            return CollectionDeleteResponse(
-                deleted_collection=collection_name, vector_count_deleted=vector_count
-            )
-        else:
-            raise HTTPException(status_code=500, detail="Failed to delete collection")
-
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Failed to delete collection: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete collection")
@@ -156,15 +164,9 @@ async def delete_collection(quiz_id: str, request: Request):
 
 @router.post("/collections/{quiz_id}/cleanup", response_model=BaseResponse)
 async def cleanup_collection(quiz_id: str, request: Request):
-    """Cleans up and optimizes quiz collection"""
-    session_id = get_session_id(request)
-
-    # Validate quiz access
-    quiz = get_quiz(quiz_id)
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    if quiz.session_id != session_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    """Cleanup and optimize quiz collection"""
+    user_id = get_user_id(request)
+    quiz = validate_quiz_access(quiz_id, user_id)
 
     if not quiz.collection_name:
         raise HTTPException(status_code=404, detail="Quiz has no associated collection")
@@ -172,6 +174,7 @@ async def cleanup_collection(quiz_id: str, request: Request):
     try:
         collection_name = quiz.collection_name
 
+        # Check if collection exists
         if not qdrant_manager.collection_exists(collection_name):
             raise HTTPException(status_code=404, detail="Collection does not exist")
 
@@ -196,7 +199,7 @@ async def cleanup_collection(quiz_id: str, request: Request):
         vectors_after = vectors_before  # No actual optimization performed
 
         log_activity(
-            session_id,
+            user_id,
             "collection_optimized",
             {
                 "quiz_id": quiz_id,
@@ -225,14 +228,10 @@ async def cleanup_collection(quiz_id: str, request: Request):
 @router.get("/collections/{quiz_id}/info")
 async def get_collection_info(quiz_id: str, request: Request):
     """Get detailed information about a quiz collection"""
-    session_id = get_session_id(request)
+    user_id = get_user_id(request)
 
     # Validate quiz access
-    quiz = get_quiz(quiz_id)
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    if quiz.session_id != session_id:
-        raise HTTPException(status_code=403, detail="Access denied")
+    quiz = validate_quiz_access(quiz_id, user_id)
 
     if not quiz.collection_name:
         raise HTTPException(status_code=404, detail="Quiz has no associated collection")
@@ -240,6 +239,7 @@ async def get_collection_info(quiz_id: str, request: Request):
     try:
         collection_name = quiz.collection_name
 
+        # Check if collection exists
         if not qdrant_manager.collection_exists(collection_name):
             raise HTTPException(status_code=404, detail="Collection does not exist")
 
@@ -249,19 +249,38 @@ async def get_collection_info(quiz_id: str, request: Request):
         retriever = RAGRetriever(collection_name, qdrant_manager)
         vector_count = retriever.get_chunk_count()
 
-        # Get associated documents
-        documents = document_service.get_quiz_documents(quiz_id)
-        indexed_docs = [doc for doc in documents if doc["indexed"]]
+        # Get sample points for analysis
+        sample_points = []
+        try:
+            # Get a few sample vectors to analyze
+            points = qdrant_manager.client.scroll(
+                collection_name=collection_name, limit=5, with_payload=True
+            )
+
+            for point in points[0]:
+                sample_points.append(
+                    {
+                        "id": str(point.id),
+                        "payload_keys": (
+                            list(point.payload.keys()) if point.payload else []
+                        ),
+                        "vector_size": (
+                            len(point.vector)
+                            if hasattr(point, "vector") and point.vector
+                            else 0
+                        ),
+                    }
+                )
+        except Exception as e:
+            logger.warning(f"Could not get sample points: {e}")
 
         return {
             "collection_name": collection_name,
             "quiz_id": quiz_id,
             "vector_count": vector_count,
-            "total_documents": len(documents),
-            "indexed_documents": len(indexed_docs),
-            "created_at": quiz.created_at,
-            "last_updated": quiz.updated_at,
-            "documents": documents,
+            "created_at": quiz.created_at.isoformat(),
+            "sample_points": sample_points,
+            "status": "healthy" if vector_count > 0 else "empty",
         }
 
     except HTTPException:
@@ -269,156 +288,3 @@ async def get_collection_info(quiz_id: str, request: Request):
     except Exception as e:
         logger.error(f"Failed to get collection info: {e}")
         raise HTTPException(status_code=500, detail="Failed to get collection info")
-
-
-@router.post("/collections/{quiz_id}/backup")
-async def backup_collection(quiz_id: str, request: Request):
-    """Create a backup of the collection data"""
-    session_id = get_session_id(request)
-
-    # Validate quiz access
-    quiz = get_quiz(quiz_id)
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    if quiz.session_id != session_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    if not quiz.collection_name:
-        raise HTTPException(status_code=404, detail="Quiz has no associated collection")
-
-    # This is a placeholder implementation
-    # In practice, you might export the collection data to a file
-    backup_id = f"backup_{quiz_id}_{int(datetime.now().timestamp())}"
-
-    log_activity(
-        session_id,
-        "collection_backup_created",
-        {
-            "quiz_id": quiz_id,
-            "backup_id": backup_id,
-            "collection_name": quiz.collection_name,
-        },
-    )
-
-    return {
-        "success": True,
-        "backup_id": backup_id,
-        "quiz_id": quiz_id,
-        "collection_name": quiz.collection_name,
-        "created_at": datetime.now(),
-        "message": "Backup request queued (placeholder implementation)",
-    }
-
-
-@router.get("/collections/{quiz_id}/stats")
-async def get_collection_stats(quiz_id: str, request: Request):
-    """Get detailed statistics about collection usage"""
-    session_id = get_session_id(request)
-
-    # Validate quiz access
-    quiz = get_quiz(quiz_id)
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    if quiz.session_id != session_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    if not quiz.collection_name:
-        raise HTTPException(status_code=404, detail="Quiz has no associated collection")
-
-    try:
-        collection_name = quiz.collection_name
-
-        if not qdrant_manager.collection_exists(collection_name):
-            raise HTTPException(status_code=404, detail="Collection does not exist")
-
-        # Get basic stats
-        from RAG.Retrieval import RAGRetriever
-
-        retriever = RAGRetriever(collection_name, qdrant_manager)
-        vector_count = retriever.get_chunk_count()
-
-        # Get document stats
-        documents = document_service.get_quiz_documents(quiz_id)
-        doc_stats = {}
-
-        for doc in documents:
-            if doc["indexed"]:
-                file_type = doc["type"]
-                if file_type not in doc_stats:
-                    doc_stats[file_type] = {"count": 0, "size_bytes": 0}
-                doc_stats[file_type]["count"] += 1
-                doc_stats[file_type]["size_bytes"] += doc["size_bytes"]
-
-        return {
-            "collection_name": collection_name,
-            "quiz_id": quiz_id,
-            "vector_count": vector_count,
-            "total_documents": len(documents),
-            "indexed_documents": len([d for d in documents if d["indexed"]]),
-            "total_size_bytes": sum(doc["size_bytes"] for doc in documents),
-            "document_types": doc_stats,
-            "average_chunk_size": 500,  # Placeholder - could calculate actual
-            "created_at": quiz.created_at,
-            "last_updated": quiz.updated_at,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get collection stats: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get collection stats")
-
-
-# Admin endpoints (could be protected with additional auth)
-
-
-@router.get("/collections/system/stats")
-async def get_system_collection_stats(request: Request):
-    """Get system-wide collection statistics (admin endpoint)"""
-    session_id = get_session_id(request)
-
-    try:
-        # Get all user quizzes
-        quizzes = get_quizzes_by_session(session_id)
-
-        total_collections = 0
-        total_vectors = 0
-        collections_by_status = {"active": 0, "empty": 0, "error": 0}
-
-        for quiz in quizzes:
-            if quiz.collection_name:
-                total_collections += 1
-
-                try:
-                    if qdrant_manager.collection_exists(quiz.collection_name):
-                        from RAG.Retrieval import RAGRetriever
-
-                        retriever = RAGRetriever(quiz.collection_name, qdrant_manager)
-                        count = retriever.get_chunk_count()
-                        total_vectors += count
-
-                        if count > 0:
-                            collections_by_status["active"] += 1
-                        else:
-                            collections_by_status["empty"] += 1
-                    else:
-                        collections_by_status["error"] += 1
-
-                except Exception as e:
-                    logger.error(
-                        f"Error checking collection {quiz.collection_name}: {e}"
-                    )
-                    collections_by_status["error"] += 1
-
-        return {
-            "total_collections": total_collections,
-            "total_vectors": total_vectors,
-            "collections_by_status": collections_by_status,
-            "average_vectors_per_collection": total_vectors / max(total_collections, 1),
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to get system collection stats: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to get system collection stats"
-        )

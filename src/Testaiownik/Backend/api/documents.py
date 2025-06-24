@@ -1,6 +1,6 @@
 # src/Testaiownik/Backend/api/documents.py
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 from ..services.document_service import DocumentService
@@ -45,8 +45,8 @@ async def upload_documents(
     quiz_id: str, request: Request, files: List[UploadFile] = File(...)
 ):
     """Uploads files (PDF/DOCX/TXT/PPTX) to specific quiz"""
-    session_id = get_session_id(request)
-    validate_quiz_access(quiz_id, session_id)
+    user_id = get_user_id(request)  # ✅ Fixed
+    validate_quiz_access(quiz_id, user_id)  # ✅ Fixed
 
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -61,37 +61,64 @@ async def upload_documents(
         if extension not in allowed_extensions:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported file type: {extension}. Allowed: {', '.join(allowed_extensions)}",
+                detail=f"Unsupported file type: {extension}. Supported: {', '.join(allowed_extensions)}",
             )
 
     try:
-        uploaded_files = await document_service.upload_documents(
-            quiz_id, session_id, files
+        upload_results = await document_service.upload_documents(
+            quiz_id, user_id, files
+        )  # ✅ Fixed
+
+        # Log the upload activity
+        log_activity(
+            user_id,
+            "documents_uploaded",
+            {
+                "quiz_id": quiz_id,
+                "file_count": len(files),
+                "total_size": sum(result["size_bytes"] for result in upload_results),
+            },
         )
 
         return DocumentUploadResponse(
-            uploaded_files=[DocumentItem(**file_data) for file_data in uploaded_files],
+            uploaded_files=[DocumentItem(**result) for result in upload_results],
             quiz_id=quiz_id,
         )
 
     except Exception as e:
         logger.error(f"Failed to upload documents: {e}")
-        raise HTTPException(status_code=500, detail="Failed to upload documents")
+        raise HTTPException(status_code=500, detail="Document upload failed")
 
 
 @router.get("/documents/{quiz_id}/list", response_model=DocumentListResponse)
 async def list_documents(quiz_id: str, request: Request):
-    """Lists all documents uploaded to specific quiz"""
-    session_id = get_session_id(request)
-    validate_quiz_access(quiz_id, session_id)
+    """Lists all documents uploaded to a quiz"""
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id)
 
     try:
         documents = document_service.get_quiz_documents(quiz_id)
 
+        doc_items = []
+        total_size = 0
+
+        for doc in documents:
+            doc_items.append(
+                DocumentItem(
+                    doc_id=doc.doc_id,
+                    filename=doc.filename,
+                    content_type=doc.content_type,
+                    size_bytes=doc.size_bytes,
+                    upload_date=doc.created_at,
+                    status="indexed" if doc.indexed else "processing",
+                )
+            )
+            total_size += doc.size_bytes
+
         return DocumentListResponse(
-            documents=[DocumentItem(**doc) for doc in documents],
-            quiz_id=quiz_id,
-            total_documents=len(documents),
+            documents=doc_items,
+            total_documents=len(doc_items),
+            total_size_bytes=total_size,
         )
 
     except Exception as e:
@@ -99,74 +126,106 @@ async def list_documents(quiz_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to list documents")
 
 
-@router.get("/documents/{quiz_id}/status", response_model=DocumentStatusResponse)
-async def get_indexing_status(quiz_id: str, request: Request):
-    """Checks indexing status for all quiz documents"""
-    session_id = get_session_id(request)
-    validate_quiz_access(quiz_id, session_id)
+@router.get(
+    "/documents/{quiz_id}/{doc_id}/status", response_model=DocumentStatusResponse
+)
+async def get_document_status(quiz_id: str, doc_id: str, request: Request):
+    """Gets processing status of specific document"""
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id)
 
     try:
-        status_data = document_service.get_indexing_status(quiz_id)
-        return DocumentStatusResponse(**status_data)
+        status_info = document_service.get_document_status(doc_id)
 
+        if not status_info:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        return DocumentStatusResponse(**status_info)
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to get indexing status: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get indexing status")
+        logger.error(f"Failed to get document status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get document status")
 
 
 @router.delete("/documents/{quiz_id}/{doc_id}", response_model=DocumentDeleteResponse)
 async def delete_document(quiz_id: str, doc_id: str, request: Request):
     """Removes specific document from quiz"""
-    session_id = get_session_id(request)
-    validate_quiz_access(quiz_id, session_id)
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id)
 
     try:
-        result = document_service.delete_quiz_document(quiz_id, doc_id, session_id)
-        return DocumentDeleteResponse(**result)
+        success = document_service.delete_document(doc_id)
 
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        if not success:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        # Log the deletion
+        log_activity(
+            user_id,
+            "document_deleted",
+            {"quiz_id": quiz_id, "doc_id": doc_id},
+        )
+
+        return DocumentDeleteResponse(
+            success=True,
+            message="Document removed successfully",
+            doc_id=doc_id,
+            reindexing_required=True,
+        )
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to delete document: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete document")
 
 
 @router.post("/documents/{quiz_id}/index", response_model=DocumentIndexResponse)
-async def index_documents(
-    quiz_id: str, request: Request, index_request: IndexDocumentsRequest = None
-):
+async def index_documents(quiz_id: str, request: Request):
     """Indexes all quiz documents to Qdrant collection"""
-    session_id = get_session_id(request)
-    validate_quiz_access(quiz_id, session_id)
-
-    # Default values if no request body
-    chunk_size = index_request.chunk_size if index_request else 500
-    batch_size = index_request.batch_size if index_request else 50
+    user_id = get_user_id(request)
+    quiz = validate_quiz_access(quiz_id, user_id)
 
     try:
-        result = await document_service.index_documents(
-            quiz_id=quiz_id,
-            session_id=session_id,
-            chunk_size=chunk_size,
-            batch_size=batch_size,
+        indexing_result = await document_service.index_quiz_documents(quiz_id)
+
+        # Update quiz with collection name
+        if indexing_result.get("collection_name") and not quiz.collection_name:
+            from ..database.crud import update_quiz
+
+            update_quiz(quiz_id, collection_name=indexing_result["collection_name"])
+
+        # Log the indexing activity
+        log_activity(
+            user_id,
+            "documents_indexed",
+            {
+                "quiz_id": quiz_id,
+                "collection_name": indexing_result["collection_name"],
+                "document_count": indexing_result["indexed_documents"],
+                "chunk_count": indexing_result["total_chunks"],
+            },
         )
 
-        return DocumentIndexResponse(**result)
+        return DocumentIndexResponse(**indexing_result)
 
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to index documents: {e}")
-        raise HTTPException(status_code=500, detail="Failed to index documents")
+        raise HTTPException(status_code=500, detail="Document indexing failed")
 
 
 # Search endpoint
-@router.get("/search/documents", response_model=SearchResponse)
+@router.get("/search", response_model=SearchResponse)
 async def search_documents(
-    request: Request, q: str, quiz_id: str = None, limit: int = 10
+    request: Request,
+    q: str,
+    quiz_id: Optional[str] = None,
+    limit: int = 10,
 ):
-    """Searches through indexed documents using vector similarity"""
-    session_id = get_session_id(request)
+    """Search through indexed documents using vector similarity"""
+    user_id = get_user_id(request)
 
     if not q.strip():
         raise HTTPException(status_code=400, detail="Search query cannot be empty")
@@ -176,7 +235,7 @@ async def search_documents(
 
     # Validate quiz access if specific quiz requested
     if quiz_id:
-        validate_quiz_access(quiz_id, session_id)
+        validate_quiz_access(quiz_id, user_id)
 
     try:
         result = document_service.search_documents(
@@ -199,8 +258,8 @@ async def search_documents(
 @router.get("/documents/{quiz_id}/{doc_id}/download")
 async def download_document(quiz_id: str, doc_id: str, request: Request):
     """Download a specific document file"""
-    session_id = get_session_id(request)
-    validate_quiz_access(quiz_id, session_id)
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id)
 
     # Implementation would serve the actual file
     # This is a placeholder
@@ -211,8 +270,8 @@ async def download_document(quiz_id: str, doc_id: str, request: Request):
 @router.delete("/documents/{quiz_id}/all")
 async def delete_all_documents(quiz_id: str, request: Request):
     """Delete all documents from a quiz"""
-    session_id = get_session_id(request)
-    validate_quiz_access(quiz_id, session_id)
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id)
 
     try:
         # Get all documents for the quiz
@@ -221,19 +280,21 @@ async def delete_all_documents(quiz_id: str, request: Request):
 
         # Delete each document
         for doc in documents:
-            try:
-                document_service.delete_quiz_document(
-                    quiz_id, doc["doc_id"], session_id
-                )
+            success = document_service.delete_document(doc.doc_id)
+            if success:
                 deleted_count += 1
-            except Exception as e:
-                logger.error(f"Failed to delete document {doc['doc_id']}: {e}")
+
+        # Log bulk deletion
+        log_activity(
+            user_id,
+            "bulk_documents_deleted",
+            {"quiz_id": quiz_id, "deleted_count": deleted_count},
+        )
 
         return {
             "success": True,
             "message": f"Deleted {deleted_count} documents",
             "deleted_count": deleted_count,
-            "total_count": len(documents),
         }
 
     except Exception as e:
@@ -241,34 +302,17 @@ async def delete_all_documents(quiz_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to delete documents")
 
 
-@router.post("/documents/{quiz_id}/reindex")
-async def reindex_documents(quiz_id: str, request: Request):
-    """Force reindexing of all documents"""
-    session_id = get_session_id(request)
-    validate_quiz_access(quiz_id, session_id)
+# Document search within quiz context
+@router.get("/documents/{quiz_id}/search", response_model=SearchResponse)
+async def search_quiz_documents(
+    quiz_id: str,
+    request: Request,
+    q: str,
+    limit: int = 10,
+):
+    """Search documents within a specific quiz"""
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id)
 
-    try:
-        # Clear existing index
-        collection_name = f"quiz_{quiz_id}"
-        if document_service.qdrant_manager.collection_exists(collection_name):
-            document_service.qdrant_manager.delete_collection(collection_name)
-
-        # Reset indexed status for all documents
-        documents = document_service.get_quiz_documents(quiz_id)
-        for doc in documents:
-            from ..database.crud import update_document_indexed
-
-            update_document_indexed(doc["doc_id"], False)
-
-        # Reindex all documents
-        result = await document_service.index_documents(quiz_id, session_id)
-
-        return {
-            "success": True,
-            "message": "Documents reindexed successfully",
-            **result,
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to reindex documents: {e}")
-        raise HTTPException(status_code=500, detail="Failed to reindex documents")
+    # Delegate to main search with quiz_id constraint
+    return await search_documents(request, q=q, quiz_id=quiz_id, limit=limit)
