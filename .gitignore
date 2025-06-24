@@ -9,6 +9,7 @@ __pycache__/
 test_files_big/
 .vscode
 qdrant_storage/
+testaiownik.db
 
 # 
 

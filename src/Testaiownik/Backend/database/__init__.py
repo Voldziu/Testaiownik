@@ -9,7 +9,7 @@ from .models import (
     QuizSession,
     ActivityLog,
 )
-from . import crud
+from .crud import *
 
 __all__ = [
     "init_db",
@@ -20,5 +20,4 @@ __all__ = [
     "TopicSession",
     "QuizSession",
     "ActivityLog",
-    "crud",
 ]

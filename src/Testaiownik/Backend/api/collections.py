@@ -3,13 +3,13 @@ from fastapi import APIRouter, HTTPException, Request
 from typing import Optional
 from datetime import datetime
 
-from services.document_service import DocumentService
-from models.responses import (
+from ..services.document_service import DocumentService
+from ..models.responses import (
     CollectionsResponse,
     CollectionDeleteResponse,
     BaseResponse,
 )
-from database.crud import get_quiz, get_quizzes_by_session, log_activity
+from ..database.crud import get_quiz, get_quizzes_by_session, log_activity
 from RAG.qdrant_manager import QdrantManager
 from utils import logger
 

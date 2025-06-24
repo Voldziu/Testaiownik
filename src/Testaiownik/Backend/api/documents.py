@@ -2,9 +2,9 @@
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from typing import List
 
-from services.document_service import DocumentService
-from models.requests import IndexDocumentsRequest
-from models.responses import (
+from ..services.document_service import DocumentService
+from ..models.requests import IndexDocumentsRequest
+from ..models.responses import (
     DocumentUploadResponse,
     DocumentListResponse,
     DocumentStatusResponse,
@@ -14,7 +14,7 @@ from models.responses import (
     SearchResultItem,
     DocumentItem,
 )
-from database.crud import get_quiz, log_activity
+from ..database.crud import get_quiz, log_activity
 from utils import logger
 
 router = APIRouter()

@@ -4,15 +4,15 @@ from typing import List, Optional
 import uuid
 from datetime import datetime
 
-from services.quiz_service import QuizService
-from models.requests import (
+from ..services.quiz_service import QuizService
+from ..models.requests import (
     StartQuizRequest,
     AnswerQuestionRequest,
     QuizDifficultyRequest,
     QuizQuestionsRequest,
     UserQuestionsRequest,
 )
-from models.responses import (
+from ..models.responses import (
     QuizResults,
     QuizCreateResponse,
     QuizListResponse,
@@ -26,7 +26,7 @@ from models.responses import (
     QuizAnswerResponse,
     QuizResultsResponse,
 )
-from database.crud import (
+from ..database.crud import (
     create_quiz,
     get_quizzes_by_session,
     get_quiz,

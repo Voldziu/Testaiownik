@@ -11,7 +11,7 @@ from ..models.requests import (
     UpdateTopicRequest,
     TopicCountRequest,
 )
-from models.responses import (
+from ..models.responses import (
     TopicAnalysisStartResponse,
     TopicSessionStatusResponse,
     TopicFeedbackResponse,

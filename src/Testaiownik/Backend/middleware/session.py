@@ -4,7 +4,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import uuid
 from datetime import datetime
 
-from database.crud import create_session, get_session, update_session_activity
+from ..database.crud import create_session, get_session, update_session_activity
 from utils import logger
 
 

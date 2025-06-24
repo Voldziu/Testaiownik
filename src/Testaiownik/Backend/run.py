@@ -16,13 +16,12 @@ import argparse
 import uvicorn
 import os
 from pathlib import Path
+from Backend import app, validate_environment, init_db, create_test_data
+from utils import logger
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
-
-from Backend import app, validate_environment, init_db, create_test_data
-from utils import logger
 
 
 def parse_args():
@@ -55,16 +54,15 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--log-level",
-        default="info",
-        choices=["critical", "error", "warning", "info", "debug", "trace"],
-        help="Log level (default: info)",
-    )
-
-    parser.add_argument(
         "--skip-validation",
         action="store_true",
         help="Skip environment validation on startup",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="info",
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Set the logging level (default: info)",
     )
 
     parser.add_argument(
@@ -136,7 +134,6 @@ def main():
             server_config.update(
                 {
                     "reload": True,
-                    "debug": True,
                     "reload_dirs": [str(project_root / "src")],
                     "reload_excludes": ["*.pyc", "__pycache__", "*.log", "uploads/*"],
                 }
