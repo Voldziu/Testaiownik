@@ -2,22 +2,23 @@
 from .models import (
     init_db,
     get_db,
-    Session,
+    User,
     Quiz,
     Document,
     TopicSession,
     QuizSession,
     ActivityLog,
 )
-from .crud import *
+from . import crud
 
 __all__ = [
     "init_db",
     "get_db",
-    "Session",
+    "User",
     "Quiz",
     "Document",
     "TopicSession",
     "QuizSession",
     "ActivityLog",
+    "crud",
 ]

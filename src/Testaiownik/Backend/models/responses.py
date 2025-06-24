@@ -41,7 +41,7 @@ class DocumentItem(BaseModel):
     doc_id: str
     filename: str
     size_bytes: int
-    file_type: str
+    type: str
     uploaded_at: datetime
     indexed: bool
 

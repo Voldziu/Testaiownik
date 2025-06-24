@@ -4,57 +4,57 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import uuid
 from datetime import datetime
 
-from ..database.crud import create_session, get_session, update_session_activity
+from ..database.crud import create_user, get_user, update_user_activity
 from utils import logger
 
 
 class SessionMiddleware(BaseHTTPMiddleware):
-    """Middleware to handle session management via X-Session-ID header"""
+    """Middleware to handle user management via X-User-ID header"""
 
-    # Endpoints that don't require session
+    # Endpoints that don't require user ID
     EXEMPT_PATHS = ["/api/health", "/docs", "/redoc", "/openapi.json"]
 
     async def dispatch(self, request: Request, call_next):
-        # Skip session check for exempt paths
+        # Skip user check for exempt paths
         if any(request.url.path.startswith(path) for path in self.EXEMPT_PATHS):
             return await call_next(request)
 
-        session_id = request.headers.get("X-Session-ID")
+        user_id = request.headers.get("X-User-ID")
 
-        # Generate new session if not provided
-        if not session_id:
-            session_id = f"session_{uuid.uuid4()}"
-            logger.info(f"Generated new session: {session_id}")
+        # Generate new user if not provided
+        if not user_id:
+            user_id = f"user_{uuid.uuid4()}"
+            logger.info(f"Generated new user: {user_id}")
 
-            # Create session in database
-            create_session(session_id)
+            # Create user in database
+            create_user(user_id)
 
-            # Add session to request for route handlers
-            request.state.session_id = session_id
+            # Add user to request for route handlers
+            request.state.user_id = user_id
 
             response = await call_next(request)
-            response.headers["X-Session-ID"] = session_id
+            response.headers["X-User-ID"] = user_id
             return response
 
-        # Validate existing session
+        # Validate existing user
         try:
-            session = get_session(session_id)
-            if not session:
-                # Session doesn't exist, create it
-                create_session(session_id)
-                logger.info(f"Created missing session: {session_id}")
+            user = get_user(user_id)
+            if not user:
+                # User doesn't exist, create it
+                create_user(user_id)
+                logger.info(f"Created missing user: {user_id}")
             else:
                 # Update last activity
-                update_session_activity(session_id)
+                update_user_activity(user_id)
 
-            # Add session to request state
-            request.state.session_id = session_id
+            # Add user to request state
+            request.state.user_id = user_id
 
             response = await call_next(request)
             return response
 
         except Exception as e:
-            logger.error(f"Session validation error: {e}")
+            logger.error(f"User validation error: {e}")
             raise HTTPException(
-                status_code=401, detail="Invalid session. Please refresh the page."
+                status_code=401, detail="Invalid user ID. Please refresh the page."
             )

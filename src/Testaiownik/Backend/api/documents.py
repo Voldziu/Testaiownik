@@ -1,6 +1,7 @@
 # src/Testaiownik/Backend/api/documents.py
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from typing import List
+from datetime import datetime
 
 from ..services.document_service import DocumentService
 from ..models.requests import IndexDocumentsRequest
@@ -21,20 +22,20 @@ router = APIRouter()
 document_service = DocumentService()
 
 
-def get_session_id(request: Request) -> str:
-    """Extract session ID from request"""
-    session_id = getattr(request.state, "session_id", None)
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Session ID required")
-    return session_id
+def get_user_id(request: Request) -> str:
+    """Extract user ID from request"""
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID required")
+    return user_id
 
 
-def validate_quiz_access(quiz_id: str, session_id: str):
-    """Validate that quiz belongs to session"""
+def validate_quiz_access(quiz_id: str, user_id: str):
+    """Validate that quiz belongs to user"""
     quiz = get_quiz(quiz_id)
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
-    if quiz.session_id != session_id:
+    if quiz.user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     return quiz
 

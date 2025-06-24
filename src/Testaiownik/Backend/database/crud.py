@@ -5,65 +5,57 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import uuid
 
-from .models import (
-    get_db,
-    Session,
-    Quiz,
-    Document,
-    TopicSession,
-    QuizSession,
-    ActivityLog,
-)
+from .models import get_db, User, Quiz, Document, TopicSession, QuizSession, ActivityLog
 from utils import logger
 
 
-# Session Operations
-def create_session(session_id: str) -> Session:
-    """Create new session"""
+# User Operations
+def create_user(user_id: str) -> User:
+    """Create new user"""
     db = next(get_db())
     try:
-        session = Session(session_id=session_id)
-        db.add(session)
+        user = User(user_id=user_id)
+        db.add(user)
         db.commit()
-        db.refresh(session)
+        db.refresh(user)
 
         # Log activity
-        log_activity(session_id, "session_created")
-        return session
+        log_activity(user_id, "user_created")
+        return user
     finally:
         db.close()
 
 
-def get_session(session_id: str) -> Optional[Session]:
-    """Get session by ID"""
+def get_user(user_id: str) -> Optional[User]:
+    """Get user by ID"""
     db = next(get_db())
     try:
-        return db.query(Session).filter(Session.session_id == session_id).first()
+        return db.query(User).filter(User.user_id == user_id).first()
     finally:
         db.close()
 
 
-def update_session_activity(session_id: str):
-    """Update session last activity"""
+def update_user_activity(user_id: str):
+    """Update user last activity"""
     db = next(get_db())
     try:
-        session = db.query(Session).filter(Session.session_id == session_id).first()
-        if session:
-            session.last_activity = datetime.now()
+        user = db.query(User).filter(User.user_id == user_id).first()
+        if user:
+            user.last_activity = datetime.now()
             db.commit()
     finally:
         db.close()
 
 
-def delete_session(session_id: str) -> bool:
-    """Delete session and all associated data"""
+def delete_user(user_id: str) -> bool:
+    """Delete user and all associated data"""
     db = next(get_db())
     try:
-        session = db.query(Session).filter(Session.session_id == session_id).first()
-        if session:
-            db.delete(session)
+        user = db.query(User).filter(User.user_id == user_id).first()
+        if user:
+            db.delete(user)
             db.commit()
-            log_activity(session_id, "session_deleted")
+            log_activity(user_id, "user_deleted")
             return True
         return False
     finally:
@@ -71,17 +63,17 @@ def delete_session(session_id: str) -> bool:
 
 
 # Quiz Operations
-def create_quiz(session_id: str) -> Quiz:
+def create_quiz(user_id: str) -> Quiz:
     """Create new quiz"""
     quiz_id = f"quiz_{uuid.uuid4()}"
     db = next(get_db())
     try:
-        quiz = Quiz(quiz_id=quiz_id, session_id=session_id)
+        quiz = Quiz(quiz_id=quiz_id, user_id=user_id)
         db.add(quiz)
         db.commit()
         db.refresh(quiz)
 
-        log_activity(session_id, "quiz_created", {"quiz_id": quiz_id})
+        log_activity(user_id, "quiz_created", {"quiz_id": quiz_id})
         return quiz
     finally:
         db.close()
@@ -96,15 +88,13 @@ def get_quiz(quiz_id: str) -> Optional[Quiz]:
         db.close()
 
 
-def get_quizzes_by_session(
-    session_id: str, limit: int = 10, offset: int = 0
-) -> List[Quiz]:
-    """Get quizzes for session"""
+def get_quizzes_by_user(user_id: str, limit: int = 10, offset: int = 0) -> List[Quiz]:
+    """Get quizzes for user"""
     db = next(get_db())
     try:
         return (
             db.query(Quiz)
-            .filter(Quiz.session_id == session_id)
+            .filter(Quiz.user_id == user_id)
             .order_by(desc(Quiz.created_at))
             .offset(offset)
             .limit(limit)
@@ -305,15 +295,11 @@ def update_quiz_session(quiz_session_id: str, **kwargs):
 
 
 # Activity Logging
-def log_activity(
-    session_id: str, action: str, details: Optional[Dict[str, Any]] = None
-):
+def log_activity(user_id: str, action: str, details: Optional[Dict[str, Any]] = None):
     """Log user activity"""
     db = next(get_db())
     try:
-        activity = ActivityLog(
-            session_id=session_id, action=action, details=details or {}
-        )
+        activity = ActivityLog(user_id=user_id, action=action, details=details or {})
         db.add(activity)
         db.commit()
     except Exception as e:
@@ -330,11 +316,11 @@ def get_system_stats() -> Dict[str, Any]:
         total_quizzes = db.query(func.count(Quiz.quiz_id)).scalar()
         total_documents = db.query(func.count(Document.doc_id)).scalar()
 
-        # Active sessions (activity in last 24h)
+        # Active users (activity in last 24h)
         cutoff = datetime.now() - timedelta(hours=24)
-        active_sessions = (
-            db.query(func.count(Session.session_id))
-            .filter(Session.last_activity > cutoff)
+        active_users = (
+            db.query(func.count(User.user_id))
+            .filter(User.last_activity > cutoff)
             .scalar()
         )
 
@@ -342,33 +328,45 @@ def get_system_stats() -> Dict[str, Any]:
             "total_quizzes": total_quizzes or 0,
             "total_documents": total_documents or 0,
             "total_questions_generated": 0,  # Could track this separately
-            "active_sessions": active_sessions or 0,
+            "active_users": active_users or 0,
         }
     finally:
         db.close()
 
 
-def get_session_stats(session_id: str) -> Dict[str, Any]:
-    """Get user session statistics"""
+def get_user_stats(user_id: str) -> Dict[str, Any]:
+    """Get user statistics"""
     db = next(get_db())
     try:
         quizzes_created = (
-            db.query(func.count(Quiz.quiz_id))
-            .filter(Quiz.session_id == session_id)
-            .scalar()
+            db.query(func.count(Quiz.quiz_id)).filter(Quiz.user_id == user_id).scalar()
         )
 
         documents_uploaded = (
             db.query(func.count(Document.doc_id))
             .join(Quiz)
-            .filter(Quiz.session_id == session_id)
+            .filter(Quiz.user_id == user_id)
             .scalar()
         )
+
+        # Count questions answered from quiz sessions
+        questions_answered = 0
+        quiz_sessions = (
+            db.query(QuizSession).join(Quiz).filter(Quiz.user_id == user_id).all()
+        )
+
+        for quiz_session in quiz_sessions:
+            if quiz_session.questions_data:
+                user_answers = quiz_session.questions_data.get("user_answers", [])
+                first_attempts = [
+                    a for a in user_answers if a.get("attempt_number", 1) == 1
+                ]
+                questions_answered += len(first_attempts)
 
         return {
             "quizzes_created": quizzes_created or 0,
             "documents_uploaded": documents_uploaded or 0,
-            "questions_answered": 0,  # Could track from quiz sessions
+            "questions_answered": questions_answered,
         }
     finally:
         db.close()
