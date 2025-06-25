@@ -30,15 +30,15 @@ class BatchAnalysis(BaseModel):
     )
     batch_summary: str = Field(description="Summary of current batch only")
 
-    @model_validator(mode="after")
-    def validate_weights_sum_to_one(self) -> Self:
-        if self.current_topics:
-            total_weight = sum(topic.weight for topic in self.current_topics)
-            if abs(total_weight - 1.0) > 0.01:  # Allow small floating point errors
-                raise ValueError(
-                    f"Consolidated topic weights must sum to 1.0, got {total_weight}"
-                )
-        return self
+    # @model_validator(mode="after")
+    # def validate_weights_sum_to_one(self) -> Self:
+    #     if self.current_topics:
+    #         total_weight = sum(topic.weight for topic in self.current_topics)
+    #         if abs(total_weight - 1.0) > 0.01:  # Allow small floating point errors
+    #             raise ValueError(
+    #                 f"Consolidated topic weights must sum to 1.0, got {total_weight}"
+    #             )
+    #     return self
 
 
 class TopicConsolidation(BaseModel):

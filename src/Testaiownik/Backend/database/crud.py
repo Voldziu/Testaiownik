@@ -147,7 +147,7 @@ def update_quiz_collection(quiz_id: str, collection_name: str):
         db.close()
 
 
-# Topic Selection Operations (now part of Quiz)
+# Topic Selection Operations
 def start_topic_analysis(quiz_id: str, desired_topic_count: int = 10):
     """Start topic analysis for quiz"""
     db = next(get_db())
@@ -364,6 +364,17 @@ def create_document(
         if quiz and quiz.status == "created":
             quiz.status = "documents_uploaded"
             db.commit()
+
+        # Access all attributes to load them into memory before expunge
+        _ = (
+            document.doc_id,
+            document.filename,
+            document.file_path,
+            document.size_bytes,
+            document.file_type,
+            document.uploaded_at,
+            document.indexed,
+        )
 
         db.expunge(document)
         return document

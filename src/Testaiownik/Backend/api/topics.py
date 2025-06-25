@@ -84,7 +84,7 @@ async def start_topic_analysis(
             )
 
         return TopicAnalysisStartResponse(
-            quiz_id=quiz_id,  # Using quiz_id consistently
+            quiz_id=quiz_id,
             status="analyzing",
             estimated_completion=None,
         )

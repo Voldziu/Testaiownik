@@ -186,17 +186,37 @@ class QuizService:
         result = {}
         for key, value in data.items():
             try:
-                if hasattr(value, "dict"):
-                    result[key] = value.dict()
-                elif hasattr(value, "model_dump"):
+                if hasattr(value, "model_dump"):
                     result[key] = value.model_dump()
-                elif isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                elif hasattr(value, "dict"):
+                    result[key] = value.dict()
+                elif isinstance(value, list):
+                    # Handle lists recursively
+                    result[key] = [self._serialize_value(item) for item in value]
+                elif isinstance(value, dict):
+                    result[key] = self._serialize_dict(value)
+                elif isinstance(value, (str, int, float, bool, type(None))):
                     result[key] = value
                 else:
                     result[key] = str(value)
             except Exception:
                 result[key] = str(value)
         return result
+
+    def _serialize_value(self, value):
+        """Serialize individual values"""
+        if hasattr(value, "model_dump"):
+            return value.model_dump()
+        elif hasattr(value, "dict"):
+            return value.dict()
+        elif isinstance(value, list):
+            return [self._serialize_value(item) for item in value]
+        elif isinstance(value, dict):
+            return self._serialize_dict(value)
+        elif isinstance(value, (str, int, float, bool, type(None))):
+            return value
+        else:
+            return str(value)
 
     async def submit_topic_feedback(
         self, quiz_id: str, user_input: str, user_id: str
@@ -218,8 +238,8 @@ class QuizService:
             config = graph_data["config"]
 
             # Submit feedback to graph
-            feedback_state = {"user_input": user_input}
-            result = graph.invoke(feedback_state, config)
+            graph.update_state(config, {"user_input": user_input})
+            result = graph.invoke(None, config)
 
             # Get updated state
             current_state = graph.get_state(config)
@@ -228,13 +248,27 @@ class QuizService:
             suggested_topics = self._extract_topics_from_state(current_state)
             serialized_state = self._serialize_langgraph_state(current_state)
 
+            conversation_history = current_state.values.get("conversation_history", [])
+            serialized_history = []
+            for item in conversation_history:
+                if isinstance(item, dict):
+                    serialized_item = {}
+                    for k, v in item.items():
+                        if k == "suggested_topics" and isinstance(v, list):
+                            serialized_item[k] = [
+                                self._serialize_value(topic) for topic in v
+                            ]
+                        else:
+                            serialized_item[k] = self._serialize_value(v)
+                    serialized_history.append(serialized_item)
+                else:
+                    serialized_history.append(self._serialize_value(item))
+
             update_topic_data(
                 quiz_id,
                 suggested_topics=suggested_topics,
                 topic_feedback_request=current_state.values.get("feedback_request"),
-                topic_conversation_history=current_state.values.get(
-                    "conversation_history", []
-                ),
+                topic_conversation_history=serialized_history,
                 langgraph_topic_state=serialized_state,
             )
 

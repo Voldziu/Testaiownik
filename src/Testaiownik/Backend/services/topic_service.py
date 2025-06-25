@@ -239,6 +239,7 @@ class TopicService:
         # Check if weights are reasonable (sum close to 1.0)
         return abs(total_weight - 1.0) < 0.01
 
+    # TODO: INTEGRATE AI TOPIC SUGGESTIONS
     async def generate_topic_suggestions(
         self, quiz_id: str, count: int = 5
     ) -> List[Dict]:
