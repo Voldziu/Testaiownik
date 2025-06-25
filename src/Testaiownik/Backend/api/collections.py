@@ -73,8 +73,7 @@ async def list_collections(request: Request, user_only: bool = True):
                                 f"Collection {collection_name} referenced but not accessible: {e}"
                             )
         else:
-            # Admin endpoint - list all collections
-            # Note: This should be protected with admin authentication in production
+
             all_collections = qdrant_manager.list_collections()
 
             for collection_name in all_collections:
@@ -84,10 +83,7 @@ async def list_collections(request: Request, user_only: bool = True):
                     retriever = RAGRetriever(collection_name, qdrant_manager)
                     vector_count = retriever.get_chunk_count()
 
-                    # Try to find associated quiz
                     quiz = None
-                    # Would need to implement get_quiz_by_collection_name or similar
-                    # For now, just list collection without quiz info
 
                     collections.append(
                         {

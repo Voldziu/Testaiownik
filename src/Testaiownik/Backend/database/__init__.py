@@ -5,8 +5,6 @@ from .models import (
     User,
     Quiz,
     Document,
-    TopicSession,
-    QuizSession,
     ActivityLog,
 )
 from . import crud

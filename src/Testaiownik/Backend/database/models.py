@@ -40,29 +40,51 @@ class User(Base):
 
 
 class Quiz(Base):
-    """Quiz instances"""
+    """Quiz instances with embedded topic selection and quiz execution"""
 
     __tablename__ = "quizzes"
 
     quiz_id = Column(String(50), primary_key=True, index=True)
     user_id = Column(String(50), ForeignKey("users.user_id"), index=True)
-    status = Column(
-        String(20), default="created"
-    )  # created, analyzing, ready, active, completed
+
+    # Status tracking - single status for entire quiz lifecycle
+    status = Column(String(20), default="created")
+    # Possible statuses: created, documents_uploaded, documents_indexed,
+    # topic_analysis, topic_feedback, topic_ready, quiz_active, quiz_completed, failed
+
+    # Document management
     collection_name = Column(String(100), nullable=True)
+
+    # Topic selection data (previously topic_sessions)
+    desired_topic_count = Column(Integer, default=10)
+    suggested_topics = Column(JSON, nullable=True)  # List of WeightedTopic dicts
+    confirmed_topics = Column(JSON, nullable=True)  # Final confirmed topics
+    topic_feedback_request = Column(Text, nullable=True)
+    topic_conversation_history = Column(JSON, default=list)
+    langgraph_topic_state = Column(
+        JSON, nullable=True
+    )  # Complete LangGraph state for topic selection
+
+    # Quiz execution data (previously quiz_sessions)
+    total_questions = Column(Integer, nullable=True)
+    difficulty = Column(String(20), nullable=True)  # easy, medium, hard
+    current_question_index = Column(Integer, default=0)
+    questions_data = Column(JSON, nullable=True)  # All generated questions
+    user_answers = Column(JSON, default=list)  # User's answers with timestamps
+    langgraph_quiz_state = Column(JSON, nullable=True)  # Complete quiz state
+
+    # Timestamps
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    topic_analysis_started_at = Column(DateTime, nullable=True)
+    topic_analysis_completed_at = Column(DateTime, nullable=True)
+    quiz_started_at = Column(DateTime, nullable=True)
+    quiz_completed_at = Column(DateTime, nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="quizzes")
     documents = relationship(
         "Document", back_populates="quiz", cascade="all, delete-orphan"
-    )
-    topic_sessions = relationship(
-        "TopicSession", back_populates="quiz", cascade="all, delete-orphan"
-    )
-    quiz_sessions = relationship(
-        "QuizSession", back_populates="quiz", cascade="all, delete-orphan"
     )
 
 
@@ -84,53 +106,6 @@ class Document(Base):
     quiz = relationship("Quiz", back_populates="documents")
 
 
-class TopicSession(Base):
-    """Topic selection workflow state"""
-
-    __tablename__ = "topic_sessions"
-
-    topic_session_id = Column(String(50), primary_key=True, index=True)
-    quiz_id = Column(String(50), ForeignKey("quizzes.quiz_id"), index=True)
-    status = Column(
-        String(20), default="analyzing"
-    )  # analyzing, awaiting_feedback, completed
-    desired_topic_count = Column(Integer, default=10)
-    suggested_topics = Column(JSON, nullable=True)  # List of WeightedTopic
-    confirmed_topics = Column(JSON, nullable=True)  # Final topics
-    conversation_history = Column(JSON, default=list)
-    feedback_request = Column(Text, nullable=True)
-    langgraph_state = Column(JSON, nullable=True)  # Complete LangGraph state
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-
-    # Relationships
-    quiz = relationship("Quiz", back_populates="topic_sessions")
-
-
-class QuizSession(Base):
-    """Quiz execution state"""
-
-    __tablename__ = "quiz_sessions"
-
-    quiz_session_id = Column(String(50), primary_key=True, index=True)
-    quiz_id = Column(String(50), ForeignKey("quizzes.quiz_id"), index=True)
-    status = Column(
-        String(20), default="generating"
-    )  # generating, active, paused, completed
-    total_questions = Column(Integer)
-    difficulty = Column(String(20))
-    current_question_index = Column(Integer, default=0)
-    questions_data = Column(JSON, nullable=True)  # All generated questions
-    user_answers = Column(JSON, default=list)  # User's answers
-    langgraph_state = Column(JSON, nullable=True)  # Complete quiz state
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    completed_at = Column(DateTime, nullable=True)
-
-    # Relationships
-    quiz = relationship("Quiz", back_populates="quiz_sessions")
-
-
 class ActivityLog(Base):
     """User activity tracking"""
 
@@ -138,7 +113,9 @@ class ActivityLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(50), index=True)
-    action = Column(String(50))  # quiz_created, document_uploaded, etc.
+    action = Column(
+        String(50)
+    )  # quiz_created, document_uploaded, topic_confirmed, quiz_completed, etc.
     details = Column(JSON, nullable=True)
     timestamp = Column(DateTime, default=datetime.now)
 

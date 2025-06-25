@@ -3,12 +3,12 @@ from typing import List, Dict, Any, Optional
 import json
 
 from Agent.Shared import WeightedTopic
-from ..database.crud import get_topic_session, update_topic_session, log_activity
+from ..database.crud import get_quiz, update_topic_data, log_activity
 from utils import logger
 
 
 class TopicService:
-    """Service for topic management operations"""
+    """Simplified service for topic management operations using quiz_id only"""
 
     def normalize_weights(self, topics: List[Dict]) -> List[Dict]:
         """Normalize topic weights to sum to 1.0"""
@@ -28,19 +28,15 @@ class TopicService:
         return topics
 
     def add_topic(
-        self,
-        topic_session_id: str,
-        topic_name: str,
-        weight: float,
-        user_id: str,  # ✅ Changed
+        self, quiz_id: str, topic_name: str, weight: float, user_id: str
     ) -> Dict:
         """Add a custom topic to suggestions"""
         try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session:
-                raise ValueError("Topic session not found")
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
 
-            current_topics = topic_session.suggested_topics or []
+            current_topics = quiz.suggested_topics or []
 
             # Check if topic already exists
             existing_names = [topic.get("topic", "") for topic in current_topics]
@@ -55,12 +51,12 @@ class TopicService:
             normalized_topics = self.normalize_weights(current_topics)
 
             # Update database
-            update_topic_session(topic_session_id, suggested_topics=normalized_topics)
+            update_topic_data(quiz_id, suggested_topics=normalized_topics)
 
             log_activity(
-                user_id,  # ✅ Changed
+                user_id,
                 "topic_added",
-                {"topic_session_id": topic_session_id, "topic_name": topic_name},
+                {"quiz_id": quiz_id, "topic_name": topic_name},
             )
 
             return {
@@ -77,16 +73,14 @@ class TopicService:
             logger.error(f"Failed to add topic: {e}")
             raise
 
-    def delete_topic(
-        self, topic_session_id: str, topic_name: str, user_id: str  # ✅ Changed
-    ) -> Dict:
+    def delete_topic(self, quiz_id: str, topic_name: str, user_id: str) -> Dict:
         """Remove a topic from suggestions"""
         try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session:
-                raise ValueError("Topic session not found")
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
 
-            current_topics = topic_session.suggested_topics or []
+            current_topics = quiz.suggested_topics or []
 
             # Find and remove topic
             updated_topics = [
@@ -103,12 +97,12 @@ class TopicService:
             normalized_topics = self.normalize_weights(updated_topics)
 
             # Update database
-            update_topic_session(topic_session_id, suggested_topics=normalized_topics)
+            update_topic_data(quiz_id, suggested_topics=normalized_topics)
 
             log_activity(
-                user_id,  # ✅ Changed
+                user_id,
                 "topic_deleted",
-                {"topic_session_id": topic_session_id, "topic_name": topic_name},
+                {"quiz_id": quiz_id, "topic_name": topic_name},
             )
 
             return {
@@ -124,19 +118,19 @@ class TopicService:
 
     def update_topic(
         self,
-        topic_session_id: str,
+        quiz_id: str,
         current_topic_name: str,
         new_name: Optional[str] = None,
         new_weight: Optional[float] = None,
-        user_id: str = None,  # ✅ Changed
+        user_id: str = None,
     ) -> Dict:
         """Update topic name and/or weight"""
         try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session:
-                raise ValueError("Topic session not found")
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
 
-            current_topics = topic_session.suggested_topics or []
+            current_topics = quiz.suggested_topics or []
 
             # Find topic to update
             topic_index = None
@@ -172,13 +166,13 @@ class TopicService:
             normalized_topics = self.normalize_weights(current_topics)
 
             # Update database
-            update_topic_session(topic_session_id, suggested_topics=normalized_topics)
+            update_topic_data(quiz_id, suggested_topics=normalized_topics)
 
             log_activity(
-                user_id,  # ✅ Changed
+                user_id,
                 "topic_updated",
                 {
-                    "topic_session_id": topic_session_id,
+                    "quiz_id": quiz_id,
                     "old_name": current_topic_name,
                     "new_name": new_name,
                     "new_weight": new_weight,
@@ -196,25 +190,23 @@ class TopicService:
             logger.error(f"Failed to update topic: {e}")
             raise
 
-    def set_topic_count(
-        self, topic_session_id: str, desired_count: int, user_id: str  # ✅ Changed
-    ) -> Dict:
+    def set_topic_count(self, quiz_id: str, desired_count: int, user_id: str) -> Dict:
         """Set desired topic count for analysis"""
         try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session:
-                raise ValueError("Topic session not found")
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
 
-            old_count = topic_session.desired_topic_count
+            old_count = quiz.desired_topic_count
 
             # Update database
-            update_topic_session(topic_session_id, desired_topic_count=desired_count)
+            update_topic_data(quiz_id, desired_topic_count=desired_count)
 
             log_activity(
-                user_id,  # ✅ Changed
+                user_id,
                 "topic_count_updated",
                 {
-                    "topic_session_id": topic_session_id,
+                    "quiz_id": quiz_id,
                     "old_count": old_count,
                     "new_count": desired_count,
                 },
@@ -252,6 +244,10 @@ class TopicService:
     ) -> List[Dict]:
         """Generate AI-based topic suggestions"""
         try:
+            quiz = get_quiz(quiz_id)
+            if not quiz or not quiz.collection_name:
+                return []
+
             # This would integrate with your AI topic generation
             # For now, return placeholder suggestions
             suggestions = [
@@ -268,47 +264,145 @@ class TopicService:
             logger.error(f"Failed to generate topic suggestions: {e}")
             return []
 
-    def get_latest_topic_session(self, quiz_id: str):
-        """Get the most recent topic session for a quiz"""
-        try:
-            # This would need a database function to get latest topic session by quiz_id
-            # For now, placeholder implementation
-            from ..database.crud import get_quiz
-
-            quiz = get_quiz(quiz_id)
-            if quiz and hasattr(quiz, "topic_sessions") and quiz.topic_sessions:
-                return quiz.topic_sessions[-1]  # Get the latest one
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to get latest topic session: {e}")
-            return None
-
-    def confirm_topic_selection(self, topic_session_id: str) -> Dict:
+    def confirm_topic_selection(self, quiz_id: str) -> Dict:
         """Confirm topic selection and prepare for quiz generation"""
         try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session:
-                raise ValueError("Topic session not found")
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
 
-            if not topic_session.suggested_topics:
+            if not quiz.suggested_topics:
                 raise ValueError("No topics available to confirm")
 
             # Move topics from suggested to confirmed
-            confirmed_topics = topic_session.suggested_topics.copy()
+            confirmed_topics = quiz.suggested_topics.copy()
 
             # Update database
-            update_topic_session(
-                topic_session_id, confirmed_topics=confirmed_topics, status="completed"
-            )
+            from ..database.crud import confirm_quiz_topics
+
+            success = confirm_quiz_topics(quiz_id, confirmed_topics)
+
+            if not success:
+                raise ValueError("Failed to confirm topics in database")
 
             return {
                 "confirmed_topics": confirmed_topics,
                 "total_topics": len(confirmed_topics),
                 "ready_for_quiz": True,
-                "quiz_id": topic_session.quiz_id,
+                "quiz_id": quiz_id,
             }
 
         except Exception as e:
             logger.error(f"Failed to confirm topic selection: {e}")
+            raise
+
+    def get_topic_analysis_status(self, quiz_id: str) -> Dict:
+        """Get topic analysis status for quiz"""
+        try:
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
+
+            return {
+                "quiz_id": quiz_id,
+                "status": quiz.status,
+                "suggested_topics": quiz.suggested_topics or [],
+                "confirmed_topics": quiz.confirmed_topics or [],
+                "desired_topic_count": quiz.desired_topic_count,
+                "feedback_request": quiz.topic_feedback_request,
+                "conversation_history": quiz.topic_conversation_history or [],
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get topic analysis status: {e}")
+            raise
+
+    def export_topics(self, quiz_id: str) -> Dict:
+        """Export current topic configuration for backup"""
+        try:
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
+
+            export_data = {
+                "quiz_id": quiz_id,
+                "suggested_topics": quiz.suggested_topics,
+                "confirmed_topics": quiz.confirmed_topics,
+                "desired_topic_count": quiz.desired_topic_count,
+                "status": quiz.status,
+                "exported_at": quiz.updated_at.isoformat() if quiz.updated_at else None,
+            }
+
+            return {
+                "success": True,
+                "export_data": export_data,
+                "message": "Topics exported successfully",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to export topics: {e}")
+            raise
+
+    def import_topics(self, quiz_id: str, topics_data: Dict, user_id: str) -> Dict:
+        """Import topics configuration from backup"""
+        try:
+            # Validate imported data
+            if "suggested_topics" not in topics_data:
+                raise ValueError("Invalid topics data - missing suggested_topics")
+
+            topics = topics_data["suggested_topics"]
+            if not self.validate_topics(topics):
+                raise ValueError("Invalid topic format or weights")
+
+            # Update database
+            update_topic_data(
+                quiz_id,
+                suggested_topics=topics,
+                desired_topic_count=topics_data.get("desired_topic_count", len(topics)),
+            )
+
+            log_activity(
+                user_id,
+                "topics_imported",
+                {"quiz_id": quiz_id, "topic_count": len(topics)},
+            )
+
+            return {
+                "success": True,
+                "message": "Topics imported successfully",
+                "imported_topics": len(topics),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to import topics: {e}")
+            raise
+
+    def reset_topic_analysis(self, quiz_id: str, user_id: str) -> Dict:
+        """Reset topic analysis to start over"""
+        try:
+            # Reset topic data
+            update_topic_data(
+                quiz_id,
+                status="documents_indexed",
+                suggested_topics=None,
+                confirmed_topics=None,
+                topic_feedback_request=None,
+                topic_conversation_history=[],
+                langgraph_topic_state=None,
+            )
+
+            log_activity(
+                user_id,
+                "topic_analysis_reset",
+                {"quiz_id": quiz_id},
+            )
+
+            return {
+                "success": True,
+                "message": "Topic analysis reset successfully",
+                "new_status": "documents_indexed",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to reset topic analysis: {e}")
             raise

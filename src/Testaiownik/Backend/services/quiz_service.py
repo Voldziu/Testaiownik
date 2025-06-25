@@ -13,25 +13,24 @@ from RAG.Retrieval import RAGRetriever
 from RAG.qdrant_manager import QdrantManager
 
 from ..database.crud import (
-    create_topic_session,
-    get_topic_session,
-    update_topic_session,
-    create_quiz_session,
-    get_quiz_session,
-    update_quiz_session,
-    update_quiz_status,
-    log_activity,
     get_quiz,
+    update_quiz,
+    update_topic_data,
+    confirm_quiz_topics,
+    start_quiz_execution,
+    update_quiz_progress,
+    complete_quiz,
+    log_activity,
 )
 from utils import logger
 
 
 class QuizService:
-    """Service layer for quiz operations integrating with TestaiownikRunner"""
+    """Simplified service layer for quiz operations using quiz_id only"""
 
     def __init__(self):
-        self.active_topic_graphs = {}  # topic_session_id -> graph instance
-        self.active_quiz_graphs = {}  # quiz_session_id -> graph instance
+        self.active_topic_graphs = {}  # quiz_id -> graph instance
+        self.active_quiz_graphs = {}  # quiz_id -> graph instance
         self.qdrant_manager = QdrantManager()
 
         # Background task tracking for cleanup
@@ -50,25 +49,36 @@ class QuizService:
 
     # Topic Selection Phase
     async def start_topic_analysis(
-        self, quiz_id: str, user_id: str, desired_topic_count: int = 10  # ✅ Changed
-    ) -> str:
+        self, quiz_id: str, user_id: str, desired_topic_count: int = 10
+    ) -> bool:
         """Start topic analysis using LangGraph agent"""
         try:
-            # Create topic session in database
-            topic_session = create_topic_session(quiz_id, desired_topic_count)
-            topic_session_id = topic_session.topic_session_id
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
+
+            # Initialize topic analysis in database
+            from ..database.crud import start_topic_analysis
+
+            success = start_topic_analysis(quiz_id, desired_topic_count)
+
+            if not success:
+                raise ValueError("Failed to initialize topic analysis")
 
             # Create RAG retriever for this quiz
-            collection_name = f"quiz_{quiz_id}"
+            collection_name = quiz.collection_name
+            if not collection_name:
+                raise ValueError("Quiz collection not found")
+
             retriever = RAGRetriever(collection_name, self.qdrant_manager)
 
             # Create topic selection graph
             topic_graph = create_agent_graph(retriever)
 
             # Store graph instance
-            self.active_topic_graphs[topic_session_id] = {
+            self.active_topic_graphs[quiz_id] = {
                 "graph": topic_graph,
-                "config": {"configurable": {"thread_id": topic_session_id}},
+                "config": {"configurable": {"thread_id": quiz_id}},
                 "retriever": retriever,
             }
 
@@ -86,29 +96,28 @@ class QuizService:
                 "desired_topic_count": desired_topic_count,
             }
 
-            # Start analysis
-            update_topic_session(topic_session_id, status="analyzing")
-
             # Run in background task
             self._create_background_task(
-                self._run_topic_analysis(topic_session_id, initial_state)
+                self._run_topic_analysis(quiz_id, initial_state)
             )
 
             log_activity(
-                user_id,  # ✅ Changed
+                user_id,
                 "topic_analysis_started",
-                {"topic_session_id": topic_session_id},
+                {"quiz_id": quiz_id},
             )
-            return topic_session_id
+            return True
 
         except Exception as e:
             logger.error(f"Failed to start topic analysis: {e}")
+            # Update quiz status to failed
+            update_quiz(quiz_id, status="failed")
             raise
 
-    async def _run_topic_analysis(self, topic_session_id: str, initial_state: Dict):
+    async def _run_topic_analysis(self, quiz_id: str, initial_state: Dict):
         """Background task to run topic analysis"""
         try:
-            graph_data = self.active_topic_graphs[topic_session_id]
+            graph_data = self.active_topic_graphs[quiz_id]
             graph = graph_data["graph"]
             config = graph_data["config"]
 
@@ -141,23 +150,23 @@ class QuizService:
             serialized_state = self._serialize_langgraph_state(current_state)
 
             # Update database with results
-            update_topic_session(
-                topic_session_id,
-                status="awaiting_feedback",
+            update_topic_data(
+                quiz_id,
+                status="topic_feedback",
                 suggested_topics=suggested_topics,
-                feedback_request=current_state.values.get("feedback_request"),
-                conversation_history=current_state.values.get(
+                topic_feedback_request=current_state.values.get("feedback_request"),
+                topic_conversation_history=current_state.values.get(
                     "conversation_history", []
                 ),
-                langgraph_state=serialized_state,
+                langgraph_topic_state=serialized_state,
             )
 
-            logger.info(f"Topic analysis completed for session {topic_session_id}")
+            logger.info(f"Topic analysis completed for quiz {quiz_id}")
 
         except Exception as e:
-            logger.error(f"Topic analysis failed for session {topic_session_id}: {e}")
+            logger.error(f"Topic analysis failed for quiz {quiz_id}: {e}")
             # Update status to failed
-            update_topic_session(topic_session_id, status="failed")
+            update_quiz(quiz_id, status="failed")
 
     def _serialize_langgraph_state(self, state) -> Dict:
         """Serialize LangGraph state for database storage"""
@@ -189,41 +198,22 @@ class QuizService:
                 result[key] = str(value)
         return result
 
-    def get_topic_session_status(self, topic_session_id: str) -> Optional[Dict]:
-        """Get topic session status and data"""
-        try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session:
-                return None
-
-            return {
-                "topic_session_id": topic_session_id,
-                "status": topic_session.status,
-                "suggested_topics": topic_session.suggested_topics or [],
-                "feedback_request": topic_session.feedback_request,
-                "conversation_history": topic_session.conversation_history or [],
-            }
-
-        except Exception as e:
-            logger.error(f"Failed to get topic session status: {e}")
-            return None
-
     async def submit_topic_feedback(
-        self, topic_session_id: str, user_input: str, user_id: str  # ✅ Changed
+        self, quiz_id: str, user_input: str, user_id: str
     ) -> Dict:
         """Process user feedback on topics"""
         try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session:
-                raise ValueError("Topic session not found")
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
 
             # Get graph instance
-            if topic_session_id not in self.active_topic_graphs:
+            if quiz_id not in self.active_topic_graphs:
                 # Try to restore from database state
-                if not self._restore_topic_session(topic_session_id):
+                if not self._restore_topic_session(quiz_id):
                     raise ValueError("Cannot restore topic session")
 
-            graph_data = self.active_topic_graphs[topic_session_id]
+            graph_data = self.active_topic_graphs[quiz_id]
             graph = graph_data["graph"]
             config = graph_data["config"]
 
@@ -234,24 +224,24 @@ class QuizService:
             # Get updated state
             current_state = graph.get_state(config)
 
-            # Process and update database (similar to _run_topic_analysis)
+            # Process and update database
             suggested_topics = self._extract_topics_from_state(current_state)
             serialized_state = self._serialize_langgraph_state(current_state)
 
-            update_topic_session(
-                topic_session_id,
+            update_topic_data(
+                quiz_id,
                 suggested_topics=suggested_topics,
-                feedback_request=current_state.values.get("feedback_request"),
-                conversation_history=current_state.values.get(
+                topic_feedback_request=current_state.values.get("feedback_request"),
+                topic_conversation_history=current_state.values.get(
                     "conversation_history", []
                 ),
-                langgraph_state=serialized_state,
+                langgraph_topic_state=serialized_state,
             )
 
             log_activity(
-                user_id,  # ✅ Changed
+                user_id,
                 "topic_feedback_submitted",
-                {"topic_session_id": topic_session_id},
+                {"quiz_id": quiz_id},
             )
 
             return {
@@ -278,22 +268,21 @@ class QuizService:
                     topics.append({"topic": str(topic), "weight": 1.0})
         return topics
 
-    def _restore_topic_session(self, topic_session_id: str) -> bool:
+    def _restore_topic_session(self, quiz_id: str) -> bool:
         """Restore topic session from database state"""
         try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session or not topic_session.langgraph_state:
+            quiz = get_quiz(quiz_id)
+            if not quiz or not quiz.langgraph_topic_state:
                 return False
 
             # Recreate graph and config
-            quiz = get_quiz(topic_session.quiz_id)
-            collection_name = f"quiz_{quiz.quiz_id}"
+            collection_name = quiz.collection_name
             retriever = RAGRetriever(collection_name, self.qdrant_manager)
             topic_graph = create_agent_graph(retriever)
 
-            config = {"configurable": {"thread_id": topic_session_id}}
+            config = {"configurable": {"thread_id": quiz_id}}
 
-            self.active_topic_graphs[topic_session_id] = {
+            self.active_topic_graphs[quiz_id] = {
                 "graph": topic_graph,
                 "config": config,
                 "retriever": retriever,
@@ -305,34 +294,34 @@ class QuizService:
             logger.error(f"Failed to restore topic session: {e}")
             return False
 
-    def confirm_topics(self, topic_session_id: str, user_id: str) -> Dict:  # ✅ Changed
+    def confirm_topics(self, quiz_id: str, user_id: str) -> Dict:
         """Confirm final topic selection"""
         try:
-            topic_session = get_topic_session(topic_session_id)
-            if not topic_session:
-                raise ValueError("Topic session not found")
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
 
-            if not topic_session.suggested_topics:
+            if not quiz.suggested_topics:
                 raise ValueError("No topics available to confirm")
 
             # Confirm topics
-            confirmed_topics = topic_session.suggested_topics.copy()
+            confirmed_topics = quiz.suggested_topics.copy()
 
-            update_topic_session(
-                topic_session_id, confirmed_topics=confirmed_topics, status="completed"
-            )
+            success = confirm_quiz_topics(quiz_id, confirmed_topics)
+            if not success:
+                raise ValueError("Failed to confirm topics")
 
             log_activity(
-                user_id,  # ✅ Changed
+                user_id,
                 "topics_confirmed",
-                {"topic_session_id": topic_session_id},
+                {"quiz_id": quiz_id},
             )
 
             return {
                 "confirmed_topics": confirmed_topics,
                 "total_topics": len(confirmed_topics),
                 "ready_for_quiz": True,
-                "quiz_id": topic_session.quiz_id,
+                "quiz_id": quiz_id,
             }
 
         except Exception as e:
@@ -347,38 +336,34 @@ class QuizService:
         total_questions: int,
         difficulty: str,
         user_questions: List[str],
-        user_id: str,  # ✅ Changed from session_id
-    ) -> str:
+        user_id: str,
+    ) -> bool:
         """Start quiz execution with confirmed topics"""
         try:
-            # Create quiz session
-            quiz_session = create_quiz_session(quiz_id, total_questions, difficulty)
-            quiz_session_id = quiz_session.quiz_session_id
+            # Initialize quiz execution in database
+            success = start_quiz_execution(quiz_id, total_questions, difficulty)
+            if not success:
+                raise ValueError("Failed to start quiz execution")
 
             # Start quiz generation in background
             self._create_background_task(
-                self._generate_quiz_questions(
-                    quiz_session_id, confirmed_topics, user_questions
-                )
+                self._generate_quiz_questions(quiz_id, confirmed_topics, user_questions)
             )
 
             log_activity(
-                user_id,  # ✅ Changed
+                user_id,
                 "quiz_started",
-                {"quiz_session_id": quiz_session_id},
+                {"quiz_id": quiz_id},
             )
 
-            return quiz_session_id
+            return True
 
         except Exception as e:
             logger.error(f"Failed to start quiz: {e}")
             raise
 
     async def _generate_quiz_questions(
-        self,
-        quiz_session_id: str,
-        confirmed_topics: List[Dict],
-        user_questions: List[str],
+        self, quiz_id: str, confirmed_topics: List[Dict], user_questions: List[str]
     ):
         """Background task to generate quiz questions"""
         try:
@@ -390,21 +375,22 @@ class QuizService:
                 "topics": confirmed_topics,
             }
 
-            update_quiz_session(
-                quiz_session_id, status="active", questions_data=questions_data
-            )
+            update_quiz_progress(quiz_id, questions_data=questions_data)
 
-            logger.info(f"Quiz questions generated for session {quiz_session_id}")
+            # Update status to active when ready
+            update_quiz(quiz_id, status="quiz_active")
+
+            logger.info(f"Quiz questions generated for {quiz_id}")
 
         except Exception as e:
             logger.error(f"Failed to generate quiz questions: {e}")
-            update_quiz_session(quiz_session_id, status="failed")
+            update_quiz(quiz_id, status="failed")
 
-    def get_current_question(self, quiz_session_id: str) -> Optional[Dict]:
-        """Get current question for quiz session"""
+    def get_current_question(self, quiz_id: str) -> Optional[Dict]:
+        """Get current question for quiz"""
         try:
-            quiz_session = get_quiz_session(quiz_session_id)
-            if not quiz_session:
+            quiz = get_quiz(quiz_id)
+            if not quiz:
                 return None
 
             # Implementation would return current question
@@ -412,12 +398,16 @@ class QuizService:
             return {
                 "current_question": None,
                 "progress": {
-                    "current_question_number": 0,
-                    "total_questions": quiz_session.total_questions,
-                    "answered": 0,
-                    "correct": 0,
+                    "current_question_number": quiz.current_question_index,
+                    "total_questions": quiz.total_questions or 0,
+                    "answered": len(quiz.user_answers or []),
+                    "correct": sum(
+                        1
+                        for a in (quiz.user_answers or [])
+                        if isinstance(a, dict) and a.get("is_correct")
+                    ),
                 },
-                "status": quiz_session.status,
+                "status": quiz.status,
             }
 
         except Exception as e:
@@ -425,7 +415,7 @@ class QuizService:
             return None
 
     async def submit_answer(
-        self, quiz_session_id: str, selected_choices: List[int], question_id: str
+        self, quiz_id: str, selected_choices: List[int], question_id: str
     ) -> Dict:
         """Submit answer to current question"""
         try:
@@ -444,35 +434,110 @@ class QuizService:
             logger.error(f"Failed to submit answer: {e}")
             raise
 
-    def cleanup_user_sessions(self, user_id: str):  # ✅ Changed from session_id
+    def get_quiz_results(self, quiz_id: str) -> Optional[Dict]:
+        """Get quiz results and statistics"""
+        try:
+            quiz = get_quiz(quiz_id)
+            if not quiz or quiz.status != "quiz_completed":
+                return None
+
+            # Calculate results from quiz data
+            total_questions = quiz.total_questions or 0
+            user_answers = quiz.user_answers or []
+
+            correct_answers = sum(
+                1
+                for answer in user_answers
+                if isinstance(answer, dict) and answer.get("is_correct")
+            )
+
+            score_percentage = (
+                (correct_answers / total_questions * 100) if total_questions > 0 else 0
+            )
+
+            # Calculate topic scores
+            topic_scores = {}
+            if quiz.confirmed_topics:
+                for topic_data in quiz.confirmed_topics:
+                    topic_name = topic_data.get("topic", "Unknown")
+                    topic_scores[topic_name] = {
+                        "correct": 0,  # Would calculate from answers
+                        "total": 0,  # Would calculate from questions
+                        "percentage": 0.0,
+                    }
+
+            return {
+                "quiz_results": {
+                    "session_id": quiz_id,
+                    "total_questions": total_questions,
+                    "correct_answers": correct_answers,
+                    "score_percentage": score_percentage,
+                    "topic_scores": topic_scores,
+                    "completed_at": quiz.quiz_completed_at or datetime.now(),
+                },
+                "status": "completed",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get quiz results: {e}")
+            return None
+
+    def get_quiz_preview(self, quiz_id: str) -> Dict:
+        """Get quiz preview data"""
+        try:
+            quiz = get_quiz(quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
+
+            topics = quiz.confirmed_topics or []
+
+            return {
+                "total_questions": quiz.total_questions or 20,
+                "difficulty": quiz.difficulty or "medium",
+                "topics": [
+                    {
+                        "topic": topic.get("topic", "Unknown"),
+                        "question_count": int(
+                            (topic.get("weight", 0) * (quiz.total_questions or 20))
+                        ),
+                    }
+                    for topic in topics
+                ],
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get quiz preview: {e}")
+            return {}
+
+    def pause_quiz(self, quiz_id: str) -> bool:
+        """Pause active quiz"""
+        try:
+            return update_quiz(quiz_id, status="paused")
+        except Exception as e:
+            logger.error(f"Failed to pause quiz: {e}")
+            return False
+
+    def resume_quiz(self, quiz_id: str) -> bool:
+        """Resume paused quiz"""
+        try:
+            return update_quiz(quiz_id, status="quiz_active")
+        except Exception as e:
+            logger.error(f"Failed to resume quiz: {e}")
+            return False
+
+    def cleanup_user_sessions(self, user_id: str):
         """Clean up user-related graph instances"""
-        # Clean up topic graphs
-        topic_sessions_to_remove = []
-        for topic_session_id, graph_data in self.active_topic_graphs.items():
-            # Check if this topic session belongs to the user
-            topic_session = get_topic_session(topic_session_id)
-            if topic_session:
-                quiz = get_quiz(topic_session.quiz_id)
-                if quiz and quiz.user_id == user_id:  # ✅ Changed
-                    topic_sessions_to_remove.append(topic_session_id)
+        # Clean up topic graphs for user's quizzes
+        from ..database.crud import get_quizzes_by_user
 
-        for topic_session_id in topic_sessions_to_remove:
-            del self.active_topic_graphs[topic_session_id]
-            logger.info(f"Cleaned up topic graph for session {topic_session_id}")
+        user_quizzes = get_quizzes_by_user(user_id)
+        quiz_ids_to_clean = [quiz.quiz_id for quiz in user_quizzes]
 
-        # Clean up quiz graphs
-        quiz_sessions_to_remove = []
-        for quiz_session_id, graph_data in self.active_quiz_graphs.items():
-            quiz_session = get_quiz_session(quiz_session_id)
-            if quiz_session:
-                quiz = get_quiz(quiz_session.quiz_id)
-                if quiz and quiz.user_id == user_id:  # ✅ Changed
-                    quiz_sessions_to_remove.append(quiz_session_id)
+        for quiz_id in quiz_ids_to_clean:
+            if quiz_id in self.active_topic_graphs:
+                del self.active_topic_graphs[quiz_id]
+                logger.info(f"Cleaned up topic graph for quiz {quiz_id}")
 
-        for quiz_session_id in quiz_sessions_to_remove:
-            del self.active_quiz_graphs[quiz_session_id]
-            logger.info(f"Cleaned up quiz graph for session {quiz_session_id}")
-
-    def get_quiz_session(self, quiz_session_id: str):
-        """Get quiz session from database"""
-        return get_quiz_session(quiz_session_id)
+            if quiz_id in self.active_quiz_graphs:
+                del self.active_quiz_graphs[quiz_id]
+                logger.info(f"Cleaned up quiz graph for quiz {quiz_id}")

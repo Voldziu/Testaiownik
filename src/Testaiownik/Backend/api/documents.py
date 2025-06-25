@@ -193,7 +193,7 @@ async def index_documents(quiz_id: str, request: Request):
 
         # Update quiz with collection name
         if indexing_result.get("collection_name") and not quiz.collection_name:
-            from ..database.crud import update_quiz
+            from database.crud import update_quiz
 
             update_quiz(quiz_id, collection_name=indexing_result["collection_name"])
 

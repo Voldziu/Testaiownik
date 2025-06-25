@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import uuid
 
-from .models import get_db, User, Quiz, Document, TopicSession, QuizSession, ActivityLog
+from .models import get_db, User, Quiz, Document, ActivityLog
 from utils import logger
 
 
@@ -104,6 +104,21 @@ def get_quizzes_by_user(user_id: str, limit: int = 10, offset: int = 0) -> List[
         db.close()
 
 
+def update_quiz(quiz_id: str, **kwargs):
+    """Update quiz fields"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            for key, value in kwargs.items():
+                if hasattr(quiz, key):
+                    setattr(quiz, key, value)
+            quiz.updated_at = datetime.now()
+            db.commit()
+    finally:
+        db.close()
+
+
 def update_quiz_status(quiz_id: str, status: str):
     """Update quiz status"""
     db = next(get_db())
@@ -130,6 +145,198 @@ def update_quiz_collection(quiz_id: str, collection_name: str):
         db.close()
 
 
+# Topic Selection Operations (now part of Quiz)
+def start_topic_analysis(quiz_id: str, desired_topic_count: int = 10):
+    """Start topic analysis for quiz"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            quiz.status = "topic_analysis"
+            quiz.desired_topic_count = desired_topic_count
+            quiz.topic_analysis_started_at = datetime.now()
+            quiz.suggested_topics = []
+            quiz.topic_conversation_history = []
+            quiz.updated_at = datetime.now()
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
+def update_topic_data(quiz_id: str, **kwargs):
+    """Update topic-related data for quiz"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            # Update topic-specific fields
+            topic_fields = [
+                "suggested_topics",
+                "confirmed_topics",
+                "topic_feedback_request",
+                "topic_conversation_history",
+                "langgraph_topic_state",
+                "desired_topic_count",
+            ]
+
+            for key, value in kwargs.items():
+                if key in topic_fields and hasattr(quiz, key):
+                    setattr(quiz, key, value)
+
+            quiz.updated_at = datetime.now()
+
+            # Update completion timestamp if topics are confirmed
+            if "confirmed_topics" in kwargs and kwargs["confirmed_topics"]:
+                quiz.topic_analysis_completed_at = datetime.now()
+                quiz.status = "topic_ready"
+
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
+def confirm_quiz_topics(quiz_id: str, confirmed_topics: List[Dict]):
+    """Confirm final topics for quiz"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            quiz.confirmed_topics = confirmed_topics
+            quiz.status = "topic_ready"
+            quiz.topic_analysis_completed_at = datetime.now()
+            quiz.updated_at = datetime.now()
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
+# Quiz Execution Operations (now part of Quiz)
+def start_quiz_execution(quiz_id: str, total_questions: int, difficulty: str):
+    """Start quiz execution"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            quiz.status = "quiz_active"
+            quiz.total_questions = total_questions
+            quiz.difficulty = difficulty
+            quiz.current_question_index = 0
+            quiz.user_answers = []
+            quiz.quiz_started_at = datetime.now()
+            quiz.updated_at = datetime.now()
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
+def update_quiz_progress(quiz_id: str, **kwargs):
+    """Update quiz execution progress"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            # Update quiz execution fields
+            execution_fields = [
+                "current_question_index",
+                "questions_data",
+                "user_answers",
+                "langgraph_quiz_state",
+            ]
+
+            for key, value in kwargs.items():
+                if key in execution_fields and hasattr(quiz, key):
+                    setattr(quiz, key, value)
+
+            quiz.updated_at = datetime.now()
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
+def complete_quiz(quiz_id: str):
+    """Mark quiz as completed"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            quiz.status = "quiz_completed"
+            quiz.quiz_completed_at = datetime.now()
+            quiz.updated_at = datetime.now()
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
+def reset_quiz_to_topic_selection(quiz_id: str):
+    """Reset quiz back to topic selection phase"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            # Reset topic data
+            quiz.status = "documents_indexed"
+            quiz.suggested_topics = None
+            quiz.confirmed_topics = None
+            quiz.topic_feedback_request = None
+            quiz.topic_conversation_history = []
+            quiz.langgraph_topic_state = None
+            quiz.topic_analysis_started_at = None
+            quiz.topic_analysis_completed_at = None
+
+            # Reset quiz execution data
+            quiz.total_questions = None
+            quiz.difficulty = None
+            quiz.current_question_index = 0
+            quiz.questions_data = None
+            quiz.user_answers = []
+            quiz.langgraph_quiz_state = None
+            quiz.quiz_started_at = None
+            quiz.quiz_completed_at = None
+
+            quiz.updated_at = datetime.now()
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
+def reset_quiz_execution(quiz_id: str):
+    """Reset just the quiz execution, keep topics"""
+    db = next(get_db())
+    try:
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz:
+            # Keep topic data, reset execution data
+            quiz.status = "topic_ready"
+            quiz.total_questions = None
+            quiz.difficulty = None
+            quiz.current_question_index = 0
+            quiz.questions_data = None
+            quiz.user_answers = []
+            quiz.langgraph_quiz_state = None
+            quiz.quiz_started_at = None
+            quiz.quiz_completed_at = None
+            quiz.updated_at = datetime.now()
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+
 # Document Operations
 def create_document(
     quiz_id: str, filename: str, file_path: str, size_bytes: int, file_type: str
@@ -149,6 +356,13 @@ def create_document(
         db.add(document)
         db.commit()
         db.refresh(document)
+
+        # Update quiz status if this is the first document
+        quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+        if quiz and quiz.status == "created":
+            quiz.status = "documents_uploaded"
+            db.commit()
+
         return document
     finally:
         db.close()
@@ -171,6 +385,21 @@ def update_document_indexed(doc_id: str, indexed: bool):
         if document:
             document.indexed = indexed
             db.commit()
+
+            # If all documents are indexed, update quiz status
+            if indexed:
+                quiz_docs = (
+                    db.query(Document)
+                    .filter(Document.quiz_id == document.quiz_id)
+                    .all()
+                )
+                if all(doc.indexed for doc in quiz_docs):
+                    quiz = (
+                        db.query(Quiz).filter(Quiz.quiz_id == document.quiz_id).first()
+                    )
+                    if quiz and quiz.status == "documents_uploaded":
+                        quiz.status = "documents_indexed"
+                        db.commit()
     finally:
         db.close()
 
@@ -185,111 +414,6 @@ def delete_document(doc_id: str) -> bool:
             db.commit()
             return True
         return False
-    finally:
-        db.close()
-
-
-# Topic Session Operations
-def create_topic_session(quiz_id: str, desired_topic_count: int = 10) -> TopicSession:
-    """Create topic selection session"""
-    topic_session_id = f"topic_session_{uuid.uuid4()}"
-    db = next(get_db())
-    try:
-        topic_session = TopicSession(
-            topic_session_id=topic_session_id,
-            quiz_id=quiz_id,
-            desired_topic_count=desired_topic_count,
-        )
-        db.add(topic_session)
-        db.commit()
-        db.refresh(topic_session)
-        return topic_session
-    finally:
-        db.close()
-
-
-def get_topic_session(topic_session_id: str) -> Optional[TopicSession]:
-    """Get topic session by ID"""
-    db = next(get_db())
-    try:
-        return (
-            db.query(TopicSession)
-            .filter(TopicSession.topic_session_id == topic_session_id)
-            .first()
-        )
-    finally:
-        db.close()
-
-
-def update_topic_session(topic_session_id: str, **kwargs):
-    """Update topic session fields"""
-    db = next(get_db())
-    try:
-        topic_session = (
-            db.query(TopicSession)
-            .filter(TopicSession.topic_session_id == topic_session_id)
-            .first()
-        )
-        if topic_session:
-            for key, value in kwargs.items():
-                if hasattr(topic_session, key):
-                    setattr(topic_session, key, value)
-            topic_session.updated_at = datetime.now()
-            db.commit()
-    finally:
-        db.close()
-
-
-# Quiz Session Operations
-def create_quiz_session(
-    quiz_id: str, total_questions: int, difficulty: str
-) -> QuizSession:
-    """Create quiz execution session"""
-    quiz_session_id = f"quiz_session_{uuid.uuid4()}"
-    db = next(get_db())
-    try:
-        quiz_session = QuizSession(
-            quiz_session_id=quiz_session_id,
-            quiz_id=quiz_id,
-            total_questions=total_questions,
-            difficulty=difficulty,
-        )
-        db.add(quiz_session)
-        db.commit()
-        db.refresh(quiz_session)
-        return quiz_session
-    finally:
-        db.close()
-
-
-def get_quiz_session(quiz_session_id: str) -> Optional[QuizSession]:
-    """Get quiz session by ID"""
-    db = next(get_db())
-    try:
-        return (
-            db.query(QuizSession)
-            .filter(QuizSession.quiz_session_id == quiz_session_id)
-            .first()
-        )
-    finally:
-        db.close()
-
-
-def update_quiz_session(quiz_session_id: str, **kwargs):
-    """Update quiz session fields"""
-    db = next(get_db())
-    try:
-        quiz_session = (
-            db.query(QuizSession)
-            .filter(QuizSession.quiz_session_id == quiz_session_id)
-            .first()
-        )
-        if quiz_session:
-            for key, value in kwargs.items():
-                if hasattr(quiz_session, key):
-                    setattr(quiz_session, key, value)
-            quiz_session.updated_at = datetime.now()
-            db.commit()
     finally:
         db.close()
 
@@ -349,19 +473,21 @@ def get_user_stats(user_id: str) -> Dict[str, Any]:
             .scalar()
         )
 
-        # Count questions answered from quiz sessions
+        # Count questions answered from user_answers in quizzes
         questions_answered = 0
-        quiz_sessions = (
-            db.query(QuizSession).join(Quiz).filter(Quiz.user_id == user_id).all()
-        )
+        user_quizzes = db.query(Quiz).filter(Quiz.user_id == user_id).all()
 
-        for quiz_session in quiz_sessions:
-            if quiz_session.questions_data:
-                user_answers = quiz_session.questions_data.get("user_answers", [])
-                first_attempts = [
-                    a for a in user_answers if a.get("attempt_number", 1) == 1
-                ]
-                questions_answered += len(first_attempts)
+        for quiz in user_quizzes:
+            if quiz.user_answers:
+                # Count unique questions answered (first attempt only)
+                unique_questions = set()
+                for answer in quiz.user_answers:
+                    if (
+                        isinstance(answer, dict)
+                        and answer.get("attempt_number", 1) == 1
+                    ):
+                        unique_questions.add(answer.get("question_id"))
+                questions_answered += len(unique_questions)
 
         return {
             "quizzes_created": quizzes_created or 0,
