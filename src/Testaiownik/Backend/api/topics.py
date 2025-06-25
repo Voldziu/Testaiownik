@@ -84,10 +84,9 @@ async def start_topic_analysis(
             )
 
         return TopicAnalysisStartResponse(
-            topic_session_id=quiz_id,  # Using quiz_id instead of separate session
-            quiz_id=quiz_id,
+            quiz_id=quiz_id,  # Using quiz_id consistently
             status="analyzing",
-            estimated_completion=None,  # Could calculate based on document count
+            estimated_completion=None,
         )
 
     except Exception as e:
@@ -103,7 +102,7 @@ async def get_topic_status(quiz_id: str, request: Request):
 
     try:
         return TopicSessionStatusResponse(
-            topic_session_id=quiz_id,  # Using quiz_id
+            quiz_id=quiz_id,  # Using quiz_id consistently
             status=quiz.status,
             suggested_topics=[
                 WeightedTopicResponse(**topic)
@@ -171,7 +170,7 @@ async def confirm_topics(quiz_id: str, request: Request):
     "/topics/{quiz_id}/topic/{topic_name}", response_model=TopicDeleteResponse
 )
 async def delete_topic(quiz_id: str, topic_name: str, request: Request):
-    """Removes specific topic from suggestions. Reassign weights."""
+    """Removes specific topic from suggestions"""
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id)
 
@@ -193,7 +192,7 @@ async def delete_topic(quiz_id: str, topic_name: str, request: Request):
 
 @router.post("/topics/{quiz_id}/add", response_model=TopicAddResponse)
 async def add_topic(quiz_id: str, topic_data: AddTopicRequest, request: Request):
-    """Adds custom topic to suggestions. Reassign weights."""
+    """Adds custom topic to suggestions"""
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id)
 
@@ -223,7 +222,7 @@ async def update_topic(
     update_data: UpdateTopicRequest,
     request: Request,
 ):
-    """Renames topic and/or changes its weight. Reassign weights."""
+    """Renames topic and/or changes its weight"""
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id)
 

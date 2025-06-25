@@ -1,3 +1,4 @@
+# src/Testaiownik/Backend/models/__init__.py
 from .requests import *
 from .responses import *
 
@@ -13,7 +14,6 @@ __all__ = [
     "QuizQuestionsRequest",
     "UserQuestionsRequest",
     "IndexDocumentsRequest",
-    "TopicCountRequest",
     # Responses
     "BaseResponse",
     "ErrorResponse",
@@ -30,9 +30,14 @@ __all__ = [
     "QuizCurrentResponse",
     "QuizAnswerResponse",
     "QuizResultsResponse",
-    "SessionListResponse",
-    "SessionDetailResponse",
+    "UserListResponse",
+    "UserDeleteResponse",
     "StatsResponse",
     "CollectionsResponse",
     "SearchResponse",
+    "WeightedTopicResponse",
+    "TopicDeleteResponse",
+    "TopicAddResponse",
+    "TopicUpdateResponse",
+    "TopicSuggestionsResponse",
 ]

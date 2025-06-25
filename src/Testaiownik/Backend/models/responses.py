@@ -86,14 +86,13 @@ class WeightedTopicResponse(BaseModel):
 
 
 class TopicAnalysisStartResponse(BaseResponse):
-    topic_session_id: str
-    quiz_id: str
+    quiz_id: str  # Changed from topic_session_id
     status: str
     estimated_completion: Optional[datetime]
 
 
 class TopicSessionStatusResponse(BaseResponse):
-    topic_session_id: str
+    quiz_id: str  # Changed from topic_session_id
     status: str
     suggested_topics: List[WeightedTopicResponse]
     feedback_request: Optional[str]
@@ -160,7 +159,7 @@ class QuizProgressResponse(BaseModel):
 
 
 class QuizStartResponse(BaseResponse):
-    quiz_session_id: str
+    quiz_id: str  # Changed from quiz_session_id
     status: str
     estimated_generation_time: int
     total_questions: int
@@ -188,7 +187,7 @@ class TopicScore(BaseModel):
 
 
 class QuizResults(BaseModel):
-    session_id: str
+    quiz_id: str  # Changed from session_id
     total_questions: int
     correct_answers: int
     score_percentage: float
@@ -201,28 +200,20 @@ class QuizResultsResponse(BaseResponse):
     status: str
 
 
-# Session responses
-class SessionItem(BaseModel):
-    session_id: str
+# User/Session responses (simplified)
+class UserSessionResponse(BaseModel):
+    user_id: str
     created_at: datetime
     last_activity: datetime
     quiz_count: int
 
 
-class SessionListResponse(BaseResponse):
-    current_session: str
-    sessions: List[SessionItem]
+class UserListResponse(BaseResponse):
+    current_user: str
+    total_quizzes: int
 
 
-class SessionDetailResponse(BaseResponse):
-    session_id: str
-    created_at: datetime
-    last_activity: datetime
-    quizzes: List[str]
-    activity_log: List[Dict[str, Any]]
-
-
-class SessionDeleteResponse(BaseResponse):
+class UserDeleteResponse(BaseResponse):
     message: str
     deleted_quizzes: int
 
@@ -232,7 +223,7 @@ class SystemStats(BaseModel):
     total_quizzes: int
     total_documents: int
     total_questions_generated: int
-    active_sessions: int
+    active_users: int
 
 
 class UserStats(BaseModel):

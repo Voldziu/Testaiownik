@@ -17,7 +17,9 @@ from ..database.crud import (
     delete_document,
     update_quiz_collection,
     log_activity,
+    update_quiz_status,
 )
+from ..database.models import Document
 from utils import logger
 
 
@@ -82,15 +84,15 @@ class DocumentService:
                         "filename": document.filename,
                         "size_bytes": document.size_bytes,
                         "type": document.file_type,
-                        "uploaded_at": datetime.now(),
-                        "indexed": False,
+                        "uploaded_at": document.uploaded_at,
+                        "indexed": document.indexed,
                     }
                 )
 
                 logger.info(f"Uploaded document: {file.filename} for quiz {quiz_id}")
 
             log_activity(
-                user_id,  #  Changed from session_id to user_id
+                user_id,
                 "documents_uploaded",
                 {"quiz_id": quiz_id, "file_count": len(uploaded_files)},
             )
@@ -101,21 +103,9 @@ class DocumentService:
             logger.error(f"Failed to upload documents: {e}")
             raise
 
-    def get_quiz_documents(self, quiz_id: str) -> List[Dict]:
+    def get_quiz_documents(self, quiz_id: str) -> List[Document]:
         """Get all documents for a quiz"""
-        documents = get_documents_by_quiz(quiz_id)
-
-        return [
-            {
-                "doc_id": doc.doc_id,
-                "filename": doc.filename,
-                "size_bytes": doc.size_bytes,
-                "type": doc.file_type,
-                "uploaded_at": doc.uploaded_at,
-                "indexed": doc.indexed,
-            }
-            for doc in documents
-        ]
+        return get_documents_by_quiz(quiz_id)
 
     def get_indexing_status(self, quiz_id: str) -> Dict[str, Any]:
         """Get document indexing status for a quiz"""
@@ -164,14 +154,10 @@ class DocumentService:
     def delete_document(self, doc_id: str) -> bool:
         """Delete a document and its file"""
         try:
-            # Get document info before deleting
-            from ..database.crud import get_documents_by_quiz
+            from ..database.crud import delete_document as delete_doc_crud
 
-            # Would need a get_document_by_id function, but for now:
-
-            success = delete_document(doc_id)
+            success = delete_doc_crud(doc_id)
             if success:
-                # Could also delete the physical file here if needed
                 logger.info(f"Deleted document: {doc_id}")
 
             return success
@@ -200,24 +186,33 @@ class DocumentService:
 
             for doc in documents:
                 try:
-                    # Here you would implement document processing and chunking
-                    # For now, just mark as indexed
+                    # Index document to Qdrant
+                    success = self.qdrant_manager.index_file_to_qdrant(
+                        doc.file_path, collection_name  # ✅ Access dict key
+                    )
 
-                    # Process document content (placeholder)
-                    # chunks = process_document(doc.file_path)
-                    # total_chunks += len(chunks)
-
-                    # Update document status
-                    update_document_indexed(doc.doc_id, True)
-                    indexed_count += 1
-
-                    logger.info(f"Indexed document: {doc.filename}")
+                    if success:
+                        # Update document status
+                        update_document_indexed(doc.doc_id, True)
+                        indexed_count += 1
+                        logger.info(f"Indexed document: {doc.filename}")
+                    else:
+                        logger.error(f"Failed to index document: {doc.filename}")
 
                 except Exception as e:
                     logger.error(f"Failed to index document {doc.filename}: {e}")
+            # Get total chunks
+            if indexed_count > 0:
+                try:
+                    retriever = RAGRetriever(collection_name, self.qdrant_manager)
+                    total_chunks = retriever.get_chunk_count()
+                except Exception as e:
+                    logger.warning(f"Could not get chunk count: {e}")
 
-            # Update quiz with collection name
+            # Update quiz with collection name and status
             update_quiz_collection(quiz_id, collection_name)
+            if indexed_count > 0:
+                update_quiz_status(quiz_id, "documents_indexed")
 
             indexing_time = time.time() - start_time
 
@@ -231,6 +226,7 @@ class DocumentService:
 
         except Exception as e:
             logger.error(f"Failed to index quiz documents: {e}")
+            update_quiz_status(quiz_id, "failed")
             raise
 
     def search_documents(
@@ -240,23 +236,32 @@ class DocumentService:
         start_time = time.time()
 
         try:
+            results = []
+
             if quiz_id:
                 # Search specific quiz collection
                 collection_name = f"quiz_{quiz_id}"
-                if not self.qdrant_manager.collection_exists(collection_name):
-                    return {
-                        "query": query,
-                        "results": [],
-                        "total_results": 0,
-                        "search_time_ms": 0,
-                    }
+                if self.qdrant_manager.collection_exists(collection_name):
+                    search_results = self.qdrant_manager.search_in_collection(
+                        query, collection_name, limit
+                    )
 
-                retriever = RAGRetriever(collection_name, self.qdrant_manager)
-                # Implement search logic here
-                results = []  # retriever.search(query, limit)
-            else:
-                # Search across all collections (admin feature)
-                results = []
+                    if search_results:
+                        for result in search_results:
+                            payload = result.payload
+                            results.append(
+                                {
+                                    "text": payload.get("text", ""),
+                                    "source": payload.get("source", ""),
+                                    "page": payload.get("page"),
+                                    "relevance_score": (
+                                        result.score
+                                        if hasattr(result, "score")
+                                        else 0.0
+                                    ),
+                                    "quiz_id": quiz_id,
+                                }
+                            )
 
             search_time = (time.time() - start_time) * 1000  # Convert to ms
 
@@ -274,7 +279,7 @@ class DocumentService:
     def get_document_status(self, doc_id: str) -> Optional[Dict[str, Any]]:
         """Get processing status of a specific document"""
         try:
-            # Would need a get_document_by_id function in crud
+            # Would need to implement get_document_by_id in crud
             # For now, placeholder implementation
             return {
                 "doc_id": doc_id,

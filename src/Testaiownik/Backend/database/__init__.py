@@ -15,8 +15,6 @@ __all__ = [
     "User",
     "Quiz",
     "Document",
-    "TopicSession",
-    "QuizSession",
     "ActivityLog",
     "crud",
 ]

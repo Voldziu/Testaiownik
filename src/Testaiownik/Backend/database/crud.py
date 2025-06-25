@@ -21,6 +21,7 @@ def create_user(user_id: str) -> User:
 
         # Log activity
         log_activity(user_id, "user_created")
+        db.expunge(user)  # Clear session to avoid stale data
         return user
     finally:
         db.close()
@@ -74,6 +75,7 @@ def create_quiz(user_id: str) -> Quiz:
         db.refresh(quiz)
 
         log_activity(user_id, "quiz_created", {"quiz_id": quiz_id})
+        db.expunge(quiz)  # Clear session to avoid stale data
         return quiz
     finally:
         db.close()
@@ -363,6 +365,7 @@ def create_document(
             quiz.status = "documents_uploaded"
             db.commit()
 
+        db.expunge(document)
         return document
     finally:
         db.close()

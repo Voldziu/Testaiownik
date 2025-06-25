@@ -2,6 +2,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from datetime import datetime
 import uvicorn
 
@@ -59,10 +60,12 @@ async def health_check():
 
         # Check Qdrant
         try:
-            from RAG.Retrieval import qdrant_manager
+            from RAG.qdrant_manager import QdrantManager
+
+            qdrant_manager = QdrantManager()
 
             # Simple ping to check if Qdrant is responsive
-            collections = qdrant_manager.list_collections()
+            qdrant_manager.collection_exists("test_collection")
             services["qdrant"] = "connected"
         except Exception as e:
             logger.warning(f"Qdrant health check failed: {e}")
@@ -73,7 +76,7 @@ async def health_check():
         try:
             from AzureModels import get_llm
 
-            llm = get_llm
+            llm = get_llm()
             # Could do a simple test call here
             services["azure_openai"] = "connected"
         except Exception as e:
@@ -87,7 +90,7 @@ async def health_check():
 
             db = next(get_db())
             # Simple query to check DB connectivity
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
             services["database"] = "connected"
             db.close()
         except Exception as e:

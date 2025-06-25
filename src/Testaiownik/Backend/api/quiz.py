@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 
 from ..services.quiz_service import QuizService
+from ..services.document_service import DocumentService
 from ..models.requests import (
     StartQuizRequest,
     AnswerQuestionRequest,
@@ -14,7 +15,6 @@ from ..models.requests import (
 )
 from ..models.responses import (
     QuizResults,
-    SessionItem,
     QuizCreateResponse,
     QuizListResponse,
     QuizListItem,
@@ -22,9 +22,9 @@ from ..models.responses import (
     QuizCurrentResponse,
     QuizAnswerResponse,
     QuizResultsResponse,
-    SessionListResponse,
-    SessionDetailResponse,
-    SessionDeleteResponse,
+    UserListResponse,
+    UserDeleteResponse,
+    BaseResponse,
 )
 from ..database.crud import (
     create_quiz,
@@ -39,6 +39,7 @@ from utils import logger
 
 router = APIRouter()
 quiz_service = QuizService()
+document_service = DocumentService()
 
 
 def get_user_id(request: Request) -> str:
@@ -85,8 +86,8 @@ async def list_quizzes(request: Request, limit: int = 10, offset: int = 0):
 
         quiz_items = []
         for quiz in quizzes:
-            # Count documents and topics
-            document_count = len(quiz.documents) if quiz.documents else 0
+            # Count documents and topics (already included in dict)
+            document_count = len(quiz.documents)
             topic_count = len(quiz.confirmed_topics or quiz.suggested_topics or [])
 
             quiz_items.append(
@@ -112,9 +113,10 @@ async def get_quiz_status(quiz_id: str, request: Request):
     quiz = validate_quiz_access(quiz_id, user_id)
 
     try:
-        # Count documents and their indexing status
-        document_count = len(quiz.documents) if quiz.documents else 0
-        indexed_docs = sum(1 for doc in (quiz.documents or []) if doc.indexed)
+        # Get documents and calculate status
+        documents = document_service.get_quiz_documents(quiz_id)
+        document_count = len(documents)
+        indexed_docs = sum(1 for doc in documents if doc.indexed)
 
         # Count topics
         topic_count = len(quiz.confirmed_topics or quiz.suggested_topics or [])
@@ -150,7 +152,7 @@ async def get_quiz_status(quiz_id: str, request: Request):
             },
             "timestamps": {
                 "created_at": quiz.created_at,
-                "topic_analysis_started": quiz.topic_analysis_started_at,
+                "topic_analysis_started": quiz.topic_analysis_completed_at,
                 "topic_analysis_completed": quiz.topic_analysis_completed_at,
                 "quiz_started": quiz.quiz_started_at,
                 "quiz_completed": quiz.quiz_completed_at,
@@ -193,7 +195,7 @@ async def start_quiz(quiz_id: str, request_data: StartQuizRequest, request: Requ
             raise HTTPException(status_code=500, detail="Failed to start quiz")
 
         return QuizStartResponse(
-            quiz_session_id=quiz_id,  # Using quiz_id instead of separate session
+            quiz_id=quiz_id,  # Using quiz_id consistently
             status="generating",
             estimated_generation_time=30,
             total_questions=request_data.total_questions,
@@ -405,7 +407,11 @@ async def get_quiz_progress(quiz_id: str, request: Request):
     quiz = validate_quiz_access(quiz_id, user_id)
 
     try:
-        if quiz.status not in ["quiz_active", "paused", "quiz_completed"]:
+        if quiz.status not in [
+            "quiz_active",
+            "paused",
+            "quiz_completed",
+        ]:
             raise HTTPException(status_code=400, detail="Quiz has not started yet")
 
         # Calculate progress from quiz data
@@ -461,7 +467,7 @@ async def get_quiz_progress(quiz_id: str, request: Request):
 
 
 # User Management Endpoints (simplified)
-@router.get("/users", response_model=SessionListResponse)
+@router.get("/users", response_model=UserListResponse)
 async def list_users(request: Request):
     """Lists user's quiz activity summary"""
     user_id = get_user_id(request)
@@ -469,20 +475,13 @@ async def list_users(request: Request):
     # For simplicity, just return current user info
     quizzes = get_quizzes_by_user(user_id)
 
-    return SessionListResponse(
-        current_session=user_id,
-        sessions=[
-            SessionItem(
-                session_id=user_id,
-                created_at=datetime.now(),
-                last_activity=datetime.now(),
-                quiz_count=len(quizzes),
-            )
-        ],
+    return UserListResponse(
+        current_user=user_id,
+        total_quizzes=len(quizzes),
     )
 
 
-@router.delete("/users/{user_id}", response_model=SessionDeleteResponse)
+@router.delete("/users/{user_id}", response_model=UserDeleteResponse)
 async def delete_user_endpoint(user_id: str, request: Request):
     """Deletes user and all associated data"""
     current_user_id = get_user_id(request)
@@ -499,7 +498,7 @@ async def delete_user_endpoint(user_id: str, request: Request):
         success = delete_user(user_id)
 
         if success:
-            return SessionDeleteResponse(
+            return UserDeleteResponse(
                 message="User deleted successfully", deleted_quizzes=quiz_count
             )
         else:
@@ -508,3 +507,87 @@ async def delete_user_endpoint(user_id: str, request: Request):
     except Exception as e:
         logger.error(f"Failed to delete user: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete user")
+
+
+# Quiz configuration endpoints
+@router.post("/quiz/{quiz_id}/difficulty", response_model=BaseResponse)
+async def change_quiz_difficulty(
+    quiz_id: str, difficulty_data: QuizDifficultyRequest, request: Request
+):
+    """Changes quiz difficulty level"""
+    user_id = get_user_id(request)
+    quiz = validate_quiz_access(quiz_id, user_id)
+
+    if quiz.status not in ["topic_ready", "quiz_active"]:
+        raise HTTPException(
+            status_code=400, detail="Cannot change difficulty at this stage"
+        )
+
+    try:
+        from ..database.crud import update_quiz
+
+        old_difficulty = quiz.difficulty
+        update_quiz(quiz_id, difficulty=difficulty_data.difficulty)
+
+        log_activity(
+            user_id,
+            "quiz_difficulty_changed",
+            {
+                "quiz_id": quiz_id,
+                "old_difficulty": old_difficulty,
+                "new_difficulty": difficulty_data.difficulty,
+            },
+        )
+
+        return BaseResponse(
+            success=True,
+            old_difficulty=old_difficulty,
+            new_difficulty=difficulty_data.difficulty,
+            regeneration_required=quiz.status == "quiz_active",
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to change difficulty: {e}")
+        raise HTTPException(status_code=500, detail="Failed to change difficulty")
+
+
+@router.post("/quiz/{quiz_id}/questions-count", response_model=BaseResponse)
+async def change_question_count(
+    quiz_id: str, questions_data: QuizQuestionsRequest, request: Request
+):
+    """Changes total number of quiz questions"""
+    user_id = get_user_id(request)
+    quiz = validate_quiz_access(quiz_id, user_id)
+
+    if quiz.status not in ["topic_ready", "quiz_active"]:
+        raise HTTPException(
+            status_code=400, detail="Cannot change question count at this stage"
+        )
+
+    try:
+        from ..database.crud import update_quiz
+
+        old_count = quiz.total_questions
+        update_quiz(quiz_id, total_questions=questions_data.total_questions)
+
+        log_activity(
+            user_id,
+            "quiz_questions_changed",
+            {
+                "quiz_id": quiz_id,
+                "old_count": old_count,
+                "new_count": questions_data.total_questions,
+            },
+        )
+
+        return BaseResponse(
+            success=True,
+            old_count=old_count,
+            new_count=questions_data.total_questions,
+            additional_generation_required=questions_data.total_questions
+            > (old_count or 0),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to change question count: {e}")
+        raise HTTPException(status_code=500, detail="Failed to change question count")

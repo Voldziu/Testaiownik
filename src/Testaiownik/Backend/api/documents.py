@@ -14,6 +14,7 @@ from ..models.responses import (
     SearchResponse,
     SearchResultItem,
     DocumentItem,
+    BaseResponse,
 )
 from ..database.crud import get_quiz, log_activity
 from utils import logger
@@ -45,8 +46,8 @@ async def upload_documents(
     quiz_id: str, request: Request, files: List[UploadFile] = File(...)
 ):
     """Uploads files (PDF/DOCX/TXT/PPTX) to specific quiz"""
-    user_id = get_user_id(request)  # ✅ Fixed
-    validate_quiz_access(quiz_id, user_id)  # ✅ Fixed
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id)
 
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -67,7 +68,7 @@ async def upload_documents(
     try:
         upload_results = await document_service.upload_documents(
             quiz_id, user_id, files
-        )  # ✅ Fixed
+        )
 
         # Log the upload activity
         log_activity(
@@ -100,25 +101,22 @@ async def list_documents(quiz_id: str, request: Request):
         documents = document_service.get_quiz_documents(quiz_id)
 
         doc_items = []
-        total_size = 0
-
         for doc in documents:
             doc_items.append(
                 DocumentItem(
                     doc_id=doc.doc_id,
                     filename=doc.filename,
-                    content_type=doc.content_type,
                     size_bytes=doc.size_bytes,
-                    upload_date=doc.created_at,
-                    status="indexed" if doc.indexed else "processing",
+                    type=doc.file_type,
+                    uploaded_at=doc.uploaded_at,
+                    indexed=doc.indexed,
                 )
             )
-            total_size += doc.size_bytes
 
         return DocumentListResponse(
             documents=doc_items,
+            quiz_id=quiz_id,
             total_documents=len(doc_items),
-            total_size_bytes=total_size,
         )
 
     except Exception as e:
@@ -126,27 +124,19 @@ async def list_documents(quiz_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to list documents")
 
 
-@router.get(
-    "/documents/{quiz_id}/{doc_id}/status", response_model=DocumentStatusResponse
-)
-async def get_document_status(quiz_id: str, doc_id: str, request: Request):
-    """Gets processing status of specific document"""
+@router.get("/documents/{quiz_id}/status", response_model=DocumentStatusResponse)
+async def get_indexing_status(quiz_id: str, request: Request):
+    """Checks indexing status for all quiz documents"""
     user_id = get_user_id(request)
     validate_quiz_access(quiz_id, user_id)
 
     try:
-        status_info = document_service.get_document_status(doc_id)
-
-        if not status_info:
-            raise HTTPException(status_code=404, detail="Document not found")
-
+        status_info = document_service.get_indexing_status(quiz_id)
         return DocumentStatusResponse(**status_info)
 
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Failed to get document status: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get document status")
+        logger.error(f"Failed to get indexing status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get indexing status")
 
 
 @router.delete("/documents/{quiz_id}/{doc_id}", response_model=DocumentDeleteResponse)
@@ -183,19 +173,17 @@ async def delete_document(quiz_id: str, doc_id: str, request: Request):
 
 
 @router.post("/documents/{quiz_id}/index", response_model=DocumentIndexResponse)
-async def index_documents(quiz_id: str, request: Request):
+async def index_documents(
+    quiz_id: str,
+    request: Request,
+    index_request: IndexDocumentsRequest = IndexDocumentsRequest(),
+):
     """Indexes all quiz documents to Qdrant collection"""
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id)
 
     try:
         indexing_result = await document_service.index_quiz_documents(quiz_id)
-
-        # Update quiz with collection name
-        if indexing_result.get("collection_name") and not quiz.collection_name:
-            from database.crud import update_quiz
-
-            update_quiz(quiz_id, collection_name=indexing_result["collection_name"])
 
         # Log the indexing activity
         log_activity(
@@ -216,7 +204,7 @@ async def index_documents(quiz_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Document indexing failed")
 
 
-# Search endpoint
+# Search endpoints
 @router.get("/search", response_model=SearchResponse)
 async def search_documents(
     request: Request,
@@ -254,16 +242,19 @@ async def search_documents(
         raise HTTPException(status_code=500, detail="Search failed")
 
 
-# Document file serving endpoint (if needed)
-@router.get("/documents/{quiz_id}/{doc_id}/download")
-async def download_document(quiz_id: str, doc_id: str, request: Request):
-    """Download a specific document file"""
+@router.get("/documents/{quiz_id}/search", response_model=SearchResponse)
+async def search_quiz_documents(
+    quiz_id: str,
+    request: Request,
+    q: str,
+    limit: int = 10,
+):
+    """Search documents within a specific quiz"""
     user_id = get_user_id(request)
     validate_quiz_access(quiz_id, user_id)
 
-    # Implementation would serve the actual file
-    # This is a placeholder
-    raise HTTPException(status_code=501, detail="File download not implemented")
+    # Delegate to main search with quiz_id constraint
+    return await search_documents(request, q=q, quiz_id=quiz_id, limit=limit)
 
 
 # Bulk operations
@@ -284,6 +275,12 @@ async def delete_all_documents(quiz_id: str, request: Request):
             if success:
                 deleted_count += 1
 
+        # Reset quiz status if all documents deleted
+        if deleted_count > 0:
+            from ..database.crud import update_quiz_status
+
+            update_quiz_status(quiz_id, "created")
+
         # Log bulk deletion
         log_activity(
             user_id,
@@ -295,6 +292,7 @@ async def delete_all_documents(quiz_id: str, request: Request):
             "success": True,
             "message": f"Deleted {deleted_count} documents",
             "deleted_count": deleted_count,
+            "quiz_status_reset": deleted_count > 0,
         }
 
     except Exception as e:
@@ -302,17 +300,72 @@ async def delete_all_documents(quiz_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to delete documents")
 
 
-# Document search within quiz context
-@router.get("/documents/{quiz_id}/search", response_model=SearchResponse)
-async def search_quiz_documents(
-    quiz_id: str,
-    request: Request,
-    q: str,
-    limit: int = 10,
-):
-    """Search documents within a specific quiz"""
+# Document information endpoints
+@router.get("/documents/{quiz_id}/{doc_id}/info")
+async def get_document_info(quiz_id: str, doc_id: str, request: Request):
+    """Get detailed information about a specific document"""
     user_id = get_user_id(request)
     validate_quiz_access(quiz_id, user_id)
 
-    # Delegate to main search with quiz_id constraint
-    return await search_documents(request, q=q, quiz_id=quiz_id, limit=limit)
+    try:
+        document_info = document_service.get_document_status(doc_id)
+
+        if not document_info:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        return document_info
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get document info: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get document info")
+
+
+@router.get("/documents/{quiz_id}/stats")
+async def get_document_stats(quiz_id: str, request: Request):
+    """Get aggregated statistics about quiz documents"""
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id)
+
+    try:
+        documents = document_service.get_quiz_documents(quiz_id)
+
+        if not documents:
+            return {
+                "total_documents": 0,
+                "total_size_bytes": 0,
+                "indexed_documents": 0,
+                "file_types": {},
+                "indexing_progress": 0.0,
+            }
+
+        # Calculate statistics
+        total_documents = len(documents)
+        indexed_documents = sum(1 for doc in documents if doc.indexed)
+        total_size = sum(doc.size_bytes for doc in documents)
+
+        # Count file types
+        file_types = {}
+        for doc in documents:
+            file_type = doc.file_type
+            file_types[file_type] = file_types.get(file_type, 0) + 1
+
+        indexing_progress = (
+            (indexed_documents / total_documents * 100) if total_documents > 0 else 0
+        )
+
+        return {
+            "total_documents": total_documents,
+            "total_size_bytes": total_size,
+            "indexed_documents": indexed_documents,
+            "file_types": file_types,
+            "indexing_progress": round(indexing_progress, 1),
+            "average_size_bytes": (
+                total_size // total_documents if total_documents > 0 else 0
+            ),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get document stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get document stats")

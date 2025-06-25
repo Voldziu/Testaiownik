@@ -7,7 +7,6 @@ from datetime import datetime
 # Topic Selection Requests
 class TopicAnalysisRequest(BaseModel):
     desired_topic_count: int = Field(default=10, ge=1, le=50)
-    batch_size: int = Field(default=40, ge=10, le=100)
 
 
 class TopicFeedbackRequest(BaseModel):
@@ -22,11 +21,6 @@ class AddTopicRequest(BaseModel):
 class UpdateTopicRequest(BaseModel):
     new_name: Optional[str] = Field(None, min_length=1, max_length=200)
     new_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
-
-
-class TopicCountRequest(BaseModel):
-    topic_session_id: str
-    desired_count: int = Field(..., ge=1, le=50)
 
 
 # Quiz Requests
