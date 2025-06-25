@@ -186,17 +186,37 @@ class QuizService:
         result = {}
         for key, value in data.items():
             try:
-                if hasattr(value, "dict"):
-                    result[key] = value.dict()
-                elif hasattr(value, "model_dump"):
+                if hasattr(value, "model_dump"):
                     result[key] = value.model_dump()
-                elif isinstance(value, (dict, list, str, int, float, bool, type(None))):
+                elif hasattr(value, "dict"):
+                    result[key] = value.dict()
+                elif isinstance(value, list):
+                    # Handle lists recursively
+                    result[key] = [self._serialize_value(item) for item in value]
+                elif isinstance(value, dict):
+                    result[key] = self._serialize_dict(value)
+                elif isinstance(value, (str, int, float, bool, type(None))):
                     result[key] = value
                 else:
                     result[key] = str(value)
             except Exception:
                 result[key] = str(value)
         return result
+
+    def _serialize_value(self, value):
+        """Serialize individual values"""
+        if hasattr(value, "model_dump"):
+            return value.model_dump()
+        elif hasattr(value, "dict"):
+            return value.dict()
+        elif isinstance(value, list):
+            return [self._serialize_value(item) for item in value]
+        elif isinstance(value, dict):
+            return self._serialize_dict(value)
+        elif isinstance(value, (str, int, float, bool, type(None))):
+            return value
+        else:
+            return str(value)
 
     async def submit_topic_feedback(
         self, quiz_id: str, user_input: str, user_id: str

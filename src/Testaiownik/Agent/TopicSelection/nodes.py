@@ -234,8 +234,13 @@ def _consolidate_topics_with_history(
     """
 
     consolidation_result = consolidation_llm.invoke(prompt)
-    return consolidation_result.consolidated_topics
+    topics = consolidation_result.consolidated_topics
+    total_weight = sum(t.weight for t in topics)
+    if total_weight > 0:
+        for topic in topics:
+            topic.weight /= total_weight
 
+    return topics
 
 def analyze_documents(
     state: AgentState,

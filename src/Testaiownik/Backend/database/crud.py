@@ -365,6 +365,17 @@ def create_document(
             quiz.status = "documents_uploaded"
             db.commit()
 
+        # Access all attributes to load them into memory before expunge
+        _ = (
+            document.doc_id,
+            document.filename,
+            document.file_path,
+            document.size_bytes,
+            document.file_type,
+            document.uploaded_at,
+            document.indexed,
+        )
+
         db.expunge(document)
         return document
     finally:

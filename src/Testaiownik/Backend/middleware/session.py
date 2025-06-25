@@ -33,7 +33,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
             try:
                 # Create user in database (returns dict now)
                 user_data = create_user(user_id)
-                logger.info(f"Created user: {user_data['user_id']}")
+                logger.info(f"Created user: {user_data.user_id}")
 
                 # Add user to request for route handlers
                 request.state.user_id = user_id
