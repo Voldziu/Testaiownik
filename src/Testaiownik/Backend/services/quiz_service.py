@@ -4,17 +4,14 @@ import asyncio
 import json
 import uuid
 from datetime import datetime
-
-
 from sqlalchemy.orm import Session
 
-
+from Agent.runner import TestaiownikRunner
 from Agent.TopicSelection import create_agent_graph, AgentState
 from Agent.Quiz import create_quiz_graph, create_initial_quiz_state, QuizState
 from Agent.Shared import WeightedTopic
 from RAG.Retrieval import RAGRetriever
 from RAG.qdrant_manager import QdrantManager
-
 
 from ..database.crud import (
     get_quiz,
@@ -26,11 +23,21 @@ from ..database.crud import (
     complete_quiz,
     log_activity,
 )
+from ..models.responses import (
+    QuizCurrentResponse,
+    QuizAnswerResponse,
+    QuizResultsResponse,
+    QuestionResponse,
+    QuestionChoice,
+    QuizProgressResponse,
+    QuizResults,
+    TopicScore,
+)
 from utils import logger
 
 
 class QuizService:
-    """Simplified service layer for quiz operations using quiz_id only"""
+    """Service layer for quiz operations with actual LangGraph integration"""
 
     def __init__(self):
         self.active_topic_graphs = {}  # quiz_id -> graph instance
@@ -53,11 +60,7 @@ class QuizService:
 
     # Topic Selection Phase
     async def start_topic_analysis(
-        self,
-        quiz_id: str,
-        user_id: str,
-        db: Session,
-        desired_topic_count: int = 10,
+        self, quiz_id: str, user_id: str, db: Session, desired_topic_count: int = 10
     ) -> bool:
         """Start topic analysis using LangGraph agent"""
         try:
@@ -120,7 +123,7 @@ class QuizService:
         except Exception as e:
             logger.error(f"Failed to start topic analysis: {e}")
             # Update quiz status to failed
-            update_quiz(quiz_id, status="failed")
+            update_quiz(db, quiz_id, status="failed")
             raise
 
     async def _run_topic_analysis(self, quiz_id: str, initial_state: Dict, db: Session):
@@ -200,6 +203,8 @@ class QuizService:
                     result[key] = value.model_dump()
                 elif hasattr(value, "dict"):
                     result[key] = value.dict()
+                elif isinstance(value, datetime):
+                    result[key] = value.isoformat()
                 elif isinstance(value, list):
                     # Handle lists recursively
                     result[key] = [self._serialize_value(item) for item in value]
@@ -219,6 +224,8 @@ class QuizService:
             return value.model_dump()
         elif hasattr(value, "dict"):
             return value.dict()
+        elif isinstance(value, datetime):
+            return value.isoformat()
         elif isinstance(value, list):
             return [self._serialize_value(item) for item in value]
         elif isinstance(value, dict):
@@ -240,7 +247,7 @@ class QuizService:
             # Get graph instance
             if quiz_id not in self.active_topic_graphs:
                 # Try to restore from database state
-                if not self._restore_topic_session(quiz_id):
+                if not self._restore_topic_session(db, quiz_id):
                     raise ValueError("Cannot restore topic session")
 
             graph_data = self.active_topic_graphs[quiz_id]
@@ -396,7 +403,13 @@ class QuizService:
             # Start quiz generation in background
             self._create_background_task(
                 self._generate_quiz_questions(
-                    quiz_id, confirmed_topics, user_questions, db
+                    quiz_id,
+                    user_id,
+                    confirmed_topics,
+                    total_questions,
+                    difficulty,
+                    user_questions,
+                    db,
                 )
             )
 
@@ -416,82 +429,327 @@ class QuizService:
     async def _generate_quiz_questions(
         self,
         quiz_id: str,
+        user_id: str,
         confirmed_topics: List[Dict],
+        total_questions: int,
+        difficulty: str,
         user_questions: List[str],
         db: Session,
     ):
-        """Background task to generate quiz questions"""
+        """Background task to generate quiz questions using LangGraph"""
         try:
-            # Implementation would generate questions using Agent/Quiz
-            # For now, placeholder
-            questions_data = {
-                "all_generated_questions": [],
-                "user_questions": user_questions,
-                "topics": confirmed_topics,
+            logger.info(f"Starting question generation for quiz {quiz_id}")
+
+            # Get quiz data
+            quiz = get_quiz(db, quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
+
+            # Create RAG retriever
+            collection_name = quiz.collection_name
+            if not collection_name:
+                raise ValueError("Quiz collection not found")
+
+            retriever = RAGRetriever(collection_name, self.qdrant_manager)
+
+            # Convert topics to WeightedTopic objects
+            weighted_topics = []
+            for topic_data in confirmed_topics:
+                weighted_topics.append(
+                    WeightedTopic(
+                        topic=topic_data.get("topic", ""),
+                        weight=topic_data.get("weight", 1.0),
+                    )
+                )
+
+            # Create quiz graph
+            quiz_graph = create_quiz_graph(retriever)
+            config = {"configurable": {"thread_id": f"quiz_{quiz_id}"}}
+
+            # Create initial quiz state
+            quiz_state = create_initial_quiz_state(
+                confirmed_topics=weighted_topics,
+                total_questions=total_questions,
+                difficulty=difficulty,
+                batch_size=5,
+                max_incorrect_recycles=2,
+                quiz_mode="fresh",
+                user_questions=user_questions,
+                user_id=user_id,
+            )
+
+            # Store quiz graph instance
+            self.active_quiz_graphs[quiz_id] = {
+                "graph": quiz_graph,
+                "config": config,
+                "retriever": retriever,
             }
 
-            update_quiz_progress(db, quiz_id, questions_data=questions_data)
+            # Run quiz generation
+            logger.info(f"Running quiz graph for question generation...")
+            result = quiz_graph.invoke(quiz_state, config)
+
+            # Get final state with generated questions
+            final_state = quiz_graph.get_state(config)
+            quiz_session = final_state.values.get("quiz_session")
+
+            if not quiz_session:
+                raise ValueError("Quiz session not created")
+
+            # Serialize quiz data for database storage
+            questions_data = {
+                "all_generated_questions": [
+                    self._serialize_question(q)
+                    for q in quiz_session.all_generated_questions
+                ],
+                "active_question_pool": quiz_session.active_question_pool,
+                "questions_per_topic": quiz_session.questions_per_topic,
+                "current_question_index": quiz_session.current_question_index,
+                "session_id": quiz_session.session_id,
+                "status": quiz_session.status,
+            }
+
+            serialized_questions = self._serialize_dict(questions_data)
+            serialized_state = self._serialize_dict(
+                self._serialize_langgraph_state(final_state)
+            )
+
+            # Update database with generated questions
+            update_quiz_progress(
+                db,
+                quiz_id,
+                questions_data=serialized_questions,
+                current_question_index=0,
+                langgraph_quiz_state=serialized_state,
+            )
 
             # Update status to active when ready
             update_quiz(db, quiz_id, status="quiz_active")
 
-            logger.info(f"Quiz questions generated for {quiz_id}")
+            logger.info(
+                f"Quiz questions generated successfully for {quiz_id}. Total questions: {len(quiz_session.all_generated_questions)}"
+            )
 
         except Exception as e:
-            logger.error(f"Failed to generate quiz questions: {e}")
+            logger.error(f"Failed to generate quiz questions for {quiz_id}: {e}")
             update_quiz(db, quiz_id, status="failed")
+            raise
 
-    def get_current_question(self, quiz_id: str, db: Session) -> Optional[Dict]:
+    def _serialize_question(self, question) -> Dict:
+        """Serialize Question object for database storage"""
+        if hasattr(question, "model_dump"):
+            data = question.model_dump()
+            # Convert datetime to string
+            if "generated_at" in data and hasattr(data["generated_at"], "isoformat"):
+                data["generated_at"] = data["generated_at"].isoformat()
+            return data
+        elif hasattr(question, "dict"):
+            data = question.dict()
+            # Convert datetime to string
+            if "generated_at" in data and hasattr(data["generated_at"], "isoformat"):
+                data["generated_at"] = data["generated_at"].isoformat()
+            return data
+        else:
+            # Manual serialization if needed
+            generated_at = getattr(question, "generated_at", datetime.now())
+            generated_at_str = (
+                generated_at.isoformat()
+                if hasattr(generated_at, "isoformat")
+                else str(datetime.now())
+            )
+
+            return {
+                "id": getattr(question, "id", str(uuid.uuid4())),
+                "topic": getattr(question, "topic", ""),
+                "question_text": getattr(question, "question_text", ""),
+                "choices": [
+                    {
+                        "text": choice.text if hasattr(choice, "text") else str(choice),
+                        "is_correct": getattr(choice, "is_correct", False),
+                    }
+                    for choice in getattr(question, "choices", [])
+                ],
+                "explanation": getattr(question, "explanation", ""),
+                "difficulty": getattr(question, "difficulty", "medium"),
+                "is_multi_choice": getattr(question, "is_multi_choice", False),
+                "generated_at": generated_at_str,
+            }
+
+    def get_current_question(
+        self, quiz_id: str, db: Session
+    ) -> Optional[QuizCurrentResponse]:
         """Get current question for quiz"""
         try:
             quiz = get_quiz(db, quiz_id)
             if not quiz:
                 return None
 
-            # Implementation would return current question
-            # For now, placeholder
-            return {
-                "current_question": None,
-                "progress": {
-                    "current_question_number": quiz.current_question_index,
-                    "total_questions": quiz.total_questions or 0,
-                    "answered": len(quiz.user_answers or []),
-                    "correct": sum(
-                        1
-                        for a in (quiz.user_answers or [])
-                        if isinstance(a, dict) and a.get("is_correct")
-                    ),
-                },
-                "status": quiz.status,
-            }
+            # Get questions data from database
+            questions_data = quiz.questions_data
+            if not questions_data or not questions_data.get("all_generated_questions"):
+                return None
+
+            current_index = quiz.current_question_index
+            active_pool = questions_data.get("active_question_pool", [])
+
+            if current_index >= len(active_pool):
+                return None
+
+            # Get current question ID
+            current_question_id = active_pool[current_index]
+
+            # Find the question in all generated questions
+            current_question_data = None
+            for q in questions_data.get("all_generated_questions", []):
+                if q.get("id") == current_question_id:
+                    current_question_data = q
+                    break
+
+            if not current_question_data:
+                return None
+
+            # Create response objects
+            choices = [
+                QuestionChoice(
+                    text=choice.get("text", ""),
+                    is_correct=choice.get("is_correct", False),
+                )
+                for choice in current_question_data.get("choices", [])
+            ]
+
+            current_question = QuestionResponse(
+                id=current_question_data.get("id"),
+                topic=current_question_data.get("topic"),
+                question_text=current_question_data.get("question_text"),
+                choices=choices,
+                is_multi_choice=current_question_data.get("is_multi_choice", False),
+                difficulty=current_question_data.get("difficulty", "medium"),
+            )
+
+            progress = QuizProgressResponse(
+                current_question_number=current_index + 1,
+                total_questions=len(active_pool),
+                answered=len(quiz.user_answers or []),
+                correct=sum(
+                    1
+                    for a in (quiz.user_answers or [])
+                    if isinstance(a, dict) and a.get("is_correct")
+                ),
+            )
+
+            return QuizCurrentResponse(
+                current_question=current_question, progress=progress, status=quiz.status
+            )
 
         except Exception as e:
             logger.error(f"Failed to get current question: {e}")
             return None
 
-    # Placeholder
-
     async def submit_answer(
-        self, quiz_id: str, selected_choices: List[int], question_id: str
-    ) -> Dict:
+        self, quiz_id: str, selected_choices: List[int], question_id: str, db: Session
+    ) -> QuizAnswerResponse:
         """Submit answer to current question"""
         try:
-            # Implementation would process answer
-            # For now, placeholder
-            return {
-                "correct": True,
-                "explanation": "Placeholder explanation",
-                "selected_answers": ["Option 1"],
-                "correct_answers": ["Option 1"],
-                "next_question_available": True,
-                "progress": {"answered": 1, "correct": 1},
+            quiz = get_quiz(db, quiz_id)
+            if not quiz:
+                raise ValueError("Quiz not found")
+
+            # Get current question
+            questions_data = quiz.questions_data
+            if not questions_data:
+                raise ValueError("No questions available")
+
+            # Find the question
+            current_question_data = None
+            for q in questions_data.get("all_generated_questions", []):
+                if q.get("id") == question_id:
+                    current_question_data = q
+                    break
+
+            if not current_question_data:
+                raise ValueError("Question not found")
+
+            # Check answer correctness
+            correct_indices = [
+                i
+                for i, choice in enumerate(current_question_data.get("choices", []))
+                if choice.get("is_correct")
+            ]
+
+            is_correct = set(selected_choices) == set(correct_indices)
+
+            # Create answer record
+            answer = {
+                "question_id": question_id,
+                "selected_choice_indices": selected_choices,
+                "is_correct": is_correct,
+                "answered_at": datetime.now().isoformat(),
+                "attempt_number": 1,
             }
+
+            # Update user answers
+            user_answers = quiz.user_answers or []
+            user_answers.append(answer)
+
+            # Move to next question
+            new_index = quiz.current_question_index + 1
+            active_pool = questions_data.get("active_question_pool", [])
+
+            # Check if quiz is completed
+            if new_index >= len(active_pool):
+                update_quiz_progress(
+                    db,
+                    quiz_id,
+                    user_answers=user_answers,
+                    current_question_index=new_index,
+                )
+                complete_quiz(db, quiz_id)
+                next_available = False
+            else:
+                update_quiz_progress(
+                    db,
+                    quiz_id,
+                    user_answers=user_answers,
+                    current_question_index=new_index,
+                )
+                next_available = True
+
+            # Format response
+            selected_texts = [
+                current_question_data.get("choices", [])[i].get("text", "")
+                for i in selected_choices
+                if i < len(current_question_data.get("choices", []))
+            ]
+
+            correct_texts = [
+                choice.get("text", "")
+                for i, choice in enumerate(current_question_data.get("choices", []))
+                if choice.get("is_correct")
+            ]
+
+            progress = QuizProgressResponse(
+                current_question_number=new_index,
+                total_questions=len(active_pool),
+                answered=len(user_answers),
+                correct=sum(1 for a in user_answers if a.get("is_correct")),
+            )
+
+            return QuizAnswerResponse(
+                correct=is_correct,
+                explanation=current_question_data.get("explanation", ""),
+                selected_answers=selected_texts,
+                correct_answers=correct_texts,
+                next_question_available=next_available,
+                progress=progress,
+            )
 
         except Exception as e:
             logger.error(f"Failed to submit answer: {e}")
             raise
 
-    def get_quiz_results(self, quiz_id: str, db: Session) -> Optional[Dict]:
+    def get_quiz_results(
+        self, quiz_id: str, db: Session
+    ) -> Optional[QuizResultsResponse]:
         """Get quiz results and statistics"""
         try:
             quiz = get_quiz(db, quiz_id)
@@ -499,7 +757,8 @@ class QuizService:
                 return None
 
             # Calculate results from quiz data
-            total_questions = quiz.total_questions or 0
+            questions_data = quiz.questions_data or {}
+            total_questions = len(questions_data.get("active_question_pool", []))
             user_answers = quiz.user_answers or []
 
             correct_answers = sum(
@@ -517,23 +776,43 @@ class QuizService:
             if quiz.confirmed_topics:
                 for topic_data in quiz.confirmed_topics:
                     topic_name = topic_data.get("topic", "Unknown")
-                    topic_scores[topic_name] = {
-                        "correct": 0,  # Would calculate from answers
-                        "total": 0,  # Would calculate from questions
-                        "percentage": 0.0,
-                    }
 
-            return {
-                "quiz_results": {
-                    "session_id": quiz_id,
-                    "total_questions": total_questions,
-                    "correct_answers": correct_answers,
-                    "score_percentage": score_percentage,
-                    "topic_scores": topic_scores,
-                    "completed_at": quiz.quiz_completed_at or datetime.now(),
-                },
-                "status": "completed",
-            }
+                    # Count questions and answers for this topic
+                    topic_questions = [
+                        q
+                        for q in questions_data.get("all_generated_questions", [])
+                        if q.get("topic") == topic_name
+                    ]
+
+                    topic_question_ids = [q.get("id") for q in topic_questions]
+                    topic_answers = [
+                        a
+                        for a in user_answers
+                        if a.get("question_id") in topic_question_ids
+                    ]
+
+                    topic_correct = sum(1 for a in topic_answers if a.get("is_correct"))
+
+                    topic_scores[topic_name] = TopicScore(
+                        correct=topic_correct,
+                        total=len(topic_answers),
+                        percentage=(
+                            (topic_correct / len(topic_answers) * 100)
+                            if topic_answers
+                            else 0
+                        ),
+                    )
+
+            quiz_results = QuizResults(
+                quiz_id=quiz_id,
+                total_questions=total_questions,
+                correct_answers=correct_answers,
+                score_percentage=score_percentage,
+                topic_scores=topic_scores,
+                completed_at=quiz.quiz_completed_at or datetime.now(),
+            )
+
+            return QuizResultsResponse(quiz_results=quiz_results, status="completed")
 
         except Exception as e:
             logger.error(f"Failed to get quiz results: {e}")

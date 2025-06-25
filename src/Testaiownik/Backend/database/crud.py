@@ -80,7 +80,7 @@ def create_quiz(db: Session, user_id: str) -> Quiz:
     )  ## Unpack to avoid weird 500 errors
     # Log activity for creating a new quiz
     log_activity(db, user_id, "quiz_created", {"quiz_id": quiz_id})
-    # db.expunge(quiz)  # Remove from session to avoid stale data issues
+    db.expunge(quiz)  # Remove from session to avoid stale data issues
     return quiz
 
 
