@@ -1,6 +1,5 @@
-# src/Testaiownik/Backend/database/models.py
+# src/Backend/database/models.py
 from sqlalchemy import (
-    create_engine,
     Column,
     String,
     Integer,
@@ -11,19 +10,10 @@ from sqlalchemy import (
     JSON,
     ForeignKey,
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import relationship
 from datetime import datetime
-import os
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./testaiownik.db")
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+from .sql_database_connector import Base
 
 
 class User(Base):
@@ -118,17 +108,3 @@ class ActivityLog(Base):
     )  # quiz_created, document_uploaded, topic_confirmed, quiz_completed, etc.
     details = Column(JSON, nullable=True)
     timestamp = Column(DateTime, default=datetime.now)
-
-
-def init_db():
-    """Initialize database tables"""
-    Base.metadata.create_all(bind=engine)
-
-
-def get_db():
-    """Database session dependency"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()

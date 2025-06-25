@@ -2,6 +2,8 @@
 from fastapi import APIRouter, HTTPException, Request
 from typing import Optional
 from datetime import datetime
+from sqlalchemy.orm import Session
+from fastapi import Depends
 
 from ..services.document_service import DocumentService
 from ..models.responses import (
@@ -10,7 +12,12 @@ from ..models.responses import (
     BaseResponse,
 )
 from ..database.crud import get_quiz, get_quizzes_by_user, log_activity
+from ..database.sql_database_connector import get_db
 from RAG.qdrant_manager import QdrantManager
+
+from .system import get_user_id, validate_quiz_access
+
+
 from utils import logger
 
 router = APIRouter()
@@ -18,26 +25,10 @@ document_service = DocumentService()
 qdrant_manager = QdrantManager()
 
 
-def get_user_id(request: Request) -> str:
-    """Extract user ID from request"""
-    user_id = getattr(request.state, "user_id", None)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="User ID required")
-    return user_id
-
-
-def validate_quiz_access(quiz_id: str, user_id: str):
-    """Validate that quiz belongs to user"""
-    quiz = get_quiz(quiz_id)
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    if quiz.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-    return quiz
-
-
 @router.get("/collections", response_model=CollectionsResponse)
-async def list_collections(request: Request, user_only: bool = True):
+async def list_collections(
+    request: Request, user_only: bool = True, db: Session = Depends(get_db)
+):
     """Lists all Qdrant collections"""
     user_id = get_user_id(request)
 
@@ -46,7 +37,7 @@ async def list_collections(request: Request, user_only: bool = True):
 
         if user_only:
             # Get collections for user's quizzes only
-            user_quizzes = get_quizzes_by_user(user_id)
+            user_quizzes = get_quizzes_by_user(db, user_id)
 
             for quiz in user_quizzes:
                 if quiz.collection_name:
@@ -92,7 +83,7 @@ async def list_collections(request: Request, user_only: bool = True):
                         quiz_id = None
                         if collection_name.startswith("quiz_"):
                             potential_quiz_id = collection_name.replace("quiz_", "")
-                            quiz = get_quiz(potential_quiz_id)
+                            quiz = get_quiz(db, potential_quiz_id)
                             if quiz:
                                 quiz_id = quiz.quiz_id
 
@@ -122,7 +113,9 @@ async def list_collections(request: Request, user_only: bool = True):
 
 
 @router.delete("/collections/{quiz_id}", response_model=CollectionDeleteResponse)
-async def delete_collection(quiz_id: str, request: Request):
+async def delete_collection(
+    quiz_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Deletes Qdrant collection for specific quiz"""
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id)
@@ -154,6 +147,7 @@ async def delete_collection(quiz_id: str, request: Request):
 
         # Log activity
         log_activity(
+            db,
             user_id,
             "collection_deleted",
             {
@@ -175,7 +169,9 @@ async def delete_collection(quiz_id: str, request: Request):
 
 
 @router.post("/collections/{quiz_id}/cleanup", response_model=BaseResponse)
-async def cleanup_collection(quiz_id: str, request: Request):
+async def cleanup_collection(
+    quiz_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Cleanup and optimize quiz collection"""
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id)
@@ -212,6 +208,7 @@ async def cleanup_collection(quiz_id: str, request: Request):
         vectors_after = vectors_before  # No actual optimization performed yet
 
         log_activity(
+            db,
             user_id,
             "collection_optimized",
             {
@@ -320,7 +317,9 @@ async def get_collection_info(quiz_id: str, request: Request):
 
 
 @router.post("/collections/{quiz_id}/reindex")
-async def reindex_collection(quiz_id: str, request: Request):
+async def reindex_collection(
+    quiz_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Rebuild collection from quiz documents"""
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id)
@@ -346,9 +345,10 @@ async def reindex_collection(quiz_id: str, request: Request):
             update_document_indexed(doc.doc_id, False)
 
         # Trigger reindexing
-        indexing_result = await document_service.index_quiz_documents(quiz_id)
+        indexing_result = await document_service.index_quiz_documents(quiz_id, db)
 
         log_activity(
+            db,
             user_id,
             "collection_reindexed",
             {
@@ -372,14 +372,14 @@ async def reindex_collection(quiz_id: str, request: Request):
 
 
 @router.get("/collections/stats")
-async def get_collections_stats(request: Request):
+async def get_collections_stats(request: Request, db: Session = Depends(get_db)):
     """Get system-wide collection statistics"""
     user_id = get_user_id(request)
 
     try:
         # Get user's collections
         user_collections = []
-        user_quizzes = get_quizzes_by_user(user_id)
+        user_quizzes = get_quizzes_by_user(db, user_id)
 
         total_vectors = 0
         total_collections = 0
