@@ -189,7 +189,8 @@ async def start_quiz(
         success = await quiz_service.start_quiz(
             quiz_id=quiz_id,
             confirmed_topics=topics_to_use,  # Use selected topics
-            total_questions=request_data.total_questions,
+            total_questions=request_data.total_questions
+            + len(request_data.user_questions or []),
             difficulty=request_data.difficulty,
             user_questions=request_data.user_questions or [],
             user_id=user_id,
@@ -203,8 +204,7 @@ async def start_quiz(
             quiz_id=quiz_id,
             status="generated",
             estimated_generation_time=30,
-            total_questions=request_data.total_questions
-            + len(request_data.user_questions or []),
+            total_questions=request_data.total_questions,
         )
 
     except HTTPException:
@@ -446,148 +446,8 @@ async def get_quiz_progress(
 
     try:
 
-        questions_data = quiz.questions_data or {}
-        all_questions = questions_data.get("all_generated_questions", [])
-        user_answers = quiz.user_answers or []
-        active_pool = questions_data.get("active_question_pool", [])
-
-        total_attempts = len(user_answers)
-        correct_attempts = sum(1 for answer in user_answers if answer.get("is_correct"))
-
-        answered_unique_questions = set()
-        correct_unique_questions = set()
-
-        for answer in user_answers:
-            question_id = answer.get("question_id")
-            attempt_number = answer.get("attempt_number", 1)
-
-            if attempt_number == 1:
-                answered_unique_questions.add(question_id)
-                if answer.get("is_correct"):
-                    correct_unique_questions.add(question_id)
-
-        # Basic progress stats
-        total_unique_questions = len(set(active_pool))  # Total unique questions in pool
-        unique_answered = len(answered_unique_questions)
-        unique_correct = len(correct_unique_questions)
-        remaining_unique = max(0, total_unique_questions - unique_answered)
-
-        # Percentages based on attempts vs unique questions
-        attempt_success_rate = (
-            (correct_attempts / total_attempts * 100) if total_attempts > 0 else 0
-        )
-        unique_question_success_rate = (
-            (unique_correct / unique_answered * 100) if unique_answered > 0 else 0
-        )
-
-        # Current position in the quiz
-        current_position = min(quiz.current_question_index + 1, total_unique_questions)
-
-        # Calculate topic progress
-        topic_progress = {}
-        if quiz.confirmed_topics and all_questions:
-            # Create mappings
-            question_to_topic = {q.get("id"): q.get("topic") for q in all_questions}
-
-            for topic_data in quiz.confirmed_topics:
-                topic_name = topic_data.get("topic", "Unknown")
-
-                # Get all unique questions for this topic in active pool
-                topic_questions_in_pool = [
-                    q_id
-                    for q_id in set(active_pool)
-                    if question_to_topic.get(q_id) == topic_name
-                ]
-
-                # Count attempts and success for this topic
-                topic_attempts = 0
-                topic_correct_attempts = 0
-                topic_unique_answered = set()
-                topic_unique_correct = set()
-
-                for answer in user_answers:
-                    question_id = answer.get("question_id")
-                    if question_id in topic_questions_in_pool:
-                        topic_attempts += 1
-                        if answer.get("is_correct"):
-                            topic_correct_attempts += 1
-
-                        # Track unique questions (first attempt only)
-                        if answer.get("attempt_number", 1) == 1:
-                            topic_unique_answered.add(question_id)
-                            if answer.get("is_correct"):
-                                topic_unique_correct.add(question_id)
-
-                topic_total_unique = len(topic_questions_in_pool)
-                topic_answered_unique = len(topic_unique_answered)
-                topic_correct_unique = len(topic_unique_correct)
-
-                topic_progress[topic_name] = {
-                    # Unique question metrics
-                    "unique_answered": topic_answered_unique,
-                    "unique_correct": topic_correct_unique,
-                    "total_unique": topic_total_unique,
-                    "remaining_unique": max(
-                        0, topic_total_unique - topic_answered_unique
-                    ),
-                    # All attempt metrics
-                    "total_attempts": topic_attempts,
-                    "correct_attempts": topic_correct_attempts,
-                    # Success rates
-                    "unique_success_rate": (
-                        (topic_correct_unique / topic_answered_unique * 100)
-                        if topic_answered_unique > 0
-                        else 0
-                    ),
-                    "attempt_success_rate": (
-                        (topic_correct_attempts / topic_attempts * 100)
-                        if topic_attempts > 0
-                        else 0
-                    ),
-                }
-
-        # Timing calculations
-        time_elapsed_seconds = 0
-        if quiz.quiz_started_at:
-            time_elapsed_seconds = int(
-                (datetime.now() - quiz.quiz_started_at).total_seconds()
-            )
-
-        avg_time_per_attempt = (
-            (time_elapsed_seconds / total_attempts) if total_attempts > 0 else 0
-        )
-        avg_time_per_unique = (
-            (time_elapsed_seconds / unique_answered) if unique_answered > 0 else 0
-        )
-
-        return {
-            "progress": {
-                # Current position
-                "current_question": current_position,
-                "total_unique_questions": total_unique_questions,
-                # Unique question progress
-                "unique_answered": unique_answered,
-                "unique_correct": unique_correct,
-                "remaining_unique": remaining_unique,
-                "unique_success_rate": round(unique_question_success_rate, 1),
-                # All attempts progress
-                "total_attempts": total_attempts,
-                "correct_attempts": correct_attempts,
-                "attempt_success_rate": round(attempt_success_rate, 1),
-                # Timing
-                "time_elapsed_seconds": time_elapsed_seconds,
-                "average_time_per_attempt": round(avg_time_per_attempt, 1),
-                "average_time_per_unique_question": round(avg_time_per_unique, 1),
-                # Topic breakdown
-                "topic_progress": topic_progress,
-            },
-            "status": quiz.status,
-            "quiz_metadata": {
-                "difficulty": quiz.difficulty,
-                "total_questions_generated": len(all_questions),
-                "recycling_enabled": True,
-            },
-        }
+        result = quiz_service.get_quiz_progress(quiz)
+        return result
 
     except Exception as e:
         logger.error(f"Failed to get quiz progress: {e}")

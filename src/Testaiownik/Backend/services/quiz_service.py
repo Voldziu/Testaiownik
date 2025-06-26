@@ -661,6 +661,158 @@ class QuizService:
                 "generated_at": generated_at_str,
             }
 
+    def get_quiz_progress(self, quiz) -> Dict:
+
+        questions_data = quiz.questions_data or {}
+        all_questions = questions_data.get("all_generated_questions", [])
+        user_answers = quiz.user_answers or []
+        active_pool = questions_data.get("active_question_pool", [])
+
+        total_attempts = len(user_answers)
+        correct_attempts = sum(1 for answer in user_answers if answer.get("is_correct"))
+
+        answered_unique_questions = set()
+        correct_unique_questions = set()
+
+        for answer in user_answers:
+            question_id = answer.get("question_id")
+
+            answered_unique_questions.add(question_id)
+            if answer.get("is_correct"):
+                correct_unique_questions.add(question_id)
+
+        # Basic progress stats
+        total_unique_questions = len(set(active_pool))  # Total unique questions in pool
+        unique_answered = len(answered_unique_questions)
+        unique_correct = len(correct_unique_questions)
+        remaining_unique = max(0, total_unique_questions - unique_answered)
+
+        # Percentages based on attempts vs unique questions
+        attempt_success_rate = (
+            (correct_attempts / total_attempts * 100) if total_attempts > 0 else 0
+        )
+        unique_question_success_rate = (
+            (unique_correct / unique_answered * 100) if unique_answered > 0 else 0
+        )
+
+        # Current position in the quiz
+        current_position = min(quiz.current_question_index + 1, total_unique_questions)
+
+        # Calculate topic progress
+        topic_progress = {}
+        if quiz.confirmed_topics and all_questions:
+            # Create mappings
+            question_to_topic = {q.get("id"): q.get("topic") for q in all_questions}
+
+            for topic_data in quiz.confirmed_topics:
+                topic_name = topic_data.get("topic", "Unknown")
+
+                # Get all unique questions for this topic in active pool
+                topic_questions_in_pool = [
+                    q_id
+                    for q_id in set(active_pool)
+                    if question_to_topic.get(q_id) == topic_name
+                ]
+
+                # Count attempts and success for this topic
+                topic_attempts = 0
+                topic_correct_attempts = 0
+                topic_unique_answered = set()
+                topic_unique_correct = set()
+
+                for answer in user_answers:
+                    question_id = answer.get("question_id")
+                    if question_id in topic_questions_in_pool:
+                        topic_attempts += 1
+                        if answer.get("is_correct"):
+                            topic_correct_attempts += 1
+
+                        # Track unique questions (first attempt only)
+                        if answer.get("attempt_number", 1) == 1:
+                            topic_unique_answered.add(question_id)
+                            if answer.get("is_correct"):
+                                topic_unique_correct.add(question_id)
+
+                topic_total_unique = len(topic_questions_in_pool)
+                topic_answered_unique = len(topic_unique_answered)
+                topic_correct_unique = len(topic_unique_correct)
+
+                topic_progress[topic_name] = {
+                    # Unique question metrics
+                    "unique_answered": topic_answered_unique,
+                    "unique_correct": topic_correct_unique,
+                    "total_unique": topic_total_unique,
+                    "remaining_unique": max(
+                        0, topic_total_unique - topic_answered_unique
+                    ),
+                    # All attempt metrics
+                    "total_attempts": topic_attempts,
+                    "correct_attempts": topic_correct_attempts,
+                    # Success rates
+                    "unique_success_rate": (
+                        (topic_correct_unique / topic_answered_unique * 100)
+                        if topic_answered_unique > 0
+                        else 0
+                    ),
+                    "attempt_success_rate": (
+                        (topic_correct_attempts / topic_attempts * 100)
+                        if topic_attempts > 0
+                        else 0
+                    ),
+                }
+
+        # Timing calculations
+        time_elapsed_seconds = 0
+        if quiz.quiz_started_at:
+            time_elapsed_seconds = int(
+                (datetime.now() - quiz.quiz_started_at).total_seconds()
+            )
+
+        avg_time_per_attempt = (
+            (time_elapsed_seconds / total_attempts) if total_attempts > 0 else 0
+        )
+        avg_time_per_unique = (
+            (time_elapsed_seconds / unique_answered) if unique_answered > 0 else 0
+        )
+
+        total_incorrect_attempts = sum(
+            1 for answer in user_answers if not answer.get("is_correct")
+        )
+
+        return {
+            "progress": {
+                # Current position
+                "total_questions_in_pool": len(active_pool),  # actual pool length
+                "remaining_questions": max(
+                    0, len(active_pool) - total_attempts
+                ),  # actual remaining
+                # All attempts progress
+                "total_attemps": total_attempts,
+                "total_incorrect_attemps": total_incorrect_attempts,
+                "total_corrent_attemps": correct_attempts,
+                "current_question": current_position,
+                "total_unique_questions": total_unique_questions,
+                # Unique question progress
+                "unique_answered": unique_answered,
+                "unique_correct": unique_correct,
+                "remaining_unique": remaining_unique,
+                "unique_success_rate": round(unique_question_success_rate, 1),
+                "attempt_success_rate": round(attempt_success_rate, 1),
+                # Timing
+                "time_elapsed_seconds": time_elapsed_seconds,
+                "average_time_per_attempt": round(avg_time_per_attempt, 1),
+                "average_time_per_unique_question": round(avg_time_per_unique, 1),
+                # Topic breakdown
+                "topic_progress": topic_progress,
+            },
+            "status": quiz.status,
+            "quiz_metadata": {
+                "difficulty": quiz.difficulty,
+                "total_questions_generated": len(all_questions),
+                "recycling_enabled": True,
+            },
+        }
+
     def get_current_question(
         self, quiz_id: str, db: Session
     ) -> Optional[QuizCurrentResponse]:
@@ -858,10 +1010,12 @@ class QuizService:
             updated_state = graph.get_state(config)
 
             # Check if we're interrupted again (next question) or if quiz is complete
-            is_interrupted_again = (
-                updated_state.next and "process_answer" in updated_state.next
-            )
-            is_completed = not updated_state.next or updated_state.next == ()
+            if not updated_state.next or updated_state.next == ():
+                is_interrupted_again = False
+                is_completed = True
+            else:
+                is_interrupted_again = "process_answer" in updated_state.next
+                is_completed = False
 
             # Get quiz session from updated state
             quiz_session = updated_state.values.get("quiz_session")
@@ -894,7 +1048,7 @@ class QuizService:
             return await self._format_answer_response(
                 latest_answer,
                 feedback_request,
-                is_interrupted_again,  # next_available = is there another question waiting
+                is_interrupted_again,
                 quiz_session,
                 question_id,
             )
@@ -1041,11 +1195,34 @@ class QuizService:
                     ),
                     "quiz_config": None,
                     "confirmed_topics": topics,
-                    "retriever": retriever,
                 }
 
                 # Update graph state
                 quiz_graph.update_state(config, quiz_state)
+
+                # If quiz is active and has current question, run graph to interrupted state
+                if (
+                    quiz.status == "quiz_active"
+                    and quiz_session.get_current_question()
+                    and not quiz_session.is_completed()
+                ):
+
+                    # Invoke graph to get to interrupted state at process_answer
+                    try:
+                        quiz_graph.invoke(None, config)
+
+                        # Verify we're in the correct interrupted state
+                        current_state = quiz_graph.get_state(config)
+                        if not (
+                            current_state.next
+                            and "process_answer" in current_state.next
+                        ):
+                            logger.warning(
+                                f"Graph not in expected interrupted state after restoration: {current_state.next}"
+                            )
+
+                    except Exception as e:
+                        logger.warning(f"Could not restore to interrupted state: {e}")
 
                 # Store graph instance
                 self.active_quiz_graphs[quiz_id] = {
@@ -1350,20 +1527,3 @@ class QuizService:
         except Exception as e:
             logger.error(f"Failed to resume quiz: {e}")
             return False
-
-    def cleanup_user_sessions(self, user_id: str, db: Session):
-        """Clean up user-related graph instances"""
-        # Clean up topic graphs for user's quizzes
-        from ..database.crud import get_quizzes_by_user
-
-        user_quizzes = get_quizzes_by_user(db, user_id)
-        quiz_ids_to_clean = [quiz.quiz_id for quiz in user_quizzes]
-
-        for quiz_id in quiz_ids_to_clean:
-            if quiz_id in self.active_topic_graphs:
-                del self.active_topic_graphs[quiz_id]
-                logger.info(f"Cleaned up topic graph for quiz {quiz_id}")
-
-            if quiz_id in self.active_quiz_graphs:
-                del self.active_quiz_graphs[quiz_id]
-                logger.info(f"Cleaned up quiz graph for quiz {quiz_id}")
