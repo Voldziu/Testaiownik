@@ -29,6 +29,7 @@ def get_user_id(request: Request) -> str:
 def validate_quiz_access(quiz_id: str, user_id: str, db: Session = Depends(get_db)):
     """Validate that quiz belongs to user"""
     quiz = get_quiz(db, quiz_id)
+    db.refresh(quiz)
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
     if quiz.user_id != user_id:

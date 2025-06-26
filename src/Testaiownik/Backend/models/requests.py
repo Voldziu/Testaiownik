@@ -25,7 +25,9 @@ class UpdateTopicRequest(BaseModel):
 
 # Quiz Requests
 class StartQuizRequest(BaseModel):
-    confirmed_topics: List[Dict[str, Any]]  # WeightedTopic format
+    confirmed_topics: Optional[List[Dict[str, Any]]] = (
+        None  # Optional WeightedTopic format
+    )
     total_questions: int = Field(default=20, ge=1)
     difficulty: Literal["easy", "medium", "hard", "very-hard"] = "very-hard"
     user_questions: List[str] = Field(default_factory=list)

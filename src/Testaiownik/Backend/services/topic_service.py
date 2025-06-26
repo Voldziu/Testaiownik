@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 import json
 from sqlalchemy.orm import Session
 
-
+from ..models.responses import TopicUpdateResponse
 from Agent.Shared import WeightedTopic
 from ..database.crud import get_quiz, update_topic_data, log_activity
 
@@ -135,7 +135,7 @@ class TopicService:
         new_name: Optional[str] = None,
         new_weight: Optional[float] = None,
         user_id: str = None,
-    ) -> Dict:
+    ) -> TopicUpdateResponse:
         """Update topic name and/or weight"""
         try:
             quiz = get_quiz(db, quiz_id)
@@ -192,12 +192,15 @@ class TopicService:
                 },
             )
 
-            return {
-                "success": True,
-                "old_topic": current_topic_name,
-                "new_topic": normalized_topics[topic_index],
-                "weights_normalized": True,
-            }
+            updated_quiz = get_quiz(db, quiz_id)
+            logger.info(f"Updated topics in DB: {updated_quiz.suggested_topics}")
+
+            return TopicUpdateResponse(
+                success=True,
+                old_topic=current_topic_name,
+                new_topic=normalized_topics[topic_index],
+                weights_normalized=True,
+            )
 
         except Exception as e:
             logger.error(f"Failed to update topic: {e}")

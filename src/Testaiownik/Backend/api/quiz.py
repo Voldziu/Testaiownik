@@ -115,7 +115,7 @@ async def get_quiz_status(
 
         # Quiz progress
         answered_questions = len(quiz.user_answers or [])
-        total_questions = quiz.total_questions or 0
+        total_questions = quiz.total_questions
 
         return {
             "quiz_id": quiz_id,
@@ -156,7 +156,6 @@ async def get_quiz_status(
         raise HTTPException(status_code=500, detail="Failed to get quiz status")
 
 
-# Quiz Execution Endpoints
 @router.post("/{quiz_id}/start", response_model=QuizStartResponse)
 async def start_quiz(
     quiz_id: str,
@@ -175,13 +174,21 @@ async def start_quiz(
             detail=f"Quiz is not ready to start. Current status: {quiz.status}",
         )
 
-    if not quiz.confirmed_topics:
-        raise HTTPException(status_code=400, detail="No topics confirmed for quiz")
+    # Use provided topics or fall back to quiz's confirmed topics
+    topics_to_use = request_data.confirmed_topics
+    if topics_to_use is None:
+        if not quiz.confirmed_topics:
+            raise HTTPException(status_code=400, detail="No topics confirmed for quiz")
+        topics_to_use = quiz.confirmed_topics
+
+    # Validate we have topics
+    if not topics_to_use:
+        raise HTTPException(status_code=400, detail="No topics available for quiz")
 
     try:
         success = await quiz_service.start_quiz(
             quiz_id=quiz_id,
-            confirmed_topics=quiz.confirmed_topics,
+            confirmed_topics=topics_to_use,  # Use selected topics
             total_questions=request_data.total_questions,
             difficulty=request_data.difficulty,
             user_questions=request_data.user_questions or [],
@@ -193,10 +200,11 @@ async def start_quiz(
             raise HTTPException(status_code=500, detail="Failed to start quiz")
 
         return QuizStartResponse(
-            quiz_id=quiz_id,  # Using quiz_id consistently
-            status="generating",
+            quiz_id=quiz_id,
+            status="generated",
             estimated_generation_time=30,
-            total_questions=request_data.total_questions,
+            total_questions=request_data.total_questions
+            + len(request_data.user_questions or []),
         )
 
     except HTTPException:
@@ -215,12 +223,12 @@ async def get_current_question(
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        current_data = quiz_service.get_current_question(quiz_id, db)
+        quiz_current_response = quiz_service.get_current_question(quiz_id, db)
 
-        if not current_data:
+        if not quiz_current_response:
             raise HTTPException(status_code=404, detail="No current question available")
 
-        return QuizCurrentResponse(**current_data)
+        return quiz_current_response
 
     except HTTPException:
         raise
@@ -243,14 +251,34 @@ async def submit_answer(
     if quiz.status != "quiz_active":
         raise HTTPException(status_code=400, detail="Quiz is not active")
 
+    # Validate that the question_id matches the current question
     try:
-        result = await quiz_service.submit_answer(
+        questions_data = quiz.questions_data
+        if not questions_data or not questions_data.get("active_question_pool"):
+            raise HTTPException(status_code=400, detail="No questions available")
+
+        current_index = quiz.current_question_index
+        active_pool = questions_data.get("active_question_pool", [])
+
+        if current_index >= len(active_pool):
+            raise HTTPException(status_code=400, detail="Quiz is completed")
+
+        current_question_id = active_pool[current_index]
+
+        if answer_data.question_id != current_question_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Can only answer current question. Expected: {current_question_id}, got: {answer_data.question_id}",
+            )
+
+        quiz_answer_response = await quiz_service.submit_answer(
             quiz_id=quiz_id,
             selected_choices=answer_data.selected_choices,
             question_id=answer_data.question_id,
+            db=db,
         )
 
-        return QuizAnswerResponse(**result)
+        return quiz_answer_response
 
     except HTTPException:
         raise
@@ -271,14 +299,14 @@ async def get_quiz_results(
         raise HTTPException(status_code=400, detail="Quiz is not completed yet")
 
     try:
-        results = quiz_service.get_quiz_results(quiz_id, db)
+        quiz_results = quiz_service.get_quiz_results(quiz_id, db)
 
-        if not results:
+        if not quiz_results:
             raise HTTPException(status_code=404, detail="Quiz results not found")
 
         return QuizResultsResponse(
-            quiz_results=QuizResults(**results["quiz_results"]),
-            status=results["status"],
+            quiz_results=quiz_results,
+            status=quiz_results.status,
         )
 
     except HTTPException:
@@ -383,7 +411,7 @@ async def restart_quiz(quiz_id: str, request: Request, db: Session = Depends(get
 
     try:
         # Reset quiz execution but keep topics
-        success = reset_quiz_execution(quiz_id)
+        success = reset_quiz_execution(db, quiz_id)
 
         if not success:
             raise HTTPException(status_code=500, detail="Failed to restart quiz")
@@ -413,61 +441,154 @@ async def get_quiz_progress(
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
+    if quiz.status not in ["quiz_active", "paused", "quiz_completed"]:
+        raise HTTPException(status_code=400, detail="Quiz has not started yet")
+
     try:
-        if quiz.status not in [
-            "quiz_active",
-            "paused",
-            "quiz_completed",
-        ]:
-            raise HTTPException(status_code=400, detail="Quiz has not started yet")
 
-        # Calculate progress from quiz data
-        total_questions = quiz.total_questions or 0
-        answered = len(quiz.user_answers or [])
+        questions_data = quiz.questions_data or {}
+        all_questions = questions_data.get("all_generated_questions", [])
+        user_answers = quiz.user_answers or []
+        active_pool = questions_data.get("active_question_pool", [])
 
-        # Calculate correct answers
-        correct = 0
-        for answer in quiz.user_answers or []:
-            if isinstance(answer, dict) and answer.get("is_correct"):
-                correct += 1
+        total_attempts = len(user_answers)
+        correct_attempts = sum(1 for answer in user_answers if answer.get("is_correct"))
 
-        remaining = max(0, total_questions - answered)
-        score_percentage = (correct / answered * 100) if answered > 0 else 0
+        answered_unique_questions = set()
+        correct_unique_questions = set()
+
+        for answer in user_answers:
+            question_id = answer.get("question_id")
+            attempt_number = answer.get("attempt_number", 1)
+
+            if attempt_number == 1:
+                answered_unique_questions.add(question_id)
+                if answer.get("is_correct"):
+                    correct_unique_questions.add(question_id)
+
+        # Basic progress stats
+        total_unique_questions = len(set(active_pool))  # Total unique questions in pool
+        unique_answered = len(answered_unique_questions)
+        unique_correct = len(correct_unique_questions)
+        remaining_unique = max(0, total_unique_questions - unique_answered)
+
+        # Percentages based on attempts vs unique questions
+        attempt_success_rate = (
+            (correct_attempts / total_attempts * 100) if total_attempts > 0 else 0
+        )
+        unique_question_success_rate = (
+            (unique_correct / unique_answered * 100) if unique_answered > 0 else 0
+        )
+
+        # Current position in the quiz
+        current_position = min(quiz.current_question_index + 1, total_unique_questions)
 
         # Calculate topic progress
         topic_progress = {}
-        if quiz.confirmed_topics:
+        if quiz.confirmed_topics and all_questions:
+            # Create mappings
+            question_to_topic = {q.get("id"): q.get("topic") for q in all_questions}
+
             for topic_data in quiz.confirmed_topics:
                 topic_name = topic_data.get("topic", "Unknown")
+
+                # Get all unique questions for this topic in active pool
+                topic_questions_in_pool = [
+                    q_id
+                    for q_id in set(active_pool)
+                    if question_to_topic.get(q_id) == topic_name
+                ]
+
+                # Count attempts and success for this topic
+                topic_attempts = 0
+                topic_correct_attempts = 0
+                topic_unique_answered = set()
+                topic_unique_correct = set()
+
+                for answer in user_answers:
+                    question_id = answer.get("question_id")
+                    if question_id in topic_questions_in_pool:
+                        topic_attempts += 1
+                        if answer.get("is_correct"):
+                            topic_correct_attempts += 1
+
+                        # Track unique questions (first attempt only)
+                        if answer.get("attempt_number", 1) == 1:
+                            topic_unique_answered.add(question_id)
+                            if answer.get("is_correct"):
+                                topic_unique_correct.add(question_id)
+
+                topic_total_unique = len(topic_questions_in_pool)
+                topic_answered_unique = len(topic_unique_answered)
+                topic_correct_unique = len(topic_unique_correct)
+
                 topic_progress[topic_name] = {
-                    "answered": 0,
-                    "correct": 0,
-                    "total": 0,  # Would calculate from questions_data
+                    # Unique question metrics
+                    "unique_answered": topic_answered_unique,
+                    "unique_correct": topic_correct_unique,
+                    "total_unique": topic_total_unique,
+                    "remaining_unique": max(
+                        0, topic_total_unique - topic_answered_unique
+                    ),
+                    # All attempt metrics
+                    "total_attempts": topic_attempts,
+                    "correct_attempts": topic_correct_attempts,
+                    # Success rates
+                    "unique_success_rate": (
+                        (topic_correct_unique / topic_answered_unique * 100)
+                        if topic_answered_unique > 0
+                        else 0
+                    ),
+                    "attempt_success_rate": (
+                        (topic_correct_attempts / topic_attempts * 100)
+                        if topic_attempts > 0
+                        else 0
+                    ),
                 }
 
-        # Calculate timing
-        time_elapsed = 0
+        # Timing calculations
+        time_elapsed_seconds = 0
         if quiz.quiz_started_at:
-            time_elapsed = (datetime.now() - quiz.quiz_started_at).total_seconds()
+            time_elapsed_seconds = int(
+                (datetime.now() - quiz.quiz_started_at).total_seconds()
+            )
 
-        avg_time_per_question = time_elapsed / answered if answered > 0 else 0
+        avg_time_per_attempt = (
+            (time_elapsed_seconds / total_attempts) if total_attempts > 0 else 0
+        )
+        avg_time_per_unique = (
+            (time_elapsed_seconds / unique_answered) if unique_answered > 0 else 0
+        )
 
         return {
             "progress": {
-                "total_questions": total_questions,
-                "answered": answered,
-                "correct": correct,
-                "remaining": remaining,
-                "score_percentage": round(score_percentage, 1),
-                "time_elapsed_seconds": int(time_elapsed),
-                "average_time_per_question": round(avg_time_per_question, 1),
+                # Current position
+                "current_question": current_position,
+                "total_unique_questions": total_unique_questions,
+                # Unique question progress
+                "unique_answered": unique_answered,
+                "unique_correct": unique_correct,
+                "remaining_unique": remaining_unique,
+                "unique_success_rate": round(unique_question_success_rate, 1),
+                # All attempts progress
+                "total_attempts": total_attempts,
+                "correct_attempts": correct_attempts,
+                "attempt_success_rate": round(attempt_success_rate, 1),
+                # Timing
+                "time_elapsed_seconds": time_elapsed_seconds,
+                "average_time_per_attempt": round(avg_time_per_attempt, 1),
+                "average_time_per_unique_question": round(avg_time_per_unique, 1),
+                # Topic breakdown
                 "topic_progress": topic_progress,
             },
             "status": quiz.status,
+            "quiz_metadata": {
+                "difficulty": quiz.difficulty,
+                "total_questions_generated": len(all_questions),
+                "recycling_enabled": True,
+            },
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Failed to get quiz progress: {e}")
         raise HTTPException(status_code=500, detail="Failed to get quiz progress")

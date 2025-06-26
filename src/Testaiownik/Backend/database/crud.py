@@ -80,7 +80,7 @@ def create_quiz(db: Session, user_id: str) -> Quiz:
     )  ## Unpack to avoid weird 500 errors
     # Log activity for creating a new quiz
     log_activity(db, user_id, "quiz_created", {"quiz_id": quiz_id})
-    db.expunge(quiz)  # Remove from session to avoid stale data issues
+    # db.expunge(quiz)  # Remove from session to avoid stale data issues
     return quiz
 
 
@@ -144,6 +144,7 @@ def start_topic_analysis(db: Session, quiz_id: str, desired_topic_count: int = 1
         quiz.topic_conversation_history = []
         quiz.updated_at = datetime.now()
         db.commit()
+        db.refresh(quiz)
         return True
     return False
 
@@ -170,8 +171,9 @@ def update_topic_data(db: Session, quiz_id: str, **kwargs):
         if "confirmed_topics" in kwargs and kwargs["confirmed_topics"]:
             quiz.topic_analysis_completed_at = datetime.now()
             quiz.status = "topic_ready"
-
         db.commit()
+        db.refresh(quiz)
+
         return True
     return False
 

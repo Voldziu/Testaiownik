@@ -378,3 +378,61 @@ async def get_document_stats(
     except Exception as e:
         logger.error(f"Failed to get document stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get document stats")
+
+
+@router.get("/{quiz_id}/question-estimate")
+async def estimate_max_questions(
+    quiz_id: str,
+    request: Request,
+    ratio: int = 2,  # Default: 2 chunks per question
+    db: Session = Depends(get_db),
+):
+    """Estimate maximum number of questions possible based on document chunks"""
+    user_id = get_user_id(request)
+    quiz = validate_quiz_access(quiz_id, user_id, db)
+
+    if not quiz.collection_name:
+        raise HTTPException(
+            status_code=400, detail="Quiz documents must be indexed first"
+        )
+
+    # Validate ratio parameter
+    if ratio <= 0:
+        raise HTTPException(status_code=400, detail="Ratio must be greater than 0")
+
+    try:
+        # Check if collection exists
+        if not document_service.qdrant_manager.collection_exists(quiz.collection_name):
+            raise HTTPException(status_code=404, detail="Document collection not found")
+
+        # Get chunk count from collection
+        from RAG.Retrieval import RAGRetriever
+
+        retriever = RAGRetriever(quiz.collection_name, document_service.qdrant_manager)
+        total_chunks = retriever.get_chunk_count()
+
+        if total_chunks == 0:
+            return {
+                "quiz_id": quiz_id,
+                "total_chunks": 0,
+                "estimated_max_questions": 0,
+                "ratio_used": ratio,
+                "message": "No chunks available for question generation",
+            }
+
+        # Calculate estimated questions based on provided ratio
+        estimated_questions = max(1, int(total_chunks / ratio))
+
+        return {
+            "quiz_id": quiz_id,
+            "total_chunks": total_chunks,
+            "ratio_used": ratio,
+            "estimated_max_questions": estimated_questions,
+            "calculation": f"{total_chunks} chunks ÷ {ratio} ratio = {estimated_questions} questions",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to estimate questions for quiz {quiz_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to estimate questions")

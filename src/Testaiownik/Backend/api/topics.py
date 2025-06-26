@@ -36,7 +36,7 @@ topic_service = TopicService()
 
 
 @router.post("/{quiz_id}/start", response_model=TopicAnalysisStartResponse)
-async def start_topic_analysis(
+def start_topic_analysis(
     quiz_id: str,
     request: Request,
     analysis_request: TopicAnalysisRequest = TopicAnalysisRequest(),
@@ -60,22 +60,20 @@ async def start_topic_analysis(
         )
 
     try:
-        success = await quiz_service.start_topic_analysis(
+        result = quiz_service.start_topic_analysis(
             quiz_id=quiz_id,
             user_id=user_id,
             db=db,
             desired_topic_count=analysis_request.desired_topic_count,
         )
 
-        if not success:
-            raise HTTPException(
-                status_code=500, detail="Failed to start topic analysis"
-            )
-
         return TopicAnalysisStartResponse(
-            quiz_id=quiz_id,
-            status="analyzing",
+            quiz_id=result["quiz_id"],
+            status=result["status"],
             estimated_completion=None,
+            suggested_topics=[
+                WeightedTopicResponse(**topic) for topic in result["suggested_topics"]
+            ],
         )
 
     except Exception as e:
@@ -89,7 +87,11 @@ async def get_topic_status(
 ):
     """Gets current state of topic selection process"""
     user_id = get_user_id(request)
-    quiz = validate_quiz_access(quiz_id, user_id, db)
+    validate_quiz_access(quiz_id, user_id, db)
+
+    quiz = get_quiz(db, quiz_id)
+
+    db.refresh(quiz)
 
     try:
         return TopicSessionStatusResponse(
@@ -225,16 +227,17 @@ async def update_topic(
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        result = topic_service.update_topic(
+
+        topic_update_response = topic_service.update_topic(
             quiz_id=quiz_id,
             current_topic_name=topic_name,
+            db=db,
             new_name=update_data.new_name,
             new_weight=update_data.new_weight,
             user_id=user_id,
-            db=db,
         )
 
-        return TopicUpdateResponse(**result)
+        return topic_update_response
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

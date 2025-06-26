@@ -86,9 +86,12 @@ class WeightedTopicResponse(BaseModel):
 
 
 class TopicAnalysisStartResponse(BaseResponse):
-    quiz_id: str  # Changed from topic_session_id
+    quiz_id: str
     status: str
     estimated_completion: Optional[datetime]
+    suggested_topics: List[WeightedTopicResponse] = Field(
+        default_factory=list
+    )  # Add this
 
 
 class TopicSessionStatusResponse(BaseResponse):
