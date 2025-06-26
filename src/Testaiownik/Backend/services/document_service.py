@@ -7,6 +7,7 @@ from pathlib import Path
 import uuid
 import time
 from datetime import datetime
+from sqlalchemy.orm import Session
 
 from RAG.qdrant_manager import QdrantManager
 from RAG.Retrieval import RAGRetriever
@@ -19,6 +20,7 @@ from ..database.crud import (
     log_activity,
     update_quiz_status,
 )
+
 from ..database.models import Document
 from utils import logger
 
@@ -40,7 +42,11 @@ class DocumentService:
         }
 
     async def upload_documents(
-        self, quiz_id: str, user_id: str, files: List[Any]
+        self,
+        quiz_id: str,
+        user_id: str,
+        files: List[Any],
+        db: Session,
     ) -> List[Dict]:
         """Upload and save documents for a quiz"""
         uploaded_files = []
@@ -71,6 +77,7 @@ class DocumentService:
 
                 # Create database record
                 document = create_document(
+                    db=db,
                     quiz_id=quiz_id,
                     filename=file.filename,
                     file_path=str(file_path),
@@ -92,6 +99,7 @@ class DocumentService:
                 logger.info(f"Uploaded document: {file.filename} for quiz {quiz_id}")
 
             log_activity(
+                db,
                 user_id,
                 "documents_uploaded",
                 {"quiz_id": quiz_id, "file_count": len(uploaded_files)},
@@ -103,13 +111,13 @@ class DocumentService:
             logger.error(f"Failed to upload documents: {e}")
             raise
 
-    def get_quiz_documents(self, quiz_id: str) -> List[Document]:
+    def get_quiz_documents(self, quiz_id: str, db: Session) -> List[Document]:
         """Get all documents for a quiz"""
-        return get_documents_by_quiz(quiz_id)
+        return get_documents_by_quiz(db, quiz_id)
 
-    def get_indexing_status(self, quiz_id: str) -> Dict[str, Any]:
+    def get_indexing_status(self, quiz_id: str, db: Session) -> Dict[str, Any]:
         """Get document indexing status for a quiz"""
-        documents = get_documents_by_quiz(quiz_id)
+        documents = get_documents_by_quiz(db, quiz_id)
 
         total_documents = len(documents)
         indexed_documents = sum(1 for doc in documents if doc.indexed)
@@ -131,7 +139,7 @@ class DocumentService:
             # Try to find collection name from quiz
             from ..database.crud import get_quiz
 
-            quiz = get_quiz(quiz_id)
+            quiz = get_quiz(db, quiz_id)
             if quiz and quiz.collection_name:
                 collection_name = quiz.collection_name
                 try:
@@ -151,12 +159,12 @@ class DocumentService:
             "chunk_count": chunk_count,
         }
 
-    def delete_document(self, doc_id: str) -> bool:
+    def delete_document(self, doc_id: str, db: Session) -> bool:
         """Delete a document and its file"""
         try:
             from ..database.crud import delete_document as delete_doc_crud
 
-            success = delete_doc_crud(doc_id)
+            success = delete_doc_crud(db, doc_id)
             if success:
                 logger.info(f"Deleted document: {doc_id}")
 
@@ -165,12 +173,12 @@ class DocumentService:
             logger.error(f"Failed to delete document {doc_id}: {e}")
             return False
 
-    async def index_quiz_documents(self, quiz_id: str) -> Dict[str, Any]:
+    async def index_quiz_documents(self, quiz_id: str, db: Session) -> Dict[str, Any]:
         """Index all documents in a quiz to Qdrant"""
         start_time = time.time()
 
         try:
-            documents = get_documents_by_quiz(quiz_id)
+            documents = get_documents_by_quiz(db, quiz_id)
             if not documents:
                 raise ValueError("No documents found for quiz")
 
@@ -188,12 +196,12 @@ class DocumentService:
                 try:
                     # Index document to Qdrant
                     success = self.qdrant_manager.index_file_to_qdrant(
-                        doc.file_path, collection_name  # ✅ Access dict key
+                        doc.file_path, collection_name
                     )
 
                     if success:
                         # Update document status
-                        update_document_indexed(doc.doc_id, True)
+                        update_document_indexed(db, doc.doc_id, True)
                         indexed_count += 1
                         logger.info(f"Indexed document: {doc.filename}")
                     else:
@@ -210,9 +218,9 @@ class DocumentService:
                     logger.warning(f"Could not get chunk count: {e}")
 
             # Update quiz with collection name and status
-            update_quiz_collection(quiz_id, collection_name)
+            update_quiz_collection(db, quiz_id, collection_name)
             if indexed_count > 0:
-                update_quiz_status(quiz_id, "documents_indexed")
+                update_quiz_status(db, quiz_id, "documents_indexed")
 
             indexing_time = time.time() - start_time
 
@@ -226,7 +234,7 @@ class DocumentService:
 
         except Exception as e:
             logger.error(f"Failed to index quiz documents: {e}")
-            update_quiz_status(quiz_id, "failed")
+            update_quiz_status(db, quiz_id, "failed")
             raise
 
     def search_documents(
@@ -275,6 +283,8 @@ class DocumentService:
         except Exception as e:
             logger.error(f"Search failed: {e}")
             raise
+
+    # PLACEHOLDER:
 
     def get_document_status(self, doc_id: str) -> Optional[Dict[str, Any]]:
         """Get processing status of a specific document"""

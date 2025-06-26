@@ -2,6 +2,8 @@
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from typing import List, Optional
 from datetime import datetime
+from fastapi import Depends
+from sqlalchemy.orm import Session
 
 from ..services.document_service import DocumentService
 from ..models.requests import IndexDocumentsRequest
@@ -16,38 +18,28 @@ from ..models.responses import (
     DocumentItem,
     BaseResponse,
 )
+from ..database.sql_database_connector import get_db
 from ..database.crud import get_quiz, log_activity
+
+from .system import get_user_id, validate_quiz_access
+
+
 from utils import logger
 
 router = APIRouter()
 document_service = DocumentService()
 
 
-def get_user_id(request: Request) -> str:
-    """Extract user ID from request"""
-    user_id = getattr(request.state, "user_id", None)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="User ID required")
-    return user_id
-
-
-def validate_quiz_access(quiz_id: str, user_id: str):
-    """Validate that quiz belongs to user"""
-    quiz = get_quiz(quiz_id)
-    if not quiz:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    if quiz.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-    return quiz
-
-
-@router.post("/documents/{quiz_id}/upload", response_model=DocumentUploadResponse)
+@router.post("/{quiz_id}/upload", response_model=DocumentUploadResponse)
 async def upload_documents(
-    quiz_id: str, request: Request, files: List[UploadFile] = File(...)
+    quiz_id: str,
+    request: Request,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
 ):
     """Uploads files (PDF/DOCX/TXT/PPTX) to specific quiz"""
     user_id = get_user_id(request)
-    validate_quiz_access(quiz_id, user_id)
+    validate_quiz_access(quiz_id, user_id, db)
 
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -67,11 +59,12 @@ async def upload_documents(
 
     try:
         upload_results = await document_service.upload_documents(
-            quiz_id, user_id, files
+            quiz_id, user_id, files, db
         )
 
         # Log the upload activity
         log_activity(
+            db,
             user_id,
             "documents_uploaded",
             {
@@ -91,14 +84,14 @@ async def upload_documents(
         raise HTTPException(status_code=500, detail="Document upload failed")
 
 
-@router.get("/documents/{quiz_id}/list", response_model=DocumentListResponse)
-async def list_documents(quiz_id: str, request: Request):
+@router.get("/{quiz_id}/list", response_model=DocumentListResponse)
+async def list_documents(quiz_id: str, request: Request, db: Session = Depends(get_db)):
     """Lists all documents uploaded to a quiz"""
     user_id = get_user_id(request)
-    validate_quiz_access(quiz_id, user_id)
+    validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        documents = document_service.get_quiz_documents(quiz_id)
+        documents = document_service.get_quiz_documents(quiz_id, db)
 
         doc_items = []
         for doc in documents:
@@ -124,14 +117,16 @@ async def list_documents(quiz_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to list documents")
 
 
-@router.get("/documents/{quiz_id}/status", response_model=DocumentStatusResponse)
-async def get_indexing_status(quiz_id: str, request: Request):
+@router.get("/{quiz_id}/status", response_model=DocumentStatusResponse)
+async def get_indexing_status(
+    quiz_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Checks indexing status for all quiz documents"""
     user_id = get_user_id(request)
-    validate_quiz_access(quiz_id, user_id)
+    validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        status_info = document_service.get_indexing_status(quiz_id)
+        status_info = document_service.get_indexing_status(quiz_id, db)
         return DocumentStatusResponse(**status_info)
 
     except Exception as e:
@@ -139,20 +134,23 @@ async def get_indexing_status(quiz_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to get indexing status")
 
 
-@router.delete("/documents/{quiz_id}/{doc_id}", response_model=DocumentDeleteResponse)
-async def delete_document(quiz_id: str, doc_id: str, request: Request):
+@router.delete("/{quiz_id}/{doc_id}", response_model=DocumentDeleteResponse)
+async def delete_document(
+    quiz_id: str, doc_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Removes specific document from quiz"""
     user_id = get_user_id(request)
-    validate_quiz_access(quiz_id, user_id)
+    validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        success = document_service.delete_document(doc_id)
+        success = document_service.delete_document(doc_id, db)
 
         if not success:
             raise HTTPException(status_code=404, detail="Document not found")
 
         # Log the deletion
         log_activity(
+            db,
             user_id,
             "document_deleted",
             {"quiz_id": quiz_id, "doc_id": doc_id},
@@ -172,21 +170,23 @@ async def delete_document(quiz_id: str, doc_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to delete document")
 
 
-@router.post("/documents/{quiz_id}/index", response_model=DocumentIndexResponse)
+@router.post("/{quiz_id}/index", response_model=DocumentIndexResponse)
 async def index_documents(
     quiz_id: str,
     request: Request,
     index_request: IndexDocumentsRequest = IndexDocumentsRequest(),
+    db: Session = Depends(get_db),
 ):
     """Indexes all quiz documents to Qdrant collection"""
     user_id = get_user_id(request)
-    quiz = validate_quiz_access(quiz_id, user_id)
+    quiz = validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        indexing_result = await document_service.index_quiz_documents(quiz_id)
+        indexing_result = await document_service.index_quiz_documents(quiz_id, db)
 
         # Log the indexing activity
         log_activity(
+            db,
             user_id,
             "documents_indexed",
             {
@@ -211,6 +211,7 @@ async def search_documents(
     q: str,
     quiz_id: Optional[str] = None,
     limit: int = 10,
+    db: Session = Depends(get_db),
 ):
     """Search through indexed documents using vector similarity"""
     user_id = get_user_id(request)
@@ -223,7 +224,7 @@ async def search_documents(
 
     # Validate quiz access if specific quiz requested
     if quiz_id:
-        validate_quiz_access(quiz_id, user_id)
+        validate_quiz_access(quiz_id, user_id, db)
 
     try:
         result = document_service.search_documents(
@@ -242,36 +243,39 @@ async def search_documents(
         raise HTTPException(status_code=500, detail="Search failed")
 
 
-@router.get("/documents/{quiz_id}/search", response_model=SearchResponse)
+@router.get("/{quiz_id}/search", response_model=SearchResponse)
 async def search_quiz_documents(
     quiz_id: str,
     request: Request,
     q: str,
     limit: int = 10,
+    db: Session = Depends(get_db),
 ):
     """Search documents within a specific quiz"""
     user_id = get_user_id(request)
-    validate_quiz_access(quiz_id, user_id)
+    validate_quiz_access(quiz_id, user_id, db)
 
     # Delegate to main search with quiz_id constraint
     return await search_documents(request, q=q, quiz_id=quiz_id, limit=limit)
 
 
 # Bulk operations
-@router.delete("/documents/{quiz_id}/all")
-async def delete_all_documents(quiz_id: str, request: Request):
+@router.delete("/{quiz_id}/all")
+async def delete_all_documents(
+    quiz_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Delete all documents from a quiz"""
     user_id = get_user_id(request)
-    validate_quiz_access(quiz_id, user_id)
+    validate_quiz_access(quiz_id, user_id, db)
 
     try:
         # Get all documents for the quiz
-        documents = document_service.get_quiz_documents(quiz_id)
+        documents = document_service.get_quiz_documents(quiz_id, db)
         deleted_count = 0
 
         # Delete each document
         for doc in documents:
-            success = document_service.delete_document(doc.doc_id)
+            success = document_service.delete_document(doc.doc_id, db)
             if success:
                 deleted_count += 1
 
@@ -283,6 +287,7 @@ async def delete_all_documents(quiz_id: str, request: Request):
 
         # Log bulk deletion
         log_activity(
+            db,
             user_id,
             "bulk_documents_deleted",
             {"quiz_id": quiz_id, "deleted_count": deleted_count},
@@ -301,14 +306,16 @@ async def delete_all_documents(quiz_id: str, request: Request):
 
 
 # Document information endpoints
-@router.get("/documents/{quiz_id}/{doc_id}/info")
-async def get_document_info(quiz_id: str, doc_id: str, request: Request):
+@router.get("/{quiz_id}/{doc_id}/info")
+async def get_document_info(
+    quiz_id: str, doc_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Get detailed information about a specific document"""
     user_id = get_user_id(request)
-    validate_quiz_access(quiz_id, user_id)
+    validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        document_info = document_service.get_document_status(doc_id)
+        document_info = document_service.get_document_status(doc_id, db)
 
         if not document_info:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -322,14 +329,16 @@ async def get_document_info(quiz_id: str, doc_id: str, request: Request):
         raise HTTPException(status_code=500, detail="Failed to get document info")
 
 
-@router.get("/documents/{quiz_id}/stats")
-async def get_document_stats(quiz_id: str, request: Request):
+@router.get("/{quiz_id}/stats")
+async def get_document_stats(
+    quiz_id: str, request: Request, db: Session = Depends(get_db)
+):
     """Get aggregated statistics about quiz documents"""
     user_id = get_user_id(request)
-    validate_quiz_access(quiz_id, user_id)
+    validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        documents = document_service.get_quiz_documents(quiz_id)
+        documents = document_service.get_quiz_documents(quiz_id, db)
 
         if not documents:
             return {
@@ -369,3 +378,61 @@ async def get_document_stats(quiz_id: str, request: Request):
     except Exception as e:
         logger.error(f"Failed to get document stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get document stats")
+
+
+@router.get("/{quiz_id}/question-estimate")
+async def estimate_max_questions(
+    quiz_id: str,
+    request: Request,
+    ratio: int = 2,  # Default: 2 chunks per question
+    db: Session = Depends(get_db),
+):
+    """Estimate maximum number of questions possible based on document chunks"""
+    user_id = get_user_id(request)
+    quiz = validate_quiz_access(quiz_id, user_id, db)
+
+    if not quiz.collection_name:
+        raise HTTPException(
+            status_code=400, detail="Quiz documents must be indexed first"
+        )
+
+    # Validate ratio parameter
+    if ratio <= 0:
+        raise HTTPException(status_code=400, detail="Ratio must be greater than 0")
+
+    try:
+        # Check if collection exists
+        if not document_service.qdrant_manager.collection_exists(quiz.collection_name):
+            raise HTTPException(status_code=404, detail="Document collection not found")
+
+        # Get chunk count from collection
+        from RAG.Retrieval import RAGRetriever
+
+        retriever = RAGRetriever(quiz.collection_name, document_service.qdrant_manager)
+        total_chunks = retriever.get_chunk_count()
+
+        if total_chunks == 0:
+            return {
+                "quiz_id": quiz_id,
+                "total_chunks": 0,
+                "estimated_max_questions": 0,
+                "ratio_used": ratio,
+                "message": "No chunks available for question generation",
+            }
+
+        # Calculate estimated questions based on provided ratio
+        estimated_questions = max(1, int(total_chunks / ratio))
+
+        return {
+            "quiz_id": quiz_id,
+            "total_chunks": total_chunks,
+            "ratio_used": ratio,
+            "estimated_max_questions": estimated_questions,
+            "calculation": f"{total_chunks} chunks ÷ {ratio} ratio = {estimated_questions} questions",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to estimate questions for quiz {quiz_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to estimate questions")

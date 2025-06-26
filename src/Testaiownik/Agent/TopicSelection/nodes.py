@@ -116,7 +116,7 @@ def _process_batches(
     total_weight = sum(topic["weight"] for topic in all_topics)
     if total_weight > 0:
         for topic in all_topics:
-            topic["weight"] /= total_weight
+            topic["weight"] = round(topic["weight"] / total_weight, 2)
 
 
 # _prepare_history_fields output
@@ -233,12 +233,13 @@ def _consolidate_topics_with_history(
     PLEASE REASSIGN WEIGHTS TO TOPICS, DO NOT USE PREVIOUS WEIGHTS. YOU CAN SUM PREVIOUS WEIGHTS AND REASSIGN THEM PROPORTIONALLY SUMMING TO 1.0.
     """
 
-    consolidation_result = consolidation_llm.invoke(prompt)
+    
+
     topics = consolidation_result.consolidated_topics
-    total_weight = sum(t.weight for t in topics)
+    total_weight = sum(topic["weight"] for topic in all_topics)
     if total_weight > 0:
-        for topic in topics:
-            topic.weight /= total_weight
+        for topic in all_topics:
+            topic["weight"] = round(topic["weight"] / total_weight, 2)
 
     return topics
 
