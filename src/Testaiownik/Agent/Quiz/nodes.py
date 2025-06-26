@@ -137,6 +137,10 @@ def generate_all_questions(
     # 3. Add all generated questions to session
     session.all_generated_questions.extend(all_generated)
 
+    # Reassign unique sequential IDs: q1, q2, q3, ...
+    for idx, question in enumerate(session.all_generated_questions, start=1):
+        question.id = f"q{idx}"
+
     # 4. Create shuffled active question pool
     all_question_ids = [q.id for q in session.all_generated_questions]
     random.shuffle(all_question_ids)  # Shuffle for better question distribution
@@ -526,11 +530,15 @@ Output exactly {count} unique questions following above specifications."""
 
             # Use search_in_collection with the question as query
             if retriever:
-                search_results = retriever.search_in_collection(query=q.question_text, limit=1)  # Search using question text and limit to 1 result
+                search_results = retriever.search_in_collection(
+                    query=q.question_text, limit=1
+                )  # Search using question text and limit to 1 result
 
                 if search_results:
                     # The best match is the first result (since limit=1)
-                    best_match = search_results[0].payload  # Get the metadata of the best match
+                    best_match = search_results[
+                        0
+                    ].payload  # Get the metadata of the best match
 
                     # Retrieve chunk metadata
                     chunk_source = best_match.get("source", "Nieznane źródło")
@@ -551,7 +559,6 @@ Output exactly {count} unique questions following above specifications."""
 
             # Update the explanation with chunk details
             q.explanation = explanation
-
 
             # Validate choices
             if len(q.choices) < 2:

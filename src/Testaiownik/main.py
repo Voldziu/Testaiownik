@@ -12,7 +12,7 @@ from Agent.runner import TestaiownikRunner
 import sys
 
 from RAG.qdrant_manager import QdrantManager
-from RAG.Retrieval.Retriever import RAGRetriever, MockRetriever
+from RAG.Retrieval.Retriever import RAGRetriever
 from utils import logger
 
 
@@ -184,7 +184,7 @@ def main():
     logger.info("Preparing retriever and indexing documents...")
 
     retriever = prepare_retriever(
-        "test_files/zacho-mini.pdf", collection_name="collection_history"
+        collection_name="collection_zacho"
     )  # Pass paths for testing!
 
     # retriever = prepare_retriever(
