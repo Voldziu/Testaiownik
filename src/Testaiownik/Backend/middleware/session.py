@@ -35,7 +35,9 @@ class SessionMiddleware(BaseHTTPMiddleware):
             db = SessionLocal()  # Create a new session for the request
             try:
                 # Create user in database (returns dict now)
+
                 user_data = create_user(db, user_id)
+
                 logger.info(f"Created user: {user_data.user_id}")
 
                 # Add user to request for route handlers

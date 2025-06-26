@@ -310,6 +310,7 @@ def get_documents_by_quiz(db: Session, quiz_id: str) -> List[Document]:
     return db.query(Document).filter(Document.quiz_id == quiz_id).all()
 
 
+
 def update_document_indexed(db: Session, doc_id: str, indexed: bool):
     """Update document indexing status"""
     document = db.query(Document).filter(Document.doc_id == doc_id).first()
