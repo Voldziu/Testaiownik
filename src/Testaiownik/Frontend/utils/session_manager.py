@@ -62,6 +62,23 @@ def set_editing_topic(topic_name: str = None):
     """Set currently editing topic"""
     st.session_state[SessionKeys.EDITING_TOPIC] = topic_name
 
+def are_topics_confirmed() -> bool:
+    """Check if topics have been confirmed"""
+    return st.session_state.get(SessionKeys.TOPICS_CONFIRMED, False)
+
+def set_topics_confirmed(status: bool = True):
+    """Set topics confirmed status"""
+    st.session_state[SessionKeys.TOPICS_CONFIRMED] = status
+
+def are_questions_generated() -> bool:
+    """Check if questions have been generated"""
+    return st.session_state.get(SessionKeys.QUESTIONS_GENERATED, False)
+
+def set_questions_generated(status: bool = True):
+    """Set questions generation status"""
+    st.session_state[SessionKeys.QUESTIONS_GENERATED] = status
+
+
 def reset_quiz_session():
     """Reset all quiz-related session state"""
     keys_to_remove = [
@@ -86,5 +103,9 @@ def get_app_phase() -> str:
         return "indexing_setup"
     elif not are_topics_generated():
         return "topic_generation"
-    else:
+    elif not are_topics_confirmed():  # Check if questions have been confirmed
         return "topic_management"
+    elif not are_questions_generated(): 
+        return "question_generation"
+    else:
+        return "test"

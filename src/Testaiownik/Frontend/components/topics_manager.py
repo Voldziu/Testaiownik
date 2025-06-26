@@ -7,6 +7,7 @@ from utils.session_manager import (
     get_user_id,
     get_quiz_id,
     are_topics_generated,
+    set_topics_confirmed,
     set_topics_generated,
     get_editing_topic,
     set_editing_topic
@@ -21,6 +22,22 @@ from config.settings import (
     DEFAULT_TOPIC_WEIGHT
 )
 from components.status_display import render_topic_generation_status
+
+# Weight mapping for user-friendly labels
+WEIGHT_OPTIONS = {
+    "Niskie": 0.15,
+    "Normalne": 0.30,
+    "Wysokie": 0.50
+}
+
+def get_weight_label_from_value(weight_value: float) -> str:
+    """Convert numeric weight to user-friendly label"""
+    if weight_value <= 0.15:
+        return "Niskie"
+    elif weight_value <= 0.30:
+        return "Normalne"
+    else:
+        return "Wysokie"
 
 def render_topics_manager():
     """Render topics management component"""
@@ -117,6 +134,80 @@ def _render_topic_management():
     
     # Display existing topics
     _render_topics_list(quiz_id)
+    
+    # Add feedback section for all topics
+    _render_feedback_section(quiz_id)
+
+    col1, col2, col3 = st.columns([1, 4, 1])  # 1 - empty space on left and right, 4 - middle space
+    with col2:
+        if st.button("✅ Zatwierdź tematy", use_container_width=True):
+            _confirm_topics(quiz_id)  # Call the API client to confirm topics
+            st.rerun()
+
+def _confirm_topics(quiz_id: str):
+    """Confirm topics and move to next step"""
+    try:
+        api_client = get_api_client(get_user_id())
+        
+        with st.spinner("Zatwierdzanie tematów..."):
+            response = api_client.confirm_topics(quiz_id)
+            
+            if response:
+                st.success("✅ Tematy zostały zatwierdzone!")
+                set_topics_confirmed()
+                st.session_state["app_phase"] = "question_generation"
+                # Move to the next stage (question generation)
+                st.info("Przechodzenie do formularza pytań...")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("❌ Wystąpił problem podczas zatwierdzania tematów")
+                
+    except APIError as e:
+        st.error("❌ Nie udało się zatwierdzić tematów")
+        with st.expander("🔧 Szczegóły błędu", expanded=False):
+            st.write(f"**Status:** {e.status_code}")
+            st.write(f"**Komunikat:** {e.message}")
+    except Exception as e:
+        st.error(f"❌ Nieoczekiwany błąd: {str(e)}")
+
+def _render_feedback_section(quiz_id: str):
+    """Render feedback section for all topics"""
+    st.subheader("📝 Podaj ogólny feedback na temat wszystkich tematów")
+    
+    feedback = st.text_area(
+        "Twoja opinia na temat wygenerowanych tematów", 
+        placeholder="Wprowadź feedback... (np. 'Zrób tematy bardziej ogólne, mniej szczegółowe.')"
+    )
+    
+    if st.button("💬 Prześlij feedback", use_container_width=True):
+        if feedback.strip():
+            _submit_topic_feedback(quiz_id, feedback)
+        else:
+            st.warning("⚠️ Feedback nie może być pusty!")
+
+def _submit_topic_feedback(quiz_id: str, feedback: str):
+    """Submit feedback to backend for all topics"""
+    try:
+        api_client = get_api_client(get_user_id())
+        
+        with st.spinner("Wysyłanie feedbacku..."):
+            response = api_client.submit_topic_feedback(quiz_id, feedback)
+            
+            if response:
+                st.success("✅ Feedback został przesłany! Tematy zostaną wygenerowane ponownie.")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("❌ Wystąpił problem podczas wysyłania feedbacku")
+                
+    except APIError as e:
+        st.error("❌ Nie udało się wysłać feedbacku")
+        with st.expander("🔧 Szczegóły błędu", expanded=False):
+            st.write(f"**Status:** {e.status_code}")
+            st.write(f"**Komunikat:** {e.message}")
+    except Exception as e:
+        st.error(f"❌ Nieoczekiwany błąd: {str(e)}")
 
 def _render_add_topic_section(quiz_id: str):
     """Render add new topic section"""
@@ -124,29 +215,27 @@ def _render_add_topic_section(quiz_id: str):
     
     with st.expander("Dodaj własny temat", expanded=False):
         with st.form("add_topic_form"):
-            col1, col2 = st.columns([2, 1])
+            new_topic_name = st.text_input(
+                "Nazwa tematu",
+                placeholder="np. Podstawy programowania",
+                help="Wprowadź nazwę nowego tematu"
+            )
             
-            with col1:
-                new_topic_name = st.text_input(
-                    "Nazwa tematu",
-                    placeholder="np. Podstawy programowania",
-                    help="Wprowadź nazwę nowego tematu"
-                )
-            
-            with col2:
-                new_topic_weight = st.slider(
-                    "Waga tematu",
-                    min_value=MIN_TOPIC_WEIGHT,
-                    max_value=MAX_TOPIC_WEIGHT,
-                    value=DEFAULT_TOPIC_WEIGHT,
-                    help="Wyższa waga = więcej pytań z tego tematu"
-                )
+            st.write("**Znaczenie tematu:**")
+            new_topic_weight_label = st.radio(
+                "Wybierz znaczenie tematu", 
+                options=list(WEIGHT_OPTIONS.keys()), 
+                index=1,  # Default to "Normalne"
+                help="Niskie - mniej pytań, Normalne - standardowo, Wysokie - więcej pytań",
+                horizontal=True
+            )
             
             # Form submit button
             submitted = st.form_submit_button("➕ Dodaj temat", type="primary", use_container_width=True)
             
             if submitted:
                 if new_topic_name.strip():
+                    new_topic_weight = WEIGHT_OPTIONS[new_topic_weight_label]
                     _add_new_topic(quiz_id, new_topic_name.strip(), new_topic_weight)
                 else:
                     st.error("⚠️ Nazwa tematu nie może być pusta!")
@@ -166,8 +255,7 @@ def _render_topics_list(quiz_id: str):
         st.subheader(f"📋 Lista tematów ({len(suggested_topics)})")
         
         # Topics summary
-        total_weight = sum(topic.get('weight', 1.0) for topic in suggested_topics)
-        st.write(f"**Całkowita waga wszystkich tematów:** {total_weight:.1f}")
+        st.write(f"**Łączna liczba tematów:** {len(suggested_topics)}")
         
         # Topics list
         for i, topic in enumerate(suggested_topics):
@@ -203,9 +291,11 @@ def _render_topic_display_mode(quiz_id: str, topic_name: str, topic_weight: floa
     
     with col1:
         # Topic info with visual indicators
-        weight_indicator = "🔥" if topic_weight > 5.0 else "⭐" if topic_weight > 2.0 else "📝"
+        weight_label = get_weight_label_from_value(topic_weight)
+        weight_indicator = "🔥" if weight_label == "Wysokie" else "⭐" if weight_label == "Normalne" else "📝"
+        
         st.write(f"{weight_indicator} **{topic_name}**")
-        st.caption(f"Waga: {topic_weight:.1f}")
+        st.caption(f"Znaczenie: {weight_label}")
     
     with col2:
         # Edit button
@@ -218,7 +308,6 @@ def _render_topic_display_mode(quiz_id: str, topic_name: str, topic_weight: floa
         if st.button("🗑️ Usuń", key=f"delete_{topic_name}_{index}", use_container_width=True):
             _delete_topic(quiz_id, topic_name)    
 
-
 def _render_topic_edit_mode(quiz_id: str, topic_name: str, current_weight: float):
     """Render topic in edit mode"""
     st.write(f"**✏️ Edytujesz temat:** {topic_name}")
@@ -230,51 +319,50 @@ def _render_topic_edit_mode(quiz_id: str, topic_name: str, current_weight: float
     if edit_name_key not in st.session_state:
         st.session_state[edit_name_key] = topic_name
     if edit_weight_key not in st.session_state:
-        st.session_state[edit_weight_key] = current_weight
+        st.session_state[edit_weight_key] = get_weight_label_from_value(current_weight)
     
-    col1, col2 = st.columns([2, 1])
+    new_name = st.text_input(
+        "Nowa nazwa tematu",
+        value=st.session_state[edit_name_key],
+        key=f"name_input_{topic_name}",
+        help="Wprowadź nową nazwę tematu"
+    )
+    st.session_state[edit_name_key] = new_name
     
-    with col1:
-        new_name = st.text_input(
-            "Nowa nazwa tematu",
-            value=st.session_state[edit_name_key],
-            key=f"name_input_{topic_name}",
-            help="Wprowadź nową nazwę tematu"
-        )
-        st.session_state[edit_name_key] = new_name
-        
-        new_weight = st.slider(
-            "Nowa waga",
-            min_value=MIN_TOPIC_WEIGHT,
-            max_value=MAX_TOPIC_WEIGHT,
-            value=st.session_state[edit_weight_key],
-            key=f"weight_input_{topic_name}",
-            help="Wyższa waga = więcej pytań z tego tematu"
-        )
-        st.session_state[edit_weight_key] = new_weight
+    st.write("**Znaczenie tematu:**")
+    current_weight_label = get_weight_label_from_value(current_weight)
+    current_index = list(WEIGHT_OPTIONS.keys()).index(current_weight_label)
     
-    with col2:
-        st.write("")  # Spacer for alignment
-        st.write("")  # Spacer for alignment
-        
-        # Action buttons
-        col_confirm, col_cancel = st.columns(2)
-        
-        with col_confirm:
-            if st.button("✅ Zatwierdź", key=f"confirm_{topic_name}", use_container_width=True):
-                if new_name.strip():
-                    _update_topic(quiz_id, topic_name, new_name.strip(), new_weight)
-                    _clear_edit_state(topic_name)
-                    set_editing_topic(None)
-                    st.rerun()
-                else:
-                    st.error("⚠️ Nazwa tematu nie może być pusta!")
-        
-        with col_cancel:
-            if st.button("❌ Anuluj", key=f"cancel_{topic_name}", use_container_width=True):
+    new_weight_label = st.radio(
+        "Wybierz znaczenie tematu", 
+        options=list(WEIGHT_OPTIONS.keys()), 
+        index=current_index,
+        key=f"weight_input_{topic_name}",
+        help="Niskie - mniej pytań, Normalne - standardowo, Wysokie - więcej pytań",
+        horizontal=True
+    )
+    
+    st.session_state[edit_weight_key] = new_weight_label
+    
+    # Action buttons
+    col_confirm, col_cancel = st.columns(2)
+    
+    with col_confirm:
+        if st.button("✅ Zatwierdź", key=f"confirm_{topic_name}", use_container_width=True):
+            if new_name.strip():
+                new_weight_value = WEIGHT_OPTIONS[st.session_state[edit_weight_key]]
+                _update_topic(quiz_id, topic_name, new_name.strip(), new_weight_value)
                 _clear_edit_state(topic_name)
                 set_editing_topic(None)
                 st.rerun()
+            else:
+                st.error("⚠️ Nazwa tematu nie może być pusta!")
+    
+    with col_cancel:
+        if st.button("❌ Anuluj", key=f"cancel_{topic_name}", use_container_width=True):
+            _clear_edit_state(topic_name)
+            set_editing_topic(None)
+            st.rerun()
 
 def _start_topic_generation(num_topics: int):
     """Start topic generation process"""
@@ -347,7 +435,6 @@ def _update_topic(quiz_id: str, old_name: str, new_name: str, new_weight: float)
     except Exception as e:
         st.error(f"❌ Nieoczekiwany błąd: {str(e)}")
 
-
 def _delete_topic(quiz_id: str, topic_name: str):
     try:
         api_client = get_api_client(get_user_id())
@@ -376,7 +463,6 @@ def _delete_topic(quiz_id: str, topic_name: str):
             st.write(f"**Komunikat:** {e.message}")
     except Exception as e:
         st.error(f"❌ Nieoczekiwany błąd: {str(e)}")
-
 
 def _clear_edit_state(topic_name: str):
     """Clear edit state from session"""

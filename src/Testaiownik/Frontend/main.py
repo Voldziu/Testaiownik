@@ -1,6 +1,7 @@
 # main.py
 
 import streamlit as st
+from components.questions_manager import render_questions_manager
 from utils.session_manager import (
     get_app_phase,
     init_user_id
@@ -29,6 +30,9 @@ def main():
     
     elif phase in ["topic_generation", "topic_management"]:
         render_topics_manager()
+
+    elif phase == "question_generation":
+        render_questions_manager()
     
     else:
         st.error("Nieznany stan aplikacji. Spróbuj odświeżyć stronę.")

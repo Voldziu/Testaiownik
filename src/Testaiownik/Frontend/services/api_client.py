@@ -110,6 +110,37 @@ class QuizAPIClient:
             headers=self.headers
         )
         return self._handle_response(response)
+    
+    def submit_topic_feedback(self, quiz_id: str, feedback: str) -> Dict[str, Any]:
+        """Submit feedback for all topics"""
+        response = requests.post(
+            f"{BASE_URL}/api/topics/{quiz_id}/feedback",  # Endpoint to send feedback
+            json={"user_input": feedback},  # Sending feedback data
+            headers=self.headers
+        )
+        return self._handle_response(response)
+    
+    def confirm_topics(self, quiz_id: str) -> Dict[str, Any]:
+        """Confirm selected topics"""
+        response = requests.post(
+            f"{BASE_URL}/api/topics/{quiz_id}/confirm",
+            headers=self.headers
+        )
+        return self._handle_response(response)
+    
+    def start_quiz(self, quiz_id: str, total_questions: int, user_questions: List[str], difficulty: str) -> Dict[str, Any]:
+        """Start quiz execution with the user-defined settings"""
+        data = {
+            "total_questions": total_questions,
+            "user_questions": user_questions,
+            "difficulty": difficulty
+        }
+        response = requests.post(
+            f"{BASE_URL}/api/quiz/{quiz_id}/start",
+            json=data,
+            headers=self.headers
+        )
+        return self._handle_response(response)
 
 # Convenience function to get API client
 def get_api_client(user_id: str) -> QuizAPIClient:

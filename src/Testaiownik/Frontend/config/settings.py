@@ -34,3 +34,5 @@ class SessionKeys:
     INDEXING_STARTED = "indexing_started"
     TOPICS_GENERATED = "topics_generated"
     EDITING_TOPIC = "editing_topic"
+    TOPICS_CONFIRMED = "topics_confirmed"  
+    QUESTIONS_GENERATED = "questions generated"
