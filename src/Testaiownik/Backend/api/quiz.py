@@ -19,6 +19,7 @@ from ..models.responses import (
     QuizCurrentResponse,
     QuizAnswerResponse,
     QuizResultsResponse,
+    ExplanationResponse,
 )
 from ..database.crud import (
     create_quiz,
@@ -465,3 +466,32 @@ async def get_quiz_progress(
     except Exception as e:
         logger.error(f"Failed to get quiz progress: {e}")
         raise HTTPException(status_code=500, detail="Failed to get quiz progress")
+
+
+@router.get("/{quiz_id}/explanation/{question_id}", response_model=ExplanationResponse)
+async def get_explanation_context(
+    quiz_id: str,
+    question_id: str,
+    request: Request,
+    limit: int = 2,
+    db: Session = Depends(get_db),
+):
+    """Get explanation context from vector store for specific question"""
+    user_id = get_user_id(request)
+    validate_quiz_access(quiz_id, user_id, db)
+
+    try:
+        explanation_context = quiz_service.get_explanation_context(
+            document_service, quiz_id, question_id, limit, db
+        )
+
+        if not explanation_context:
+            raise HTTPException(status_code=404, detail="Explanation context not found")
+
+        return ExplanationResponse(**explanation_context)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get explanation context: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get explanation context")

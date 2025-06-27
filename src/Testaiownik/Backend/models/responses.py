@@ -282,3 +282,17 @@ class SearchResponse(BaseResponse):
     results: List[SearchResultItem]
     total_results: int
     search_time_ms: int
+
+
+class SourceChunk(BaseModel):
+    text: str
+    source: str
+    page: Optional[int] = None
+    relevance_score: float
+
+
+class ExplanationResponse(BaseModel):
+    question_id: str
+    explanation: str
+    source_chunks: List[SourceChunk]
+    additional_context: str

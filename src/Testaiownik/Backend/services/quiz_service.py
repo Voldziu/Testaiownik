@@ -1,5 +1,5 @@
 # src/Testaiownik/Backend/services/quiz_service.py
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import asyncio
 
 import uuid
@@ -1600,3 +1600,58 @@ class QuizService:
             slide=source_metadata_data.get("slide"),
             chunk_text=source_metadata_data.get("chunk_text"),
         )
+
+    def get_explanation_context(
+        self, document_service, quiz_id: str, question_id: str, limit: int, db: Session
+    ) -> Optional[Dict[str, Any]]:
+        """Get explanation context from vector store for specific question"""
+        try:
+            quiz = get_quiz(db, quiz_id)
+            if not quiz:
+                return None
+
+            if not quiz.questions_data or not quiz.questions_data.get(
+                "all_generated_questions"
+            ):
+                return None
+
+            # Find the specific question by ID
+            question_data = None
+            for q in quiz.questions_data.get("all_generated_questions", []):
+                if q.get("id") == question_id:
+                    question_data = q
+                    break
+
+            if not question_data:
+                return None
+
+            if not question_data.get("explanation"):
+                return None
+
+            search_result = document_service.search_documents(
+                query=question_data["explanation"],
+                quiz_id=quiz_id,
+                limit=limit,  # Return 1-2 most relevant chunks
+            )
+
+            source_chunks = []
+            for result in search_result["results"]:
+                source_chunks.append(
+                    {
+                        "text": result["text"],
+                        "source": result["source"],
+                        "page": result.get("page"),
+                        "relevance_score": result["relevance_score"],
+                    }
+                )
+
+            return {
+                "question_id": question_id,
+                "explanation": question_data["explanation"],
+                "source_chunks": source_chunks,
+                "additional_context": question_data.get("topic", ""),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get explanation context: {e}")
+            return None

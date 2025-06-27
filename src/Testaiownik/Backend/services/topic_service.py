@@ -58,7 +58,7 @@ class TopicService:
             normalized_topics = self.normalize_weights(current_topics)
 
             # Update database
-            update_topic_data(quiz_id, suggested_topics=normalized_topics)
+            update_topic_data(db, quiz_id, suggested_topics=normalized_topics)
 
             log_activity(
                 db,
