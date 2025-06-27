@@ -1,10 +1,10 @@
 # src/Testaiownik/Backend/services/topic_service.py
-from typing import List, Dict, Any, Optional
-import json
+from typing import List, Dict, Optional
+
 from sqlalchemy.orm import Session
 
 from ..models.responses import TopicUpdateResponse
-from Agent.Shared import WeightedTopic
+
 from ..database.crud import get_quiz, update_topic_data, log_activity
 
 from utils import logger
@@ -58,7 +58,7 @@ class TopicService:
             normalized_topics = self.normalize_weights(current_topics)
 
             # Update database
-            update_topic_data(quiz_id, suggested_topics=normalized_topics)
+            update_topic_data(db, quiz_id, suggested_topics=normalized_topics)
 
             log_activity(
                 db,

@@ -145,6 +145,15 @@ class QuestionChoice(BaseModel):
     is_correct: bool
 
 
+class SourceMetadata(BaseModel):
+    """Metadata about the source document/chunk used for question generation"""
+
+    source: str
+    page: Optional[int] = None
+    slide: Optional[int] = None
+    chunk_text: Optional[str] = None
+
+
 class QuestionResponse(BaseModel):
     id: str
     topic: str
@@ -152,6 +161,7 @@ class QuestionResponse(BaseModel):
     choices: List[QuestionChoice]
     is_multi_choice: bool
     difficulty: str
+    source_metadata: Optional[SourceMetadata] = None
 
 
 class QuizProgressResponse(BaseModel):
@@ -272,3 +282,17 @@ class SearchResponse(BaseResponse):
     results: List[SearchResultItem]
     total_results: int
     search_time_ms: int
+
+
+class SourceChunk(BaseModel):
+    text: str
+    source: str
+    page: Optional[int] = None
+    relevance_score: float
+
+
+class ExplanationResponse(BaseModel):
+    question_id: str
+    explanation: str
+    source_chunks: List[SourceChunk]
+    additional_context: str

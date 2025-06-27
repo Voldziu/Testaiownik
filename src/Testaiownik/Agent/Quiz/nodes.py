@@ -11,6 +11,7 @@ from .models import (
     UserAnswer,
     WeightedTopic,
     UserQuestionResponse,
+    SourceMetadata,
 )
 from RAG.Retrieval import DocumentRetriever
 
@@ -351,7 +352,10 @@ def finalize_results(state: QuizState) -> QuizState:
 
 # TODO: optimze calling llm (batch it)
 def _process_user_questions(
-    user_questions: List[str], topics: List[WeightedTopic], difficulty: str
+    user_questions: List[str],
+    topics: List[WeightedTopic],
+    difficulty: str,
+    retriever: DocumentRetriever = None,
 ) -> List[Question]:
     """Process user-provided questions into Question objects"""
     if not user_questions:
@@ -378,6 +382,14 @@ Determine:
 3. Whether this question allows multiple correct answers (is_multi_choice)
 4. Detailed explanation of why the answer(s) are correct
 5. Which topic from the available list best fits this question
+
+Quality Standards:
+- {difficulty}-appropriate content
+- Questions can't be general, they must be very specific.
+- Clear question wording
+- Test comprehension over memorization
+- Provide realistic answer options
+
 
 For simple True/False questions:
 - Provide exactly 2 options: the correct answer and its opposite
@@ -406,6 +418,24 @@ Provide structured response."""
             if len(choices) < 2:
                 choices.append(QuestionChoice(text="False", is_correct=False))
 
+            # Search for relevant document context using the user's question
+            source_metadata = None
+            if retriever:
+                search_results = retriever.search_in_collection(
+                    query=question_text, limit=1
+                )  # Search using user's question text
+
+                if search_results:
+                    # Get metadata from the best matching document chunk
+                    best_match = search_results[0].payload
+
+                    source_metadata = SourceMetadata(
+                        source=best_match.get("source", "Unknown source"),
+                        page=best_match.get("page", None),
+                        slide=best_match.get("slide", None),
+                        chunk_text=best_match.get("text", None),
+                    )
+
             question = Question(
                 topic=response.assigned_topic,
                 question_text=question_text,
@@ -413,6 +443,7 @@ Provide structured response."""
                 explanation=response.explanation,
                 difficulty=difficulty,
                 is_multi_choice=response.is_multi_choice,
+                source_metadata=source_metadata,
             )
 
             processed_questions.append(question)
@@ -420,7 +451,26 @@ Provide structured response."""
 
         except Exception as e:
             logger.error(f"Failed to process user question '{question_text}': {e}")
-            # Create fallback question
+            # Create fallback question - also try to get source metadata
+            fallback_source_metadata = None
+            if retriever:
+                try:
+                    search_results = retriever.search_in_collection(
+                        query=question_text, limit=1
+                    )
+                    if search_results:
+                        best_match = search_results[0].payload
+                        fallback_source_metadata = SourceMetadata(
+                            source=best_match.get("source", "Nieznane źródło"),
+                            page=best_match.get("page", None),
+                            slide=best_match.get("slide", None),
+                            chunk_text=best_match.get("text", None),
+                        )
+                except Exception as search_error:
+                    logger.warning(
+                        f"Could not get source metadata for fallback question: {search_error}"
+                    )
+
             fallback_question = Question(
                 topic=available_topics[0] if available_topics else "General",
                 question_text=question_text,
@@ -431,6 +481,7 @@ Provide structured response."""
                 explanation="This question was provided by the user. Please verify the answer.",
                 difficulty=difficulty,
                 is_multi_choice=False,
+                source_metadata=fallback_source_metadata,
             )
             processed_questions.append(fallback_question)
 
@@ -525,8 +576,8 @@ Output exactly {count} unique questions following above specifications."""
             q.topic = topic
             q.difficulty = difficulty
 
-            # Create explanation with chunk metadata
-            explanation = "Explanation generated from the context:\n"
+            # Initialize source metadata as None
+            source_metadata = None
 
             # Use search_in_collection with the question as query
             if retriever:
@@ -536,48 +587,24 @@ Output exactly {count} unique questions following above specifications."""
 
                 if search_results:
                     # The best match is the first result (since limit=1)
-                    best_match = search_results[
-                        0
-                    ].payload  # Get the metadata of the best match
+                    best_match = search_results[0].payload
 
-                    # Retrieve chunk metadata
-                    chunk_source = best_match.get("source", "Nieznane źródło")
-                    page = best_match.get("page", None)
-                    slide = best_match.get("slide", None)
+                    # Create source metadata object
+                    source_metadata = SourceMetadata(
+                        source=best_match.get("source", "Unknown source"),
+                        page=best_match.get("page", None),
+                        slide=best_match.get("slide", None),
+                        chunk_text=best_match.get(
+                            "text", None
+                        ),  # Store original chunk text
+                    )
 
-                    # Add chunk metadata to explanation
-                    explanation += f"\nŹródło: {chunk_source}"
+            # Assign the metadata to the question
+            q.source_metadata = source_metadata
+            logger.debug(f"Source metadata: {source_metadata}")
 
-                    # Add page or slide if available
-                    if page:
-                        explanation += f"\nStrona (PDF): {page}"
-                    elif slide:
-                        explanation += f"\nSlajd (PPTX): {slide}"
-
-            # Adding the original explanation from the LLM
-            explanation += f"\n\nOriginal explanation: {q.explanation}"
-
-            # Update the explanation with chunk details
-            q.explanation = explanation
-
-            # Validate choices
-            if len(q.choices) < 2:
-                logger.warning(
-                    f"Question has fewer than 2 choices, adding fallback choices"
-                )
-                q.choices.extend(
-                    [
-                        QuestionChoice(text="Option A True", is_correct=True),
-                        QuestionChoice(text="Option B False", is_correct=False),
-                    ]
-                )
-
-            # Ensure at least one correct answer
-            if not any(choice.is_correct for choice in q.choices):
-                logger.warning(
-                    f"Question has no correct answer, marking first as correct"
-                )
-                q.choices[0].is_correct = True
+            # Keep the original LLM explanation clean - no metadata concatenation
+            # q.explanation remains as generated by the LLM
 
             questions.append(q)
 

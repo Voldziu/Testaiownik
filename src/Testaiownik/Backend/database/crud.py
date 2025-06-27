@@ -11,20 +11,34 @@ from .models import User, Quiz, Document, ActivityLog
 # User Operations
 def create_user(db: Session, user_id: str) -> User:
     """Create new user"""
-    user = User(user_id=user_id)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        user = User(user_id=user_id)
+        db.add(user)
+        db.commit()
 
-    _ = (
-        user.user_id,
-        user.created_at,
-        user.last_activity,
-        user.quizzes,
-    )  ## Unpack to avoid weird 500 errors
-    log_activity(db, user_id, "user_created")
-    db.expunge(user)  # Remove from session to avoid stale data issues
-    return user
+        if user in db:
+            db.refresh(user)
+        else:
+
+            user = db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                raise Exception(f"Failed to create user {user_id}")
+
+        _ = (
+            user.user_id,
+            user.created_at,
+            user.last_activity,
+            user.quizzes,
+        )  ## Unpack to avoid weird 500 errors
+
+        log_activity(db, user_id, "user_created")
+        # db.expunge(user)
+        return user
+
+    except Exception as e:
+        db.rollback()
+
+        raise
 
 
 def get_user(db: Session, user_id: str) -> Optional[User]:
@@ -213,6 +227,7 @@ def start_quiz_execution(
 def update_quiz_progress(db: Session, quiz_id: str, **kwargs):
     """Update quiz execution progress"""
     quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+
     if quiz:
         execution_fields = [
             "current_question_index",
@@ -257,6 +272,37 @@ def reset_quiz_execution(db: Session, quiz_id: str):
         quiz.quiz_started_at = None
         quiz.quiz_completed_at = None
         quiz.updated_at = datetime.now()
+        db.commit()
+        return True
+    return False
+
+
+def soft_reset_quiz_execution(db: Session, quiz_id: str):
+    """Reset quiz progress but preserve questions and topics"""
+    quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
+    if quiz:
+        # Preserve: questions_data, total_questions, difficulty, confirmed_topics
+        # Reset: user progress, current position, timing, state
+
+        quiz.status = "quiz_active"  # Ready to start with existing questions
+        quiz.current_question_index = 0  # Reset to first question
+        quiz.user_answers = []  # Clear all user answers/progress
+        quiz.langgraph_quiz_state = (
+            None  # Reset session state (questions will be restored)
+        )
+
+        # Reset timing but preserve question generation completion
+        quiz.quiz_started_at = None
+        quiz.quiz_completed_at = None
+        quiz.updated_at = datetime.now()
+
+        # Note: Keep these fields unchanged:
+        # - questions_data (preserve generated questions)
+        # - total_questions (preserve question count)
+        # - difficulty (preserve difficulty setting)
+        # - confirmed_topics (preserve topic configuration)
+        # - topic_analysis_completed_at (preserve topic completion time)
+
         db.commit()
         return True
     return False
@@ -308,7 +354,6 @@ def create_document(
 def get_documents_by_quiz(db: Session, quiz_id: str) -> List[Document]:
     """Get all documents for quiz"""
     return db.query(Document).filter(Document.quiz_id == quiz_id).all()
-
 
 
 def update_document_indexed(db: Session, doc_id: str, indexed: bool):

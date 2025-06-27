@@ -233,7 +233,7 @@ def _consolidate_topics_with_history(
     PLEASE REASSIGN WEIGHTS TO TOPICS, DO NOT USE PREVIOUS WEIGHTS. YOU CAN SUM PREVIOUS WEIGHTS AND REASSIGN THEM PROPORTIONALLY SUMMING TO 1.0.
     """
 
-    
+    consolidation_result = consolidation_llm.invoke(prompt)
 
     topics = consolidation_result.consolidated_topics
     total_weight = sum(topic["weight"] for topic in all_topics)
@@ -242,6 +242,7 @@ def _consolidate_topics_with_history(
             topic["weight"] = round(topic["weight"] / total_weight, 2)
 
     return topics
+
 
 def analyze_documents(
     state: AgentState,

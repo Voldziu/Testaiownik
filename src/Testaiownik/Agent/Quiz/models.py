@@ -11,6 +11,17 @@ class QuestionChoice(BaseModel):
     is_correct: bool = Field(description="Whether this choice is correct")
 
 
+class SourceMetadata(BaseModel):
+    """Metadata about the source document/chunk used for question generation"""
+
+    source: str = Field(description="Source document name")
+    page: Optional[int] = Field(default=None, description="Page number (for PDFs)")
+    slide: Optional[int] = Field(default=None, description="Slide number (for PPTX)")
+    chunk_text: Optional[str] = Field(
+        default=None, description="Original chunk text used"
+    )
+
+
 class Question(BaseModel):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()), description="Unique question ID"
@@ -29,6 +40,9 @@ class Question(BaseModel):
     )
     generated_at: datetime = Field(
         default_factory=datetime.now, description="When question was generated"
+    )
+    source_metadata: Optional[SourceMetadata] = Field(
+        default=None, description="Metadata about source document/chunk"
     )
 
     def get_correct_indices(self) -> List[int]:

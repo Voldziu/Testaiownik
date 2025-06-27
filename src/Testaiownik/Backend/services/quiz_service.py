@@ -1,15 +1,16 @@
 # src/Testaiownik/Backend/services/quiz_service.py
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional, Any
 import asyncio
-import json
+
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from Agent.runner import TestaiownikRunner
-from Agent.TopicSelection import create_agent_graph, AgentState
-from Agent.Quiz import create_quiz_graph, create_initial_quiz_state, QuizState
+
+from Agent.TopicSelection import create_agent_graph
+from Agent.Quiz import create_quiz_graph, create_initial_quiz_state
 from Agent.Shared import WeightedTopic
+from Agent.Quiz.models import SourceMetadata as AgentSourceMetadata
 from RAG.Retrieval import RAGRetriever
 from RAG.qdrant_manager import QdrantManager
 
@@ -23,7 +24,7 @@ from ..database.crud import (
     complete_quiz,
     log_activity,
 )
-from ..database.sql_database_connector import SessionLocal
+
 from ..models.responses import (
     QuizCurrentResponse,
     QuizAnswerResponse,
@@ -33,6 +34,7 @@ from ..models.responses import (
     QuizProgressResponse,
     QuizResults,
     TopicScore,
+    SourceMetadata,
 )
 from utils import logger
 
@@ -200,6 +202,7 @@ class QuizService:
             except Exception as e:
                 logger.warning(f"Failed to serialize key '{key}': {e}")
                 result[key] = str(value)
+        logger.debug(f"Succesfully serialized dict: {result}")
         return result
 
     def _serialize_value(self, value):
@@ -623,25 +626,57 @@ class QuizService:
 
     def _serialize_question(self, question) -> Dict:
         """Serialize Question object for database storage"""
+
+        # Try using model_dump() for Pydantic models first
+        logger.debug(f"Serializing question: {question}")
         if hasattr(question, "model_dump"):
             data = question.model_dump()
             # Convert datetime to string
             if "generated_at" in data and hasattr(data["generated_at"], "isoformat"):
                 data["generated_at"] = data["generated_at"].isoformat()
+
+            logger.debug(f"hasattr MODEL DUMP data : {data}")
             return data
+
         elif hasattr(question, "dict"):
             data = question.dict()
             # Convert datetime to string
             if "generated_at" in data and hasattr(data["generated_at"], "isoformat"):
                 data["generated_at"] = data["generated_at"].isoformat()
+            logger.debug(f"hasattr DICT data: {data}")
             return data
         else:
+
+            logger.debug("Manual serialization of the question..")
             # Manual serialization if needed
             generated_at = getattr(question, "generated_at", datetime.now())
             generated_at_str = (
                 generated_at.isoformat()
                 if hasattr(generated_at, "isoformat")
                 else str(datetime.now())
+            )
+
+            # Handle source_metadata serialization
+            source_metadata = getattr(question, "source_metadata", None)
+            serialized_source_metadata = None
+
+            if source_metadata:
+                if hasattr(source_metadata, "model_dump"):
+                    serialized_source_metadata = source_metadata.model_dump()
+                elif hasattr(source_metadata, "dict"):
+                    serialized_source_metadata = source_metadata.dict()
+                elif isinstance(source_metadata, dict):
+                    serialized_source_metadata = source_metadata
+                else:
+                    # Convert to dict format
+                    serialized_source_metadata = {
+                        "source": getattr(source_metadata, "source", "Unknown"),
+                        "page": getattr(source_metadata, "page", None),
+                        "slide": getattr(source_metadata, "slide", None),
+                        "chunk_text": getattr(source_metadata, "chunk_text", None),
+                    }
+            logger.debug(
+                f"Serialized source metadata after serialization: {serialized_source_metadata}"
             )
 
             return {
@@ -659,6 +694,7 @@ class QuizService:
                 "difficulty": getattr(question, "difficulty", "medium"),
                 "is_multi_choice": getattr(question, "is_multi_choice", False),
                 "generated_at": generated_at_str,
+                "source_metadata": serialized_source_metadata,
             }
 
     def get_quiz_progress(self, quiz) -> Dict:
@@ -879,6 +915,16 @@ class QuizService:
                 for choice in current_question_data.get("choices", [])
             ]
 
+            logger.debug(
+                f"Get current question question.source_metadata: {current_question_data['source_metadata']}"
+            )
+
+            source_metadata = self._parse_source_metadata(
+                current_question_data.get("source_metadata")
+            )
+
+            logger.debug(f"Get current question source_metadata: {source_metadata}")
+
             current_question = QuestionResponse(
                 id=current_question_data.get("id"),
                 topic=current_question_data.get("topic"),
@@ -886,6 +932,7 @@ class QuizService:
                 choices=choices,
                 is_multi_choice=current_question_data.get("is_multi_choice", False),
                 difficulty=current_question_data.get("difficulty", "medium"),
+                source_metadata=source_metadata,
             )
 
             # Calculate progress
@@ -931,6 +978,19 @@ class QuizService:
                 for choice in question.choices
             ]
 
+            logger.debug(f"Question: {question}")
+
+            source_metadata = None
+            logger.debug(
+                f"Source_metadata from question.source_metadata: {question.source_metadata}"
+            )
+            if hasattr(question, "source_metadata") and question.source_metadata:
+                source_metadata = self._parse_source_metadata(question.source_metadata)
+
+            logger.debug(
+                f"Source metadata from _format_current_question_response: {source_metadata}"
+            )
+
             current_question = QuestionResponse(
                 id=question.id,
                 topic=question.topic,
@@ -938,6 +998,7 @@ class QuizService:
                 choices=choices,
                 is_multi_choice=question.is_multi_choice,
                 difficulty=question.difficulty,
+                source_metadata=source_metadata,
             )
 
             # Calculate progress from quiz session
@@ -1527,3 +1588,70 @@ class QuizService:
         except Exception as e:
             logger.error(f"Failed to resume quiz: {e}")
             return False
+
+    def _parse_source_metadata(self, source_metadata_data) -> Optional[SourceMetadata]:
+        """Convert source metadata from dict/object to SourceMetadata instance"""
+        if not source_metadata_data:
+            return None
+
+        return SourceMetadata(
+            source=source_metadata_data.get("source", "Unknown"),
+            page=source_metadata_data.get("page"),
+            slide=source_metadata_data.get("slide"),
+            chunk_text=source_metadata_data.get("chunk_text"),
+        )
+
+    def get_explanation_context(
+        self, document_service, quiz_id: str, question_id: str, limit: int, db: Session
+    ) -> Optional[Dict[str, Any]]:
+        """Get explanation context from vector store for specific question"""
+        try:
+            quiz = get_quiz(db, quiz_id)
+            if not quiz:
+                return None
+
+            if not quiz.questions_data or not quiz.questions_data.get(
+                "all_generated_questions"
+            ):
+                return None
+
+            # Find the specific question by ID
+            question_data = None
+            for q in quiz.questions_data.get("all_generated_questions", []):
+                if q.get("id") == question_id:
+                    question_data = q
+                    break
+
+            if not question_data:
+                return None
+
+            if not question_data.get("explanation"):
+                return None
+
+            search_result = document_service.search_documents(
+                query=question_data["explanation"],
+                quiz_id=quiz_id,
+                limit=limit,  # Return 1-2 most relevant chunks
+            )
+
+            source_chunks = []
+            for result in search_result["results"]:
+                source_chunks.append(
+                    {
+                        "text": result["text"],
+                        "source": result["source"],
+                        "page": result.get("page"),
+                        "relevance_score": result["relevance_score"],
+                    }
+                )
+
+            return {
+                "question_id": question_id,
+                "explanation": question_data["explanation"],
+                "source_chunks": source_chunks,
+                "additional_context": question_data.get("topic", ""),
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get explanation context: {e}")
+            return None
