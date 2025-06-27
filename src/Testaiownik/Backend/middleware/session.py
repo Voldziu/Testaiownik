@@ -1,13 +1,10 @@
 # src/Testaiownik/Backend/middleware/session.py
-from fastapi import Request, Response, HTTPException
+from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 import uuid
-from datetime import datetime
-from sqlalchemy.orm import Session
-from fastapi import Depends
 
 from ..database.crud import create_user, get_user, update_user_activity
-from ..database.sql_database_connector import SessionLocal
+from ..database.sql_database_connector import SessionLocal, get_db
 from utils import logger
 
 
@@ -57,15 +54,15 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 db.close()
 
         # Validate existing user
-        db = SessionLocal()
+        db = next(get_db())
         try:
-            logger.debug(f"Validating existing user: {user_id}")
+            logger.debug(f"Validating user: {user_id}")
             user_data = get_user(db, user_id)  # Returns dict or None
 
             if not user_data:  # User doesn't exist
                 logger.info(f"User {user_id} not found, creating...")
                 user_data = create_user(db, user_id)
-                logger.info(f"Created missing user: {user_data['user_id']}")
+                logger.info(f"Created missing user: {user_data.user_id}")
             else:
                 # Update last activity for existing user
                 logger.debug(f"User {user_id} found, updating activity...")
@@ -84,5 +81,3 @@ class SessionMiddleware(BaseHTTPMiddleware):
             raise HTTPException(
                 status_code=401, detail=f"User validation failed: {str(e)}"
             )
-        finally:
-            db.close()

@@ -1,12 +1,11 @@
 # src/Testaiownik/Backend/services/document_service.py
 from typing import List, Dict, Any, Optional
-import os
-import asyncio
+
 import aiofiles
 from pathlib import Path
 import uuid
 import time
-from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from RAG.qdrant_manager import QdrantManager
@@ -15,7 +14,6 @@ from ..database.crud import (
     create_document,
     get_documents_by_quiz,
     update_document_indexed,
-    delete_document,
     update_quiz_collection,
     log_activity,
     update_quiz_status,

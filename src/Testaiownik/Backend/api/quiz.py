@@ -1,22 +1,17 @@
 # src/Testaiownik/Backend/api/quiz.py
 from fastapi import APIRouter, HTTPException, Request
-from typing import List, Optional
-import uuid
 from datetime import datetime
 from fastapi import Depends
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from ..services.quiz_service import QuizService
 from ..services.document_service import DocumentService
 from ..models.requests import (
     StartQuizRequest,
     AnswerQuestionRequest,
-    QuizDifficultyRequest,
-    QuizQuestionsRequest,
-    UserQuestionsRequest,
 )
 from ..models.responses import (
-    QuizResults,
     QuizCreateResponse,
     QuizListResponse,
     QuizListItem,
@@ -24,17 +19,13 @@ from ..models.responses import (
     QuizCurrentResponse,
     QuizAnswerResponse,
     QuizResultsResponse,
-    UserListResponse,
-    UserDeleteResponse,
-    BaseResponse,
 )
 from ..database.crud import (
     create_quiz,
     get_quizzes_by_user,
-    get_quiz,
     log_activity,
-    update_quiz_status,
     reset_quiz_execution,
+    soft_reset_quiz_execution,
 )
 from ..database.sql_database_connector import get_db
 
@@ -404,26 +395,48 @@ async def resume_quiz(quiz_id: str, request: Request, db: Session = Depends(get_
 
 
 @router.post("/{quiz_id}/restart")
-async def restart_quiz(quiz_id: str, request: Request, db: Session = Depends(get_db)):
-    """Restarts quiz with same topics but new questions"""
+async def restart_quiz(
+    quiz_id: str,
+    request: Request,
+    hard: Optional[bool] = None,  # Add optional hard parameter
+    db: Session = Depends(get_db),
+):
+    """Restarts quiz - soft reset keeps questions, hard reset regenerates them"""
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        # Reset quiz execution but keep topics
-        success = reset_quiz_execution(db, quiz_id)
+        if hard:
+            # Hard reset: Reset everything including questions (current behavior)
+            success = reset_quiz_execution(db, quiz_id)
+            reset_type = "hard"
+            message = "Quiz reset successfully. Start again to generate new questions."
+            regenerated_questions = False  # Will regenerate when started
+        else:
+            # Soft reset: Keep questions, reset only user progress/flow
+            success = soft_reset_quiz_execution(db, quiz_id)
+            reset_type = "soft"
+            message = "Quiz progress reset. Questions preserved."
+            regenerated_questions = False  # Questions preserved
 
         if not success:
             raise HTTPException(status_code=500, detail="Failed to restart quiz")
 
-        log_activity(db, user_id, "quiz_restarted", {"quiz_id": quiz_id})
+        log_activity(
+            db,
+            user_id,
+            "quiz_restarted",
+            {"quiz_id": quiz_id, "reset_type": reset_type},
+        )
 
         return {
-            "quiz_id": quiz_id,  # Same quiz, no new ID needed
-            "regenerated_questions": False,  # Will regenerate when started
+            "quiz_id": quiz_id,
+            "reset_type": reset_type,
+            "regenerated_questions": regenerated_questions,
             "same_topics": True,
-            "status": "topic_ready",
-            "message": "Quiz reset successfully. Start again to generate new questions.",
+            "same_questions": not hard,  # Questions preserved in soft reset
+            "status": "topic_ready" if hard else "quiz_active",
+            "message": message,
         }
 
     except HTTPException:

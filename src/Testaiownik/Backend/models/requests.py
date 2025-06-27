@@ -1,7 +1,6 @@
 # src/Testaiownik/Backend/models/requests.py
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
-from datetime import datetime
 
 
 # Topic Selection Requests

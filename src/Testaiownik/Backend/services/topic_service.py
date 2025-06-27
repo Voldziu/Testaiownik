@@ -1,10 +1,10 @@
 # src/Testaiownik/Backend/services/topic_service.py
-from typing import List, Dict, Any, Optional
-import json
+from typing import List, Dict, Optional
+
 from sqlalchemy.orm import Session
 
 from ..models.responses import TopicUpdateResponse
-from Agent.Shared import WeightedTopic
+
 from ..database.crud import get_quiz, update_topic_data, log_activity
 
 from utils import logger
