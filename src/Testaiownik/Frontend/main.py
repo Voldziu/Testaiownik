@@ -2,6 +2,7 @@
 
 import streamlit as st
 from components.questions_manager import render_questions_manager
+from components.quiz_manager import render_quiz_questions
 from utils.session_manager import (
     get_app_phase,
     init_user_id
@@ -33,6 +34,9 @@ def main():
 
     elif phase == "question_generation":
         render_questions_manager()
+
+    elif phase == "test":
+        render_quiz_questions()
     
     else:
         st.error("Nieznany stan aplikacji. Spróbuj odświeżyć stronę.")

@@ -58,39 +58,28 @@ def _render_topic_generation_setup():
     
     quiz_id = get_quiz_id()
     
-    # Show current status
-    render_topic_generation_status(quiz_id)
+    if 'status_checked' not in st.session_state:
+        render_topic_generation_status(quiz_id)
+        st.session_state['status_checked'] = True
     
     st.divider()
     
     # Topic generation configuration
     st.subheader("⚙️ Konfiguracja generowania")
     
-    col1, col2 = st.columns([2, 1])
+  
+    st.write("**Liczba tematów do wygenerowania:**")
+    num_topics = st.slider(
+        "Wybierz liczbę tematów",
+        min_value=MIN_TOPIC_COUNT,
+        max_value=MAX_TOPIC_COUNT,
+        value=DEFAULT_TOPIC_COUNT,
+        help="Więcej tematów = bardziej szczegółowa analiza, ale dłuższy czas przetwarzania"
+    )
     
-    with col1:
-        st.write("**Liczba tematów do wygenerowania:**")
-        num_topics = st.slider(
-            "Wybierz liczbę tematów",
-            min_value=MIN_TOPIC_COUNT,
-            max_value=MAX_TOPIC_COUNT,
-            value=DEFAULT_TOPIC_COUNT,
-            help="Więcej tematów = bardziej szczegółowa analiza, ale dłuższy czas przetwarzania"
-        )
-    
-    with col2:
-        st.write("**Podgląd:**")
-        st.info(f"📊 {num_topics} tematów")
-        
-        if num_topics <= 10:
-            st.write("🎯 Analiza podstawowa")
-        elif num_topics <= 25:
-            st.write("📈 Analiza standardowa")
-        else:
-            st.write("🔍 Analiza szczegółowa")
     
     # Generation settings
-    with st.expander("🔧 Zaawansowane ustawienia", expanded=False):
+    with st.expander("🔧 Szczegóły", expanded=False):
         st.markdown("""
         **Jak działa generowanie tematów:**
         
@@ -109,17 +98,10 @@ def _render_topic_generation_setup():
     # Generate button
     st.divider()
     
-    col1, col2 = st.columns([2, 1])
     
-    with col1:
-        if st.button("🚀 Rozpocznij generowanie tematów", type="primary", use_container_width=True):
-            _start_topic_generation(num_topics)
+    if st.button("🚀 Rozpocznij generowanie tematów", type="primary", use_container_width=True):
+        _start_topic_generation(num_topics)
     
-    with col2:
-        if st.button("⬅️ Wróć do indeksowania", use_container_width=True):
-            st.info("Powrót do poprzedniego kroku...")
-            # Here you could implement navigation back
-            time.sleep(1)
 
 def _render_topic_management():
     """Render topic management section"""
