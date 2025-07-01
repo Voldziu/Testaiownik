@@ -14,7 +14,7 @@ def render_questions_manager():
 
     st.title("📝 Konfiguracja pytań")
 
-    # Sekcja konfiguracji liczby pytań z suwakiem
+    # question config section
     st.subheader("⚙️ Ustawienia testu")
     num_questions = st.slider(
         "Wybierz liczbę pytań",
@@ -24,26 +24,26 @@ def render_questions_manager():
         help="Ustaw całkowitą liczbę pytań w teście",
     )
 
-    # Wyświetlenie aktualnej wartości
+    # display question count
     st.info(f"📊 Liczba pytań w teście: **{num_questions}**")
 
     # Separator
     st.divider()
 
-    # Lista pytań dodanych przez użytkownika (będzie przechowywana w session_state)
+    # user question list
     if "user_questions" not in st.session_state:
         st.session_state["user_questions"] = []
 
-    # Sekcja dodawania pytań
+    # add question section
     st.subheader("➕ Dodaj własne pytania")
     st.write("*Opcjonalnie: możesz dodać własne pytania do testu*")
 
-    # Komponent do dodawania pytania
+    # add question component
     with st.container():
         col1, col2 = st.columns([4, 1])
 
         with col1:
-            # Ustawienie wartości domyślnej dla inputu w session_state, jeżeli nie istnieje
+            # Set default value for input in session_state if it doesn't exist
             if "new_question_input" not in st.session_state:
                 st.session_state["new_question_input"] = ""
 
@@ -66,12 +66,12 @@ def render_questions_manager():
                 else:
                     st.warning("⚠️ Pytanie nie może być puste!")
 
-    # Wyświetlanie dodanych pytań na dole
+    # Display added questions at the bottom
     if st.session_state["user_questions"]:
         st.divider()
         st.subheader("📋 Twoje pytania:")
 
-        # Kontener z przewijaniem dla pytań
+        # Scrollable container for questions
         with st.container():
             for idx, q in enumerate(st.session_state["user_questions"], 1):
                 col1, col2 = st.columns([10, 1])
@@ -80,7 +80,7 @@ def render_questions_manager():
                     st.write(f"**{idx}.** {q}")
 
                 with col2:
-                    # Przycisk usuwania pytania
+                    # Button to remove question
                     if st.button("🗑️", key=f"delete_{idx}", help="Usuń pytanie"):
                         st.session_state["user_questions"].pop(idx - 1)
                         st.rerun()
@@ -91,20 +91,20 @@ def render_questions_manager():
     else:
         st.info("💡 Nie dodano jeszcze żadnych własnych pytań")
 
-    # Separator przed przyciskiem rozpoczęcia
+    # Separator before the start button
     st.divider()
 
-    # Przycisk do rozpoczęcia testu - zawsze widoczny
+    # Button to start the test - always visible
     st.subheader("🚀 Rozpocznij test")
 
-    # Podsumowanie konfiguracji
+    # Summary of configuration
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Całkowita liczba pytań", num_questions)
     with col2:
         st.metric("Twoje pytania", len(st.session_state["user_questions"]))
 
-    # Główny przycisk rozpoczęcia
+    # Main start button
     if st.button("🚀 Rozpocznij test", type="primary", use_container_width=True):
         start_test(quiz_id, num_questions, st.session_state["user_questions"])
 
@@ -115,21 +115,20 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
         with st.spinner("Rozpoczynanie testu..."):
             api_client = get_api_client(get_user_id())
 
-            # Przygotowanie danych do wysłania
+            # Prepare data to send
             request_data = {
                 "total_questions": total_questions,
-                "difficulty": "very-hard",  # Domyślny poziom trudności
+                "difficulty": "very-hard",  # Default difficulty level
                 "user_questions": user_questions if user_questions else [],
             }
 
-            # Wywołanie endpointu /quiz/{quiz_id}/start
+            # Call the /quiz/{quiz_id}/start endpoint
             response = api_client.start_quiz(quiz_id=quiz_id, **request_data)
 
             if response:
                 st.success("✅ Test został pomyślnie rozpoczęty!")
 
-                # Wyświetlenie informacji o teście
-                st.balloons()
+                # Display test information
 
                 with st.expander("📊 Szczegóły testu", expanded=True):
                     st.write(f"🆔 **ID Quizu:** {quiz_id}")
@@ -140,7 +139,7 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
 
                 set_questions_generated()
                 st.session_state["app_phase"] = "test"
-                # Opcjonalnie przekierowanie lub dalsze akcje
+                # Optional redirect or further actions
                 st.info("🔄 Test jest generowany.")
 
                 time.sleep(1)
@@ -152,7 +151,7 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
     except Exception as e:
         st.error(f"❌ Błąd podczas rozpoczęcia testu: {str(e)}")
 
-        # Debug info w przypadku błędu
+        # Debug info in case of an error
         with st.expander("🔍 Szczegóły błędu", expanded=False):
             st.code(str(e))
             st.write("**Parametry wywołania:**")

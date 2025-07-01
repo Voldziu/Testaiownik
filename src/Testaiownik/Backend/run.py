@@ -7,8 +7,6 @@ the existing CLI interface in main.py.
 
 Usage:
     python -m Backend.run                    # Development server
-    python -m Backend.run --production       # Production server
-    python -m Backend.run --port 8080        # Custom port
 """
 
 import sys

@@ -141,6 +141,45 @@ class QuizAPIClient:
             headers=self.headers
         )
         return self._handle_response(response)
+    
+    def get_current_question(self, quiz_id: str) -> Dict[str, Any]:
+        """Get the current question for a quiz"""
+        response = requests.get(
+            f"{BASE_URL}/api/quiz/{quiz_id}/current",
+            headers=self.headers
+        )
+        return self._handle_response(response)
+
+    # Submit the user's answer to a question
+    def submit_answer(self, quiz_id: str, question_id: str, selected_choices: List[str]) -> Dict[str, Any]:
+        """Submit an answer for a specific question"""
+        data = {
+            "question_id": question_id,
+            "selected_choices": selected_choices
+        }
+        response = requests.post(
+            f"{BASE_URL}/api/quiz/{quiz_id}/answer",
+            json=data,
+            headers=self.headers
+        )
+        return self._handle_response(response)
+    
+    # Fetch explanation for a specific question
+    def get_explanation(self, quiz_id: str, question_id: str) -> Dict[str, Any]:
+        """Get the explanation for a question"""
+        response = requests.get(
+            f"{BASE_URL}/api/quiz/{quiz_id}/explanation/{question_id}",
+            headers=self.headers
+        )
+        return self._handle_response(response)
+    
+    def get_quiz_status(self, quiz_id: str) -> Dict[str, Any]:
+        """Get the status of the quiz"""
+        response = requests.get(
+            f"{BASE_URL}/api/quiz/{quiz_id}/status",
+            headers=self.headers
+        )
+        return self._handle_response(response)
 
 # Convenience function to get API client
 def get_api_client(user_id: str) -> QuizAPIClient:

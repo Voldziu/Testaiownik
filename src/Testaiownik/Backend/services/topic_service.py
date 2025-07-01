@@ -52,7 +52,7 @@ class TopicService:
 
             # Add new topic
             new_topic = {"topic": topic_name, "weight": weight}
-            current_topics.append(new_topic)
+            current_topics = current_topics + [new_topic]
 
             # Normalize weights
             normalized_topics = self.normalize_weights(current_topics)
@@ -67,7 +67,7 @@ class TopicService:
                 {"quiz_id": quiz_id, "topic_name": topic_name},
             )
 
-            return {
+            returnMessage = {
                 "success": True,
                 "added_topic": {
                     "topic": topic_name,
@@ -76,6 +76,9 @@ class TopicService:
                 "total_topics": len(normalized_topics),
                 "weights_normalized": True,
             }
+            logger.debug(returnMessage)
+
+            return returnMessage
 
         except Exception as e:
             logger.error(f"Failed to add topic: {e}")
@@ -142,7 +145,7 @@ class TopicService:
             if not quiz:
                 raise ValueError("Quiz not found")
 
-            current_topics = quiz.suggested_topics or []
+            current_topics = quiz.suggested_topics.copy() or []
 
             # Find topic to update
             topic_index = None

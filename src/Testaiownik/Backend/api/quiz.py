@@ -107,7 +107,7 @@ async def get_quiz_status(
 
         # Quiz progress
         answered_questions = len(quiz.user_answers or [])
-        total_questions = quiz.total_questions
+        total_questions = len(set(quiz.questions_data.get("active_question_pool")))
 
         return {
             "quiz_id": quiz_id,
@@ -473,7 +473,7 @@ async def get_explanation_context(
     quiz_id: str,
     question_id: str,
     request: Request,
-    limit: int = 2,
+    limit: int = 1,
     db: Session = Depends(get_db),
 ):
     """Get explanation context from vector store for specific question"""
