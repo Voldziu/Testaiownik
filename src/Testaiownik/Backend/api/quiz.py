@@ -473,7 +473,7 @@ async def get_explanation_context(
     quiz_id: str,
     question_id: str,
     request: Request,
-    limit: int = 2,
+    limit: int = 1,
     db: Session = Depends(get_db),
 ):
     """Get explanation context from vector store for specific question"""

@@ -1594,12 +1594,44 @@ class QuizService:
         if not source_metadata_data:
             return None
 
-        return SourceMetadata(
-            source=source_metadata_data.get("source", "Unknown"),
-            page=source_metadata_data.get("page"),
-            slide=source_metadata_data.get("slide"),
-            chunk_text=source_metadata_data.get("chunk_text"),
-        )
+        try:
+            if isinstance(source_metadata_data, SourceMetadata):
+                return source_metadata_data
+            
+            elif isinstance(source_metadata_data, dict):
+                return SourceMetadata(
+                    source=source_metadata_data.get("source", "Unknown"),
+                    page=source_metadata_data.get("page"),
+                    slide=source_metadata_data.get("slide"),
+                    chunk_text=source_metadata_data.get("chunk_text"),
+                )
+            
+            elif hasattr(source_metadata_data, 'source'):
+                return SourceMetadata(
+                    source=getattr(source_metadata_data, 'source', "Unknown"),
+                    page=getattr(source_metadata_data, 'page', None),
+                    slide=getattr(source_metadata_data, 'slide', None),
+                    chunk_text=getattr(source_metadata_data, 'chunk_text', None),
+                )
+            
+            else:
+                if hasattr(source_metadata_data, '__dict__'):
+                    metadata_dict = source_metadata_data.__dict__
+                    return SourceMetadata(
+                        source=metadata_dict.get("source", "Unknown"),
+                        page=metadata_dict.get("page"),
+                        slide=metadata_dict.get("slide"),
+                        chunk_text=metadata_dict.get("chunk_text"),
+                    )
+                
+                logger.warning(f"Unknown source_metadata_data type: {type(source_metadata_data)}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error parsing source metadata: {e}")
+            logger.error(f"Source metadata data type: {type(source_metadata_data)}")
+            logger.error(f"Source metadata data: {source_metadata_data}")
+            return None
 
     def get_explanation_context(
         self, document_service, quiz_id: str, question_id: str, limit: int, db: Session
