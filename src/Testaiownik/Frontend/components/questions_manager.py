@@ -129,7 +129,6 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
                 st.success("✅ Test został pomyślnie rozpoczęty!")
 
                 # Display test information
-                st.balloons()
 
                 with st.expander("📊 Szczegóły testu", expanded=True):
                     st.write(f"🆔 **ID Quizu:** {quiz_id}")

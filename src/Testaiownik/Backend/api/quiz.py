@@ -107,7 +107,7 @@ async def get_quiz_status(
 
         # Quiz progress
         answered_questions = len(quiz.user_answers or [])
-        total_questions = quiz.total_questions
+        total_questions = len(set(quiz.questions_data.get("active_question_pool")))
 
         return {
             "quiz_id": quiz_id,
