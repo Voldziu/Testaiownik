@@ -180,6 +180,14 @@ class QuizAPIClient:
             headers=self.headers
         )
         return self._handle_response(response)
+    
+    def get_quiz_progress(self, quiz_id: str) -> Dict[str, Any]:
+        """Get the progress of the quiz"""
+        response = requests.get(
+            f"{BASE_URL}/api/quiz/{quiz_id}/progress",
+            headers=self.headers
+        )
+        return self._handle_response(response)
 
 # Convenience function to get API client
 def get_api_client(user_id: str) -> QuizAPIClient:
