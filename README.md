@@ -83,8 +83,20 @@ AI-powered learning assistant that automatically generates test questions from e
    ```
 
 
+4. **Run locally-  docker**
+   Be in root directory
 
-4. **Run locally**
+   ```bash
+   docker compose up -d
+   ```
+
+   Streamlit should be open on localhost:8501 now :)
+
+   
+
+
+
+4. **Run locally - no docker**
    Backend
 
    ```bash
