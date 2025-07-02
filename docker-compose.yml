@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: src/Testaiownik/Backend/Dockerfile
+    container_name: testaiownik-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - ENVIRONMENT=production
+    env_file:
+      - .env
+    depends_on:
+      - qdrant
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - testaiownik-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: src/Testaiownik/Frontend/Dockerfile
+    container_name: testaiownik-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000 # used in Frontend/config/settings.py
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    networks:
+      - testaiownik-network
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: testaiownik-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - testaiownik-network
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
+
+networks:
+  testaiownik-network:
+    driver: bridge

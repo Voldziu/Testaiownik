@@ -26,18 +26,17 @@ COPY src/Testaiownik/ ./
 # Install dependencies
 RUN uv sync --frozen
 
-# Set Python path to current directory
+
+
+# Set Python path to parent directory (contains Testaiownik modules)
 ENV PYTHONPATH=/app
 
-# Create uploads directory
-RUN mkdir -p uploads
-
 # Expose port
-EXPOSE 8000
+EXPOSE 8501
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+    CMD curl -f http://localhost:8501/health || exit 1
 
-# Run the application
-CMD ["uv", "run", "python", "-m", "Backend.run"]
+# Run the application from Frontend directory
+CMD ["uv","run","streamlit", "run", "Frontend/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
