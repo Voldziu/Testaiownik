@@ -90,6 +90,80 @@ def load_current_question(quiz_id: str):
         st.session_state["quiz_state"]["loading"] = False
         st.error(f"❌ Błąd podczas ładowania pytania: {str(e)}")
 
+def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
+    """Get quiz progress with caching mechanism"""
+    progress_cache_key = f"quiz_progress_{quiz_id}"
+    
+    # Force refresh or cache miss
+    if force_refresh or progress_cache_key not in st.session_state:
+        try:
+            api_client = get_api_client(get_user_id())
+            progress_data = api_client.get_quiz_progress(quiz_id)
+            
+            if progress_data and 'progress' in progress_data:
+                progress = progress_data['progress']
+                
+                current_question_num = progress.get('current_question', 1)
+                total_questions = progress.get('total_questions_in_pool', 1)
+                unique_answered = progress.get('unique_answered', 0)
+                total_unique_questions = progress.get('total_unique_questions', 1)
+                
+                # Progress based on unique questions
+                if total_unique_questions > 0:
+                    progress_percentage = (unique_answered / total_unique_questions) * 100
+                else:
+                    progress_percentage = 0
+                
+                # Current question number based on unique answered
+                current_question_num = unique_answered + 1
+                
+                # Ensure we don't exceed total questions
+                if current_question_num > total_questions:
+                    current_question_num = total_questions
+                
+                # Cache the results
+                st.session_state[progress_cache_key] = {
+                    'current_question_num': current_question_num,
+                    'total_questions': total_questions,
+                    'progress_percentage': progress_percentage,
+                    'unique_answered': unique_answered,
+                    'total_unique_questions': total_unique_questions,
+                    'raw_progress': progress  # Store raw data for debugging
+                }
+                
+                return st.session_state[progress_cache_key]
+            else:
+                # Fallback values
+                fallback_data = {
+                    'current_question_num': 1,
+                    'total_questions': 10,
+                    'progress_percentage': 0,
+                    'unique_answered': 0,
+                    'total_unique_questions': 10,
+                    'raw_progress': {}
+                }
+                st.session_state[progress_cache_key] = fallback_data
+                return fallback_data
+                
+        except Exception as e:
+            st.warning(f"Nie udało się pobrać postępu quizu: {str(e)}")
+            # Return cached data if available, otherwise fallback
+            if progress_cache_key in st.session_state:
+                return st.session_state[progress_cache_key]
+            else:
+                fallback_data = {
+                    'current_question_num': 1,
+                    'total_questions': 10,
+                    'progress_percentage': 0,
+                    'unique_answered': 0,
+                    'total_unique_questions': 10,
+                    'raw_progress': {}
+                }
+                return fallback_data
+    else:
+        # Return cached data
+        return st.session_state[progress_cache_key]
+
 def render_question():
     """Render current question with answer options"""
     question_data = st.session_state["quiz_state"]["current_question"]
@@ -98,38 +172,13 @@ def render_question():
         return
     
     quiz_id = get_quiz_id()
-    current_question_num = 1
-    total_questions = 1
-    progress_percentage = 0
     
-    # Cache status
-    status_cache_key = f"quiz_status_{quiz_id}"
-    if status_cache_key not in st.session_state:
-        try:
-            api_client = get_api_client(get_user_id())
-            status_data = api_client.get_quiz_status(quiz_id)
-            
-            if status_data and 'quiz_execution' in status_data:
-                quiz_exec = status_data['quiz_execution']
-                current_question_num = quiz_exec.get('current_index', 0) + 1  
-                total_questions = quiz_exec.get('total_questions', 1)
-                progress_percentage = quiz_exec.get('progress_percentage', 0)
-            
-            # save to cache
-            st.session_state[status_cache_key] = {
-                'current_question_num': current_question_num,
-                'total_questions': total_questions,
-                'progress_percentage': progress_percentage
-            }
-            
-        except Exception as e:
-            st.warning(f"Nie udało się pobrać statusu quizu: {str(e)}")
-    else:
-        # cached data
-        cached_status = st.session_state[status_cache_key]
-        current_question_num = cached_status['current_question_num']
-        total_questions = cached_status['total_questions']
-        progress_percentage = cached_status['progress_percentage']
+    # Get current progress (use cached unless we need fresh data)
+    progress_data = get_quiz_progress(quiz_id, force_refresh=False)
+    
+    current_question_num = progress_data['current_question_num']
+    total_questions = progress_data['total_questions']
+    progress_percentage = progress_data['progress_percentage']
     
     # Quiz header with progress
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -143,6 +192,16 @@ def render_question():
     # Progress bar
     progress_value = progress_percentage / 100 if progress_percentage <= 100 else 1.0
     st.progress(progress_value)
+    
+    # DEBUG - usuń to po naprawieniu
+    if st.checkbox("🐛 Debug Info"):
+        st.write(f"Current question num: {current_question_num}")
+        st.write(f"Total questions: {total_questions}")
+        st.write(f"Progress %: {progress_percentage:.1f}%")
+        st.write(f"Unique answered: {progress_data['unique_answered']}")
+        st.write(f"Total unique questions: {progress_data['total_unique_questions']}")
+        st.write("Raw progress data:", progress_data.get('raw_progress', {}))
+    
     st.divider()
     
     # Question content
@@ -155,10 +214,19 @@ def render_question():
     else:
         render_answer_feedback(question_data)
 
+def refresh_quiz_progress_cache(quiz_id: str):
+    """Refresh quiz progress cache - wywołaj po każdej odpowiedzi"""
+    progress_cache_key = f"quiz_progress_{quiz_id}"
+    if progress_cache_key in st.session_state:
+        del st.session_state[progress_cache_key]
+    
+    # Force refresh of progress data
+    get_quiz_progress(quiz_id, force_refresh=True)
+        
 def clear_quiz_cache():
     """Clear quiz-related cache"""
     keys_to_remove = [key for key in st.session_state.keys() 
-                    if key.startswith('quiz_status_')]
+                    if key.startswith('quiz_status_') or key.startswith('quiz_progress_')]
     for key in keys_to_remove:
         del st.session_state[key]
 
@@ -224,7 +292,7 @@ def render_answer_options(question_data: Dict[str, Any]):
 
 
 def submit_answer(question_id: str, selected_choices: List[int]):
-    """Submit answer to API"""
+    """Submit answer to API and refresh progress"""
     quiz_id = get_quiz_id()
     
     try:
@@ -236,7 +304,7 @@ def submit_answer(question_id: str, selected_choices: List[int]):
             result = api_client.submit_answer(
                 quiz_id=quiz_id,
                 question_id=question_id,
-                selected_choices=selected_choices  # Send selected_choices as integers (indices)
+                selected_choices=selected_choices
             )
             
             # Update session state with result
@@ -245,8 +313,10 @@ def submit_answer(question_id: str, selected_choices: List[int]):
             st.session_state["quiz_state"]["selected_choices"] = selected_choices
             st.session_state["quiz_state"]["loading"] = False
             
+            # KLUCZOWE: Odśwież cache postępu po każdej odpowiedzi
+            refresh_quiz_progress_cache(quiz_id)
+            
             clear_quiz_cache()
-
             
     except Exception as e:
         st.session_state["quiz_state"]["loading"] = False
@@ -254,9 +324,7 @@ def submit_answer(question_id: str, selected_choices: List[int]):
 
 def render_answer_feedback(question_data: Dict[str, Any]):
     """Render feedback after answer submission"""
-
     result = st.session_state["quiz_state"]["answer_result"]
-
     
     if not result:
         return
@@ -272,7 +340,6 @@ def render_answer_feedback(question_data: Dict[str, Any]):
     
     st.divider()
     
-   
     is_correct = result.get('correct', False)
     
     if is_correct:
@@ -309,8 +376,6 @@ def render_answer_feedback(question_data: Dict[str, Any]):
             with st.expander("💡 Wyjaśnienie:", expanded=False):
                 st.info(explanation)
 
-  
-
                 # Display source chunks (file, page, slide, chunk text)
                 if source_chunks:
                     for source_chunk in source_chunks:
@@ -322,7 +387,6 @@ def render_answer_feedback(question_data: Dict[str, Any]):
                         if page is not None:
                             st.write(f"📄 Strona: {page}")
                         
-        
                         # Optionally, display the chunk text (relevant text extracted)
                         chunk_text = source_chunk.get('text', 'Brak wyciągu')
                         if chunk_text:
@@ -331,8 +395,9 @@ def render_answer_feedback(question_data: Dict[str, Any]):
     except Exception as e:
         st.warning(f"Nie udało się pobrać wyjaśnienia: {str(e)}")
         
-        st.divider()
-        
+    st.divider()
+    
+    # Display updated progress from the API response
     progress = result.get('progress', {})
     if progress:
         col1, col2 = st.columns(2)
@@ -348,6 +413,10 @@ def render_answer_feedback(question_data: Dict[str, Any]):
     
     # Navigation buttons
     if st.button("➡️ Następne pytanie", use_container_width=True):
+        # KLUCZOWE: Odśwież postęp przed przejściem do następnego pytania
+        quiz_id = get_quiz_id()
+        refresh_quiz_progress_cache(quiz_id)
+        
         # Reset state for next question
         st.session_state["quiz_state"]["answered"] = False
         st.session_state["quiz_state"]["answer_result"] = None

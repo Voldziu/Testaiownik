@@ -1,3 +1,4 @@
+import os
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
 from AzureModels.models import get_embedding_model
@@ -13,9 +14,10 @@ import time
 
 
 class QdrantManager:
+
     def __init__(
         self,
-        url: str = "http://localhost:6333",
+        url: str = os.getenv("QDRANT_URL", "localhost:6333"),  # From dockercompose
         vector_size: int = 1536,
         timeout: int = None,
     ):
