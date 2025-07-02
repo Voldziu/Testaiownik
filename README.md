@@ -64,7 +64,26 @@ AI-powered learning assistant that automatically generates test questions from e
    # CHAT_MODEL_VERSION_DEV=your-api-version
    ```
 
-3. **Deploy local Qdrant on docker**
+
+
+3. **Run locally-  docker**
+   Be in root directory
+
+   ```bash
+   docker compose up -d
+   ```
+
+   Streamlit should be open on localhost:8501 now :)
+
+   
+
+
+
+3*. **Run locally - no docker**
+
+   Qdrant: 
+
+
    Linux
    ```bash
    docker pull qdrant/qdrant
@@ -83,28 +102,15 @@ AI-powered learning assistant that automatically generates test questions from e
    ```
 
 
-4. **Run locally-  docker**
-   Be in root directory
 
-   ```bash
-   docker compose up -d
-   ```
-
-   Streamlit should be open on localhost:8501 now :)
-
-   
-
-
-
-4. **Run locally - no docker**
-   Backend
+   Backend:
 
    ```bash
    cd src/Testaiownik
    uv run -m Backend.run
    ```
 
-   Frontend
+   Frontend:
 
    ```bash
    cd src/Testaiownik/Frontend
