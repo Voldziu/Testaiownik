@@ -28,11 +28,11 @@ AI-powered learning assistant that automatically generates test questions from e
 - ✅ Document processing (PDF/PPTX/TXT/DOCX)
 - ✅ Comprehensive test suite
 
-**Current Sprint:**
-- **Sprint 3**: FastAPI backend + Streamlit frontend 🔄 In Progress
 
-**Next Sprint:**
-- **Sprint 4**: Testing & production polish
+**Sprint 3**: FastAPI backend + Streamlit frontend ✅ Completed
+
+*Current Sprint:*
+**Sprint 4**: Testing & production polish
 
 ## 🚀 Quick Start
 
@@ -84,10 +84,23 @@ AI-powered learning assistant that automatically generates test questions from e
 
 
 
-4. **Test the current main**
+4. **Run locally**
+   Backend
+
    ```bash
-   uv run python src/Testaiownik/main.py
+   cd src/Testaiownik
+   uv run -m Backend.run
    ```
+
+   Frontend
+
+   ```bash
+   cd src/Testaiownik/Frontend
+   streamlit run main.py
+   ```
+
+   Make sure Qdrant is running!
+
 
 
 
@@ -112,7 +125,7 @@ cd IaaC
 - Application Insights
 - Container App Environment
 
-## 📁 Project Structure
+## 📁 Project Structure ( In active development)
 
 ```
 testaiownik/
