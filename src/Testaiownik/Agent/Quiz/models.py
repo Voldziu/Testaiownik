@@ -81,10 +81,12 @@ class QuizSession(BaseModel):
     difficulty: Literal["easy", "medium", "hard", "very-hard"] = Field(
         default="medium", description="Global quiz difficulty"
     )
-    batch_size: int = Field(default=5, description="Questions generated per batch")
-    max_incorrect_recycles: int = Field(
-        default=2, description="Max times incorrect question can be recycled"
+    copies_per_incorrect_answer: int = Field(
+        default=2,
+        description="Number of copies to add when question is answered incorrectly",
     )
+    batch_size: int = Field(default=5, description="Questions generated per batch")
+
     quiz_mode: Literal["fresh", "retry_same", "retry_failed"] = Field(
         default="fresh", description="Quiz generation mode"
     )
@@ -139,11 +141,9 @@ class QuizSession(BaseModel):
         self.last_activity = datetime.now()
 
         if not answer.is_correct:
-            current_count = self.incorrect_recycle_count.get(answer.question_id, 0)
-            if current_count < self.max_incorrect_recycles:
-                # Add to end of queue for recycling
+            # Add multiple copies of the question to the end of the pool
+            for _ in range(self.copies_per_incorrect_answer):
                 self.active_question_pool.append(answer.question_id)
-                self.incorrect_recycle_count[answer.question_id] = current_count + 1
 
     def is_completed(self) -> bool:
         """Check if quiz is completed"""
@@ -187,7 +187,11 @@ class QuizConfiguration(BaseModel):
         default="medium", description="Global difficulty"
     )
     batch_size: int = Field(default=5, description="Questions per generation batch")
-    max_incorrect_recycles: int = Field(default=2, description="Max incorrect recycles")
+    copies_per_incorrect_answer: int = Field(
+        default=2,
+        description="Number of copies to add when question is answered incorrectly",
+    )
+
     quiz_mode: Literal["fresh", "retry_same", "retry_failed"] = Field(
         default="fresh", description="Quiz mode"
     )
