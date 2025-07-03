@@ -529,7 +529,7 @@ class QuizService:
                 total_questions=total_questions,
                 difficulty=difficulty,
                 batch_size=5,
-                max_incorrect_recycles=2,
+                copies_per_incorrect_answer=2,
                 quiz_mode="fresh",
                 user_questions=user_questions,
                 user_id=user_id,
@@ -1228,7 +1228,7 @@ class QuizService:
                     total_questions=quiz.total_questions or 20,
                     difficulty=quiz.difficulty or "medium",
                     batch_size=5,
-                    max_incorrect_recycles=2,
+                    copies_per_incorrect_answer=2,
                     quiz_mode="fresh",
                     questions_per_topic=questions_data.get("questions_per_topic", {}),
                     all_generated_questions=all_questions,
@@ -1597,7 +1597,7 @@ class QuizService:
         try:
             if isinstance(source_metadata_data, SourceMetadata):
                 return source_metadata_data
-            
+
             elif isinstance(source_metadata_data, dict):
                 return SourceMetadata(
                     source=source_metadata_data.get("source", "Unknown"),
@@ -1605,17 +1605,17 @@ class QuizService:
                     slide=source_metadata_data.get("slide"),
                     chunk_text=source_metadata_data.get("chunk_text"),
                 )
-            
-            elif hasattr(source_metadata_data, 'source'):
+
+            elif hasattr(source_metadata_data, "source"):
                 return SourceMetadata(
-                    source=getattr(source_metadata_data, 'source', "Unknown"),
-                    page=getattr(source_metadata_data, 'page', None),
-                    slide=getattr(source_metadata_data, 'slide', None),
-                    chunk_text=getattr(source_metadata_data, 'chunk_text', None),
+                    source=getattr(source_metadata_data, "source", "Unknown"),
+                    page=getattr(source_metadata_data, "page", None),
+                    slide=getattr(source_metadata_data, "slide", None),
+                    chunk_text=getattr(source_metadata_data, "chunk_text", None),
                 )
-            
+
             else:
-                if hasattr(source_metadata_data, '__dict__'):
+                if hasattr(source_metadata_data, "__dict__"):
                     metadata_dict = source_metadata_data.__dict__
                     return SourceMetadata(
                         source=metadata_dict.get("source", "Unknown"),
@@ -1623,10 +1623,12 @@ class QuizService:
                         slide=metadata_dict.get("slide"),
                         chunk_text=metadata_dict.get("chunk_text"),
                     )
-                
-                logger.warning(f"Unknown source_metadata_data type: {type(source_metadata_data)}")
+
+                logger.warning(
+                    f"Unknown source_metadata_data type: {type(source_metadata_data)}"
+                )
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error parsing source metadata: {e}")
             logger.error(f"Source metadata data type: {type(source_metadata_data)}")
