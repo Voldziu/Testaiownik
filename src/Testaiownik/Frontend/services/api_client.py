@@ -188,6 +188,23 @@ class QuizAPIClient:
             headers=self.headers
         )
         return self._handle_response(response)
+    
+    def restart_quiz(self, quiz_id: str, hard: bool = False) -> Dict[str, Any]:
+        """Restart the quiz, either soft or hard reset"""
+        url = f"{BASE_URL}/api/quiz/{quiz_id}/restart"
+        params = {'hard': hard}  # Soft reset - hard=False
+        response = requests.post(url, params=params, headers=self.headers)
+        return self._handle_response(response)
+    
+
+    def get_quizzes(self, limit: int = 10, offset: int = 0) -> Dict[str, Any]:
+        """Fetch list of quizzes created by the user"""
+        response = requests.get(
+            f"{BASE_URL}/api/quiz/list", 
+            headers=self.headers,
+            params={"limit": limit, "offset": offset},  
+        )
+        return self._handle_response(response)
 
 # Convenience function to get API client
 def get_api_client(user_id: str) -> QuizAPIClient:

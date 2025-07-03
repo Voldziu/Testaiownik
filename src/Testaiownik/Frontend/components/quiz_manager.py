@@ -1,17 +1,18 @@
 from datetime import datetime
+import time
 import streamlit as st
 from utils.session_manager import get_quiz_id, get_user_id
 from services.api_client import get_api_client
 from typing import List, Dict, Any
 
 def render_quiz_questions():
-    """Render active quiz questions with answer submission"""
+    """Render active quiz questions with enhanced error handling"""
     quiz_id = get_quiz_id()
     if not quiz_id:
         st.error("❌ Brak ID quizu. Wróć do tworzenia quizu.")
         return
 
-    # Initialize session state for quiz
+    # Initialize quiz state
     if "quiz_state" not in st.session_state:
         st.session_state["quiz_state"] = {
             "current_question": None,
@@ -20,92 +21,152 @@ def render_quiz_questions():
             "selected_choices": [],
             "loading": False,
             "completed": False,
-            "start_time": datetime.now().isoformat()  # Store start time when quiz begins
+            "start_time": datetime.now().isoformat()
         }
         clear_quiz_cache()
 
-    # Check if quiz is completed first
+    # Check if quiz is completed
     if st.session_state["quiz_state"]["completed"]:
         render_mastery_summary()
         return
 
-    # Load current question
-    load_current_question(quiz_id)
-    
-    # Render based on current state
-    if st.session_state["quiz_state"]["current_question"]:
-        render_question()
-    else:
-        # Check if quiz is completed when no question is available
-        progress_data = get_quiz_progress(quiz_id, force_refresh=True)
-        if is_quiz_completed_by_progress(progress_data):
-            st.session_state["quiz_state"]["completed"] = True
-            st.rerun()
+    # ENHANCED: Check if quiz has started before loading questions
+    try:
+        # Try to get quiz progress first to check if quiz exists/started
+        progress_data = get_quiz_progress(quiz_id, force_refresh=False)
+        
+        # If we can get progress, quiz has started
+        load_current_question(quiz_id)
+        
+        # Render based on state
+        if st.session_state["quiz_state"]["current_question"]:
+            render_question()
         else:
-            st.info("🔄 Ładowanie pytania...")
+            # Check if quiz is completed when no question available
+            if is_quiz_completed_by_progress(progress_data):
+                st.session_state["quiz_state"]["completed"] = True
+                st.rerun()
+            else:
+                st.info("🔄 Ładowanie pytania...")
+                
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "quiz has not started yet" in error_msg:
+            st.info("🔄 Quiz nie został jeszcze uruchomiony. Przechodzę do konfiguracji pytań.")
+            
+            # FIXED: Automatically redirect to questions manager instead of just showing info
+            st.session_state["app_phase"] = "questions_manager"
+            time.sleep(0.5)  # Small delay to show the message
+            st.rerun()
+            
+        elif "no current question available" in error_msg:
+            st.info("🔄 Brak dostępnych pytań. Przechodzę do konfiguracji pytań.")
+            
+            # FIXED: Automatically redirect to questions manager
+            st.session_state["app_phase"] = "questions_manager"
+            time.sleep(0.5)
+            st.rerun()
+            
+        else:
+            st.error(f"❌ Błąd podczas ładowania quizu: {str(e)}")
+            
+            # FIXED: For other errors, also provide option to go back to questions manager
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("⬅️ Wróć do konfiguracji pytań"):
+                    st.session_state["app_phase"] = "questions_manager"
+                    st.rerun()
+            with col2:
+                if st.button("🏠 Menu główne"):
+                    return_to_main_menu()
+
+
 
 def load_current_question(quiz_id: str):
-    """Load current question from API"""
+    """Load current question from API with enhanced error handling"""
     try:
+        # Sprawdzenie, czy quiz jest zakończony
+        if st.session_state["quiz_state"].get("completed", False):
+            return
+
         current_question = st.session_state["quiz_state"]["current_question"]
         answered = st.session_state["quiz_state"]["answered"]
         loading = st.session_state["quiz_state"]["loading"]
-        
-        # Sprawdzenie, czy quiz jest zakończony
-        progress_data = get_quiz_progress(quiz_id, force_refresh=False)
-        total_questions = progress_data.get('total_questions', 0)
-        unique_answered = progress_data.get('unique_answered', 0)
 
-        # Jeśli odpowiedziano na wszystkie pytania, zakończ quiz
-        if unique_answered >= total_questions:
+        # ENHANCED: Check if quiz has started before trying to get progress
+        try:
+            progress_data = get_quiz_progress(quiz_id, force_refresh=False)
+            total_questions = progress_data.get('total_questions', 0)
+            unique_answered = progress_data.get('unique_answered', 0)
+            remaining_questions = total_questions - unique_answered
+        except Exception as progress_error:
+            # If we can't get progress, assume quiz hasn't started
+            error_msg = str(progress_error).lower()
+            if "quiz has not started yet" in error_msg:
+                st.info("🔄 Quiz nie został jeszcze uruchomiony...")
+                return
+            else:
+                # Re-raise other errors
+                raise progress_error
+
+        # If all questions answered, mark as completed
+        if remaining_questions == 0:
             st.session_state["quiz_state"]["completed"] = True
             return
 
-        # Don't load new question if current one is answered but feedback not shown yet
+        # Don't load new question if current one is answered but feedback not shown
         if current_question and answered and not loading:
             return
-        
-        # Don't load new question if we have one and it's not answered yet
-        if current_question and not answered and not loading:
-            return  
 
-        # Only load new question if we don't have one or we're specifically loading
+        # Don't load new question if we have one but haven't answered yet
+        if current_question and not answered and not loading:
+            return
+
+        # Only load new question if we don't have one or we're loading
         if not loading and not answered:
             st.session_state["quiz_state"]["loading"] = True
-            
             api_client = get_api_client(get_user_id())
-            current_data = api_client.get_current_question(quiz_id)
+            
+            try:
+                current_data = api_client.get_current_question(quiz_id)
+            except Exception as question_error:
+                error_msg = str(question_error).lower()
+                if "no current question available" in error_msg or "quiz has not started yet" in error_msg:
+                    st.info("🔄 Brak dostępnych pytań. Quiz może nie być jeszcze uruchomiony.")
+                    st.session_state["quiz_state"]["loading"] = False
+                    return
+                else:
+                    raise question_error
 
             if current_data:
-                # Check if it's directly the question data
+                # Check if question data is valid
                 question_data = None
-                
                 if 'id' in current_data and 'question_text' in current_data:
                     question_data = current_data
-                
                 elif 'current_question' in current_data:
                     question_data = current_data['current_question']
-                
                 elif 'question' in current_data:
                     question_data = current_data['question']
-                
+
                 if question_data:
                     if 'id' not in question_data:
-                        st.error("❌ Question data missing 'id' field!")
+                        st.error("❌ Pytanie nie zawiera 'id'!")
+                        st.session_state["quiz_state"]["loading"] = False
                         return
-                    
+
                     if 'question_text' not in question_data:
-                        st.error("❌ Question data missing 'question_text' field!")
+                        st.error("❌ Pytanie nie zawiera 'question_text'!")
+                        st.session_state["quiz_state"]["loading"] = False
                         return
                 else:
-                    # No more questions available - quiz completed
+                    # No questions - quiz completed
                     st.session_state["quiz_state"]["completed"] = True
                     st.session_state["quiz_state"]["loading"] = False
                     return
-                
+
                 # Reset state for new question
-                if (st.session_state["quiz_state"]["current_question"] is None or 
-                    st.session_state["quiz_state"]["current_question"]["id"] != question_data["id"]):
+                if (st.session_state["quiz_state"]["current_question"] is None or
+                        st.session_state["quiz_state"]["current_question"]["id"] != question_data["id"]):
                     st.session_state["quiz_state"]["current_question"] = question_data
                     st.session_state["quiz_state"]["answered"] = False
                     st.session_state["quiz_state"]["answer_result"] = None
@@ -115,22 +176,36 @@ def load_current_question(quiz_id: str):
                     st.session_state["quiz_state"]["current_question"] = question_data
                     st.session_state["quiz_state"]["loading"] = False
             else:
-                # No question data returned - quiz completed
+                # No data - quiz completed
                 st.session_state["quiz_state"]["completed"] = True
                 st.session_state["quiz_state"]["loading"] = False
-                
+                return
+
     except Exception as e:
         st.session_state["quiz_state"]["loading"] = False
-        # Check if this is a "no more questions" error
         error_msg = str(e).lower()
-        if "no more questions" in error_msg or "quiz completed" in error_msg or "zakończony" in error_msg:
-            st.session_state["quiz_state"]["completed"] = True
+        
+        # ENHANCED ERROR HANDLING
+        if any(phrase in error_msg for phrase in [
+            "no more questions", 
+            "quiz completed", 
+            "zakończony",
+            "quiz has not started yet",
+            "no current question available"
+        ]):
+            if "quiz has not started yet" in error_msg or "no current question available" in error_msg:
+                st.info("🔄 Quiz nie został jeszcze uruchomiony lub nie ma dostępnych pytań.")
+            else:
+                st.session_state["quiz_state"]["completed"] = True
+            return
         else:
             st.error(f"❌ Błąd podczas ładowania pytania: {str(e)}")
 
 
+
+
 def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
-    """Get quiz progress with caching mechanism"""
+    """Get quiz progress with enhanced error handling"""
     progress_cache_key = f"quiz_progress_{quiz_id}"
     
     # Force refresh or cache miss
@@ -146,7 +221,7 @@ def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
                 total_questions = progress.get('total_questions_in_pool', 1)
                 unique_answered = progress.get('unique_answered', 0)
                 total_unique_questions = progress.get('total_unique_questions', 1)
-                correct_answers = progress.get('unique_correct', 0)  # Fixed: use unique_correct
+                correct_answers = progress.get('unique_correct', 0)
                 
                 # Progress based on unique questions
                 if total_unique_questions > 0:
@@ -169,7 +244,7 @@ def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
                     'unique_answered': unique_answered,
                     'total_unique_questions': total_unique_questions,
                     'correct_answers': correct_answers,
-                    'raw_progress': progress  # Store raw data for debugging
+                    'raw_progress': progress
                 }
                 
                 return st.session_state[progress_cache_key]
@@ -188,7 +263,31 @@ def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
                 return fallback_data
                 
         except Exception as e:
-            st.warning(f"Nie udało się pobrać postępu quizu: {str(e)}")
+            error_msg = str(e).lower()
+            
+            # ENHANCED ERROR HANDLING - Check for specific quiz state errors
+            if any(phrase in error_msg for phrase in [
+                "quiz has not started yet", 
+                "not started", 
+                "quiz not found",
+                "quiz does not exist"
+            ]):
+                # Quiz hasn't started yet - this is expected for new quizzes
+                # Don't show error, just return default values
+                fallback_data = {
+                    'current_question_num': 1,
+                    'total_questions': 10,
+                    'progress_percentage': 0,
+                    'unique_answered': 0,
+                    'total_unique_questions': 10,
+                    'correct_answers': 0,
+                    'raw_progress': {}
+                }
+                return fallback_data
+            else:
+                # Show warning for other errors
+                st.warning(f"Nie udało się pobrać postępu quizu: {str(e)}")
+                
             # Return cached data if available, otherwise fallback
             if progress_cache_key in st.session_state:
                 return st.session_state[progress_cache_key]
@@ -262,12 +361,15 @@ def is_quiz_completed_by_progress(progress_data: Dict[str, Any]) -> bool:
 
 def render_mastery_summary():
     """Render mastery completion summary focused on learning achievement"""
+    # Sprawdź czy już pokazano balony w tej sesji
+    if not st.session_state.get("balloons_shown", False):
+        st.balloons()  # Celebratory balloons!
+        st.session_state["balloons_shown"] = True
+    
     quiz_id = get_quiz_id()
     progress_data = get_quiz_progress(quiz_id, force_refresh=True)
     
     # Header - focus on mastery
-    st.balloons()  # Celebratory balloons!
-    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.title("🎓 Materiał opanowany!")
@@ -410,122 +512,186 @@ def render_mastery_summary():
     
     st.divider()
     
-    # Komunikaty motywujące (Podejście 3)
-    st.subheader("🌟 Twoje osiągnięcie:")
-    
-    # Zamiast oceny procentowej - uznanie za wytrwałość
-    if avg_attempts <= 1.2:
-        st.success("🚀 **Błyskawiczna nauka!** Większość pytań opanowałeś za pierwszym razem!")
-        achievement_level = "expert"
-    elif avg_attempts <= 2.0:
-        st.success("⭐ **Świetna koncentracja!** Potrzebowałeś niewiele prób do opanowania materiału.")
-        achievement_level = "advanced"
-    elif avg_attempts <= 3.0:
-        st.info("💪 **Wytrwałość się opłaciła!** Dzięki powtórzeniom dobrze opanowałeś materiał.")
-        achievement_level = "persistent"
-    else:
-        st.success("🏆 **Determinacja na medal!** Nie poddałeś się i opanowałeś wszystkie zagadnienia!")
-        achievement_level = "determined"
-    
-    # Render mastery certificate
-    render_mastery_certificate(unique_questions, duration_str, achievement_level)
-    
-    st.divider()
-    
     # Enhanced action buttons focused on continued learning
     st.subheader("🚀 Co dalej?")
+
+    # Check if restart is in progress to prevent multiple buttons
+    if st.session_state.get("quiz_restart_in_progress", False):
+        st.info("🔄 Restart w toku...")
+        return
     
-    col1, col2, col3 = st.columns(3)
-    
+    col1, col2 = st.columns(2)
+
     with col1:
-        if st.button("🔄 Sprawdź się ponownie", use_container_width=True):
+        if st.button("🔄 Sprawdź się ponownie", use_container_width=True, key="retry_quiz"):
             restart_quiz_with_message("Sprawdź, czy tym razem opanujesz materiał jeszcze szybciej!")
-    
+
     with col2:
-        if st.button("📚 Nowy temat", use_container_width=True):
-            return_to_topic_selection()
-    
-    with col3:
-        if st.button("🏠 Menu główne", use_container_width=True):
+        if st.button("🏠 Menu główne", use_container_width=True, key="main_menu"):
             return_to_main_menu()
 
-def render_mastery_certificate(questions_count: int, duration: str, achievement_level: str):
-    """Render a mastery certificate instead of traditional results"""
-    
-    # Certificate styling based on achievement level
-    if achievement_level == "expert":
-        border_color = "gold"
-        bg_gradient = "linear-gradient(45deg, #fff9c4, #ffeaa7)"
-        icon = "🏆"
-        title = "CERTYFIKAT EKSPERTA"
-    elif achievement_level == "advanced":
-        border_color = "silver"  
-        bg_gradient = "linear-gradient(45deg, #f0f8ff, #e6f3ff)"
-        icon = "⭐"
-        title = "CERTYFIKAT ZAAWANSOWANY"
-    elif achievement_level == "persistent":
-        border_color = "#CD7F32"  # Bronze
-        bg_gradient = "linear-gradient(45deg, #ffeaa7, #fdcb6e)"
-        icon = "💪"
-        title = "CERTYFIKAT WYTRWAŁOŚCI"
-    else:
-        border_color = "#4CAF50"
-        bg_gradient = "linear-gradient(45deg, #e8f5e8, #c8e6c9)"
-        icon = "🏆"
-        title = "CERTYFIKAT DETERMINACJI"
-    
-    st.markdown(f"""
-    <div style='text-align: center; padding: 2rem; border: 3px solid {border_color}; border-radius: 15px; 
-                background: {bg_gradient}; margin: 1rem 0; box-shadow: 0 4px 8px rgba(0,0,0,0.1);'>
-        <h1 style='color: #2c3e50; margin-bottom: 0.5rem;'>{icon} {title}</h1>
-        <h3 style='color: #34495e; margin-bottom: 1rem;'>Gratulujemy opanowania materiału!</h3>
-        <div style='background: rgba(255,255,255,0.7); padding: 1rem; border-radius: 10px; margin: 1rem 0;'>
-            <p style='margin: 0.3rem 0; font-size: 1.1rem;'><strong>Opanowane pytania:</strong> {questions_count}</p>
-            <p style='margin: 0.3rem 0; font-size: 1.1rem;'><strong>Czas nauki:</strong> {duration}</p>
-            <p style='margin: 0.3rem 0; font-size: 1.1rem;'><strong>Data ukończenia:</strong> {datetime.now().strftime("%d.%m.%Y")}</p>
-        </div>
-        <p style='font-style: italic; color: #7f8c8d; margin-top: 1rem;'>
-            "Prawdziwy sukces to nie brak błędów, ale wytrwałość w dążeniu do celu"
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
 
 def restart_quiz_with_message(message: str):
     """Restart the quiz with a motivational message"""
-    # Clear all quiz-related session state
-    keys_to_clear = [key for key in st.session_state.keys() 
-                    if key.startswith('quiz_') or key == 'quiz_state']
-    
-    for key in keys_to_clear:
-        del st.session_state[key]
-    
-    st.success(f"🔄 {message}")
-    st.rerun()
+    quiz_id = get_quiz_id()
 
-def return_to_topic_selection():
-    """Return to topic selection"""
-    # Clear quiz session state but keep user session
-    quiz_keys = [key for key in st.session_state.keys() 
-                if key.startswith('quiz_') or key == 'quiz_state']
+    # Prevent multiple restart attempts
+    if st.session_state.get("quiz_restart_in_progress", False):
+        return
     
-    for key in quiz_keys:
-        del st.session_state[key]
-    
-    st.success("📚 Przechodzisz do wyboru nowego tematu...")
-    st.rerun()
+    st.session_state["quiz_restart_in_progress"] = True
+
+    try:
+        # Pokazuj spinner podczas restartowania
+        with st.spinner("Restartowanie quizu..."):
+            api_client = get_api_client(get_user_id())
+            
+            # Try soft reset first (preserves questions)
+            try:
+                st.info("🔄 Resetowanie postępu quizu...")
+                response = api_client.restart_quiz(quiz_id, hard=False)  # Soft reset
+                
+                # Wait for the backend to reset
+                import time
+                time.sleep(1.0)
+                
+                # Verify the reset worked by checking quiz status
+                try:
+                    # Try to get the first question to verify the reset worked
+                    test_question = api_client.get_current_question(quiz_id)
+                    if not test_question:
+                        raise Exception("No question returned after soft reset")
+                    
+                    st.success("✅ Soft reset wykonany pomyślnie - pytania zachowane!")
+                    
+                except Exception as verify_error:
+                    st.warning(f"Soft reset verification failed: {str(verify_error)}")
+                    raise verify_error  # Let it fall through to hard reset
+                
+            except Exception as soft_reset_error:
+                st.warning(f"Soft reset nie powiódł się: {str(soft_reset_error)}")
+                st.info("🔄 Próbuję hard reset...")
+                
+                # Fallback to hard reset if soft reset fails
+                try:
+                    response = api_client.restart_quiz(quiz_id, hard=True)
+                    time.sleep(1.0)
+                    
+                    # Verify hard reset worked
+                    test_question = api_client.get_current_question(quiz_id)
+                    if not test_question:
+                        raise Exception("No question returned after hard reset")
+                    
+                    st.success("✅ Hard reset wykonany pomyślnie - nowe pytania!")
+                    
+                except Exception as hard_reset_error:
+                    st.error(f"❌ Błąd podczas hard reset: {str(hard_reset_error)}")
+                    st.info("Spróbuj wrócić do menu głównego i rozpocząć quiz ponownie.")
+                    st.session_state["quiz_restart_in_progress"] = False
+                    return
+            
+            # Wyczyść wszystkie cache i stan - AFTER successful API reset
+            clear_quiz_cache()
+            
+            # Clear specific progress cache
+            progress_cache_key = f"quiz_progress_{quiz_id}"
+            if progress_cache_key in st.session_state:
+                del st.session_state[progress_cache_key]
+            
+            # Clear all quiz-related session state
+            keys_to_clear = [
+                "quiz_state", 
+                "balloons_shown", 
+                "quiz_restart_in_progress",
+                "quiz_completion_time"
+            ]
+            
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # Resetowanie stanu w sesji - create fresh state
+            st.session_state["quiz_state"] = {
+                "current_question": None,
+                "answered": False,
+                "answer_result": None,
+                "selected_choices": [],
+                "loading": False,
+                "completed": False,
+                "start_time": datetime.now().isoformat()
+            }
+
+        st.success(f"🔄 {message}")
+        
+        # Additional delay before rerun to ensure backend is ready
+        import time
+        time.sleep(0.5)
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"❌ Wystąpił błąd przy restarcie quizu: {str(e)}")
+        st.info("Spróbuj wrócić do menu głównego i rozpocząć quiz ponownie.")
+        
+        # Clean up restart flag even on error
+        if "quiz_restart_in_progress" in st.session_state:
+            del st.session_state["quiz_restart_in_progress"]
+
+
 
 def return_to_main_menu():
-    """Return to main menu"""
-    # Clear quiz session state
-    if "quiz_state" in st.session_state:
-        del st.session_state["quiz_state"]
+    """Return to main menu with complete state cleanup - ENHANCED"""
+    # Import reset_quiz_session from session_manager
+    from utils.session_manager import reset_quiz_session
     
-    # Clear quiz ID to return to main menu
-    if "quiz_id" in st.session_state:
-        del st.session_state["quiz_id"]
+    # Clear ALL quiz-related session state using the dedicated function
+    reset_quiz_session()
+    
+    # Clear additional quiz runtime state - EXPANDED LIST
+    quiz_runtime_keys = [
+        "quiz_state", 
+        "balloons_shown", 
+        "quiz_restart_in_progress",
+        "quiz_completion_time",
+        "show_quiz_list",
+        "user_questions",  # Clear custom questions
+        "new_question_input",  # Clear input field
+        "questions_generated_flag",  # Clear generation flag
+        "app_phase",  # Reset app phase
+        "topics_confirmed",  # ADDED: Clear topics confirmation
+        "quiz_created",  # ADDED: Clear quiz creation flag
+        "confirmed_topics"  # ADDED: Clear confirmed topics
+    ]
+    
+    for key in quiz_runtime_keys:
+        if key in st.session_state:
+            del st.session_state[key]
+    
+    # Clear quiz cache
+    clear_quiz_cache()
+    
+    # Clear ALL cache keys that might interfere - MORE COMPREHENSIVE
+    cache_keys_to_clear = [key for key in st.session_state.keys() 
+                          if key.startswith('quiz_') or 
+                             key.startswith('topic_') or
+                             key.startswith('progress_') or
+                             key.startswith('question_') or
+                             key.startswith('api_')]
+    
+    for key in cache_keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
+    
+    # Force reset to homepage phase
+    st.session_state["app_phase"] = "homepage"
+    
+    # ENHANCED: Reset ALL quiz creation flags
+    st.session_state["quiz_created"] = False
+    st.session_state["topics_confirmed"] = False
+    st.session_state["questions_generated_flag"] = False
     
     st.success("🏠 Powracasz do menu głównego...")
     st.rerun()
+
 
 def refresh_quiz_progress_cache(quiz_id: str):
     """Refresh quiz progress cache - wywołaj po każdej odpowiedzi"""
@@ -537,12 +703,17 @@ def refresh_quiz_progress_cache(quiz_id: str):
     get_quiz_progress(quiz_id, force_refresh=True)
         
 def clear_quiz_cache():
-    """Clear quiz-related cache"""
+    """Clear quiz-related cache - ENHANCED VERSION"""
     keys_to_remove = [key for key in st.session_state.keys() 
-                    if key.startswith('quiz_status_') or key.startswith('quiz_progress_')]
+                    if key.startswith('quiz_status_') or 
+                       key.startswith('quiz_progress_') or
+                       key.startswith('quiz_data_') or
+                       key.startswith('current_question_') or
+                       key.startswith('api_cache_')]
+    
     for key in keys_to_remove:
-        del st.session_state[key]
-
+        if key in st.session_state:
+            del st.session_state[key]
 def render_disabled_answers(question_data: Dict[str, Any]):
     """Render disabled answer options after submission"""
     choices = question_data.get('choices', [])
@@ -764,7 +935,6 @@ def render_answer_feedback(question_data: Dict[str, Any]):
     # Navigation buttons
     if st.button("➡️ Następne pytanie", use_container_width=True):
         quiz_id = get_quiz_id()
-        refresh_quiz_progress_cache(quiz_id)
         
         # Reset state for next question
         st.session_state["quiz_state"]["answered"] = False
@@ -772,8 +942,10 @@ def render_answer_feedback(question_data: Dict[str, Any]):
         st.session_state["quiz_state"]["selected_choices"] = []
         st.session_state["quiz_state"]["current_question"] = None
         
-        # Now clear quiz cache
+        # Refresh cache
+        refresh_quiz_progress_cache(quiz_id)
         clear_quiz_cache()
+        
         st.rerun()
 
 # Utility function to check if quiz is completed

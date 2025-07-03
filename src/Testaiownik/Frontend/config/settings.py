@@ -36,3 +36,4 @@ class SessionKeys:
     EDITING_TOPIC = "editing_topic"
     TOPICS_CONFIRMED = "topics_confirmed"  
     QUESTIONS_GENERATED = "questions generated"
+    HOME_PAGE_SHOWN = "home_page_shown"

@@ -3,6 +3,7 @@
 import streamlit as st
 from components.questions_manager import render_questions_manager
 from components.quiz_manager import render_quiz_questions
+from components.home_page import render_home_page
 from utils.session_manager import (
     get_app_phase,
     init_user_id
@@ -20,7 +21,11 @@ def main():
     phase = get_app_phase()
     
     # Route to appropriate component based on phase
-    if phase == "quiz_creation":
+
+    if phase == "homepage":
+        render_home_page() 
+
+    elif phase == "quiz_creation":
         render_quiz_creation()
     
     elif phase == "file_upload":

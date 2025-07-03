@@ -78,6 +78,14 @@ def set_questions_generated(status: bool = True):
     """Set questions generation status"""
     st.session_state[SessionKeys.QUESTIONS_GENERATED] = status
 
+def is_home_page_shown() -> bool:
+    """Check if home page has been shown"""
+    return st.session_state.get(SessionKeys.HOME_PAGE_SHOWN, False)
+
+def set_home_page_shown(status: bool = True):
+    """Set the home page shown status"""
+    st.session_state[SessionKeys.HOME_PAGE_SHOWN] = status
+
 
 def reset_quiz_session():
     """Reset all quiz-related session state"""
@@ -95,7 +103,15 @@ def reset_quiz_session():
 
 def get_app_phase() -> str:
     """Get current application phase"""
-    if not is_quiz_created():
+    
+    # Check if explicitly set to homepage
+    if st.session_state.get("app_phase") == "homepage":
+        return "homepage"
+    
+    # Check normal flow
+    if not is_home_page_shown():
+        return "homepage"
+    elif not is_quiz_created():
         return "quiz_creation"
     elif not is_files_uploaded():
         return "file_upload"
@@ -103,7 +119,7 @@ def get_app_phase() -> str:
         return "indexing_setup"
     elif not are_topics_generated():
         return "topic_generation"
-    elif not are_topics_confirmed():  # Check if questions have been confirmed
+    elif not are_topics_confirmed():
         return "topic_management"
     elif not are_questions_generated(): 
         return "question_generation"

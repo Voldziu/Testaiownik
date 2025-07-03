@@ -109,8 +109,9 @@ def render_questions_manager():
         start_test(quiz_id, num_questions, st.session_state["user_questions"])
 
 
+
 def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
-    """Start quiz with user-defined question count and optional custom questions"""
+    """Start quiz with user-defined question count and optional custom questions - ENHANCED"""
     try:
         with st.spinner("Rozpoczynanie testu..."):
             api_client = get_api_client(get_user_id())
@@ -129,7 +130,6 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
                 st.success("✅ Test został pomyślnie rozpoczęty!")
 
                 # Display test information
-
                 with st.expander("📊 Szczegóły testu", expanded=True):
                     st.write(f"🆔 **ID Quizu:** {quiz_id}")
                     st.write(f"📝 **Liczba pytań:** {total_questions}")
@@ -138,11 +138,23 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
                     st.write(f"⏱️ **Szacowany czas generowania:** ~30 sekund")
 
                 set_questions_generated()
+                
+                # ENHANCED: Clear any existing quiz state before starting
+                if "quiz_state" in st.session_state:
+                    del st.session_state["quiz_state"]
+                
+                # Clear progress cache for this quiz
+                progress_cache_key = f"quiz_progress_{quiz_id}"
+                if progress_cache_key in st.session_state:
+                    del st.session_state[progress_cache_key]
+                
+                # Set the app phase to test
                 st.session_state["app_phase"] = "test"
-                # Optional redirect or further actions
-                st.info("🔄 Test jest generowany.")
-
-                time.sleep(1)
+                
+                st.info("🔄 Test jest generowany. Poczekaj chwilę...")
+                
+                # Wait a bit longer to ensure backend is ready
+                time.sleep(2)
                 st.rerun()
 
             else:
