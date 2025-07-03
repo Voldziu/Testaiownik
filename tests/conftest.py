@@ -18,370 +18,26 @@ sys.path.insert(0, str(testaiownik_dir))
 load_dotenv(test_dir.parent / ".env.test")
 
 
-# Agent fixtures
+# Service-specific fixtures
 @pytest.fixture
-def mock_llm():
-    """Mock LLM for testing"""
-    llm = Mock()
-    llm.invoke.return_value = Mock()
-    llm.with_structured_output.return_value = llm
-    return llm
+def mock_db_session():
+    """Mock database session"""
+    return Mock()
 
 
 @pytest.fixture
-def real_llm():
-    """Real LLM for integration tests"""
-    from src.Testaiownik.AzureModels import get_llm
-
-    return get_llm(temperature=0.1, max_tokens=500)
-
-
-@pytest.fixture
-def sample_weighted_topics():
-    """Sample WeightedTopic objects for testing"""
-    from src.Testaiownik.Agent.Shared import WeightedTopic
-
-    return [
-        WeightedTopic(topic="Algorithms", weight=0.4),
-        WeightedTopic(topic="Data Structures", weight=0.3),
-        WeightedTopic(topic="Complexity Analysis", weight=0.3),
-    ]
+def mock_qdrant_manager():
+    """Mock QdrantManager"""
+    manager = Mock()
+    manager.create_collection.return_value = None
+    manager.collection_exists.return_value = False
+    manager.index_file_to_qdrant.return_value = True
+    manager.get_collection_info.return_value = {"name": "test_collection", "size": 100}
+    return manager
 
 
 @pytest.fixture
-def mock_retriever():
-    """Mock DocumentRetriever for testing"""
-    from src.Testaiownik.RAG.Retrieval import DocumentRetriever
-
-    retriever = Mock(spec=DocumentRetriever)
-
-    # Default sample chunks
-    sample_chunks = [
-        {
-            "text": "Algorithms are step-by-step procedures for solving computational problems.",
-            "source": "algorithms.pdf",
-        },
-        {
-            "text": "Data structures organize and store data efficiently in computer memory.",
-            "source": "data_structures.pdf",
-        },
-        {
-            "text": "Time complexity analysis helps measure algorithm efficiency using Big O notation.",
-            "source": "complexity.pdf",
-        },
-    ]
-
-    retriever.get_all_chunks.return_value = sample_chunks
-    retriever.get_chunk_count.return_value = len(sample_chunks)
-    retriever.search_in_collection.return_value = [
-        Mock(payload={"text": chunk["text"]}) for chunk in sample_chunks
-    ]
-
-    return retriever
-
-
-@pytest.fixture
-def agent_state_minimal():
-    """Minimal AgentState for testing"""
-    from src.Testaiownik.Agent.TopicSelection.state import AgentState
-
-    state: AgentState = {
-        "suggested_topics": [],
-        "rejected_topics": [],
-        "confirmed_topics": [],
-        "subtopics": {},
-        "user_input": None,
-        "feedback_request": None,
-        "conversation_history": [],
-        "next_node": "",
-        "messages": [],
-        "desired_topic_count": 10,
-    }
-    return state
-
-
-@pytest.fixture
-def agent_state_with_topics(sample_weighted_topics):
-    """AgentState with sample topics"""
-    from src.Testaiownik.Agent.TopicSelection.state import AgentState
-
-    state: AgentState = {
-        "suggested_topics": sample_weighted_topics,
-        "rejected_topics": [],
-        "confirmed_topics": [],
-        "subtopics": {},
-        "user_input": None,
-        "feedback_request": None,
-        "conversation_history": [],
-        "next_node": "request_feedback",
-        "messages": ["Analysis complete"],
-        "desired_topic_count": 3,
-    }
-    return state
-
-
-# Quiz fixtures
-@pytest.fixture
-def quiz_configuration(sample_weighted_topics):
-    """Sample QuizConfiguration for testing"""
-    from src.Testaiownik.Agent.Quiz.models import QuizConfiguration
-
-    return QuizConfiguration(
-        topics=sample_weighted_topics,
-        total_questions=10,
-        difficulty="medium",
-        batch_size=3,
-        user_questions=["What is recursion?"],
-    )
-
-
-@pytest.fixture
-def sample_question():
-    """Sample Question for testing"""
-    from src.Testaiownik.Agent.Quiz.models import Question, QuestionChoice
-
-    return Question(
-        topic="Algorithms",
-        question_text="What is the time complexity of QuickSort in the average case?",
-        choices=[
-            QuestionChoice(text="O(n)", is_correct=False),
-            QuestionChoice(text="O(n log n)", is_correct=True),
-            QuestionChoice(text="O(n²)", is_correct=False),
-            QuestionChoice(text="O(log n)", is_correct=False),
-        ],
-        explanation="QuickSort has O(n log n) average case time complexity",
-        difficulty="medium",
-    )
-
-
-@pytest.fixture
-def quiz_session_basic(sample_weighted_topics):
-    """Basic QuizSession for testing"""
-    from src.Testaiownik.Agent.Quiz.models import QuizSession
-
-    return QuizSession(
-        topics=sample_weighted_topics,
-        total_questions=10,
-        questions_per_topic={
-            "Algorithms": 4,
-            "Data Structures": 3,
-            "Complexity Analysis": 3,
-        },
-        difficulty="medium",
-    )
-
-
-@pytest.fixture
-def quiz_state_minimal(quiz_configuration):
-    """Minimal QuizState for testing"""
-    from src.Testaiownik.Agent.Quiz.state import create_initial_quiz_state
-
-    return create_initial_quiz_state(
-        confirmed_topics=quiz_configuration.topics,
-        total_questions=5,
-        difficulty="easy",
-    )
-
-
-# RAG fixtures
-@pytest.fixture
-def mock_embedding_model():
-    """Mock embedding model"""
-    model = Mock()
-    model.embed_documents.return_value = [[0.1, 0.2, 0.3] * 512]
-    model.embed_query.return_value = [0.1, 0.2, 0.3] * 512
-    return model
-
-
-@pytest.fixture
-def mock_qdrant_client():
-    """Mock Qdrant client"""
-    client = Mock()
-    client.get_collection.return_value = Mock()
-    client.create_collection.return_value = None
-    client.upsert.return_value = None
-
-    # Mock scroll response
-    mock_point = Mock()
-    mock_point.payload = {"text": "sample text", "source": "test.pdf"}
-    client.scroll.return_value = ([mock_point], None)
-
-    # Mock count response
-    mock_count_result = Mock()
-    mock_count_result.count = 10
-    client.count.return_value = mock_count_result
-
-    return client
-
-
-@pytest.fixture
-def mock_qdrant_manager(mock_qdrant_client, mock_embedding_model):
-    """Mock QdrantManager with all dependencies"""
-    from src.Testaiownik.RAG.qdrant_manager import QdrantManager
-
-    with (
-        pytest.mock.patch(
-            "RAG.qdrant_manager.QdrantClient", return_value=mock_qdrant_client
-        ),
-        pytest.mock.patch(
-            "RAG.qdrant_manager.get_embedding_model", return_value=mock_embedding_model
-        ),
-    ):
-        manager = QdrantManager()
-        manager.client = mock_qdrant_client
-        manager.embedding_model = mock_embedding_model
-        return manager
-
-
-# Integration test fixtures
-@pytest.fixture
-def testaiownik_runner(mock_retriever):
-    """TestaiownikRunner for integration testing"""
-    from src.Testaiownik.Agent.runner import TestaiownikRunner
-
-    return TestaiownikRunner(mock_retriever)
-
-
-# Test data fixtures
-@pytest.fixture
-def sample_conversation_history():
-    """Sample conversation history for testing"""
-    return [
-        {
-            "suggested_topics": [
-                {"topic": "Sorting Algorithms", "weight": 0.6},
-                {"topic": "Search Algorithms", "weight": 0.4},
-            ],
-            "user_feedback": "Add more advanced topics",
-        },
-        {
-            "suggested_topics": [
-                {"topic": "Advanced Sorting (QuickSort, MergeSort)", "weight": 0.4},
-                {"topic": "Tree Traversal Algorithms", "weight": 0.3},
-                {"topic": "Graph Search Algorithms", "weight": 0.3},
-            ],
-            "user_feedback": "These look good, I accept",
-        },
-    ]
-
-
-@pytest.fixture
-def temp_test_file():
-    """Create temporary test file"""
-    import tempfile
-    import os
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False, encoding="utf-8"
-    ) as f:
-        f.write("Test content for file processing")
-        temp_path = f.name
-
-    yield temp_path
-
-    # Cleanup
-    try:
-        os.unlink(temp_path)
-    except OSError:
-        pass
-
-
-# Pytest configuration
-def pytest_configure(config):
-    """Configure pytest markers"""
-    config.addinivalue_line(
-        "markers", "integration: mark test as integration test (may be slower)"
-    )
-    config.addinivalue_line("markers", "unit: mark test as unit test (fast, isolated)")
-    config.addinivalue_line(
-        "markers", "requires_llm: mark test as requiring real LLM (uses API calls)"
-    )
-
-
-def pytest_collection_modifyitems(config, items):
-    """Auto-mark tests based on their location"""
-    for item in items:
-        # Mark integration tests
-        if "integration" in str(item.fspath):
-            item.add_marker(pytest.mark.integration)
-
-        # Mark tests that use real_llm fixture
-        if "real_llm" in getattr(item, "fixturenames", []):
-            item.add_marker(pytest.mark.requires_llm)
-
-
-# Cleanup fixtures
-@pytest.fixture(autouse=True)
-def cleanup_temp_files():
-    """Automatically cleanup temporary files after tests"""
-    yield
-    # Any cleanup code here would run after each test
-    pass
-
-
-@pytest.fixture
-def mock_user_id():
-    """Mock user ID for testing"""
-    return "test_user_123"
-
-
-@pytest.fixture
-def mock_quiz_id():
-    """Mock quiz ID for testing"""
-    return "quiz_456"
-
-
-@pytest.fixture
-def mock_request(mock_user_id):
-    """Mock request with user ID"""
-    request = Mock()
-    request.state = Mock()
-    request.state.user_id = mock_user_id
-    return request
-
-
-@pytest.fixture
-def mock_qdrant_manager_backend():
-    """Mock Qdrant manager for Backend testing"""
-    from unittest.mock import patch
-
-    with patch("Backend.services.document_service.QdrantManager") as mock:
-        manager = Mock()
-        manager.create_collection.return_value = None
-        manager.index_documents_from_files.return_value = {"indexed": 10, "chunks": 100}
-        manager.search_collection.return_value = [
-            {"text": "sample text", "metadata": {"source": "test.pdf"}, "score": 0.9}
-        ]
-        manager.get_collection_info.return_value = {
-            "name": "test_collection",
-            "vector_count": 100,
-        }
-        manager.list_collections.return_value = [
-            {"name": "quiz_456", "vector_count": 100}
-        ]
-        manager.delete_collection.return_value = True
-        mock.return_value = manager
-        yield manager
-
-
-@pytest.fixture
-def mock_file_upload_backend():
-    """Mock file upload for Backend testing"""
-    from io import BytesIO
-    from unittest.mock import AsyncMock
-
-    file_content = b"This is a test PDF content"
-    file_mock = Mock()
-    file_mock.filename = "test.pdf"
-    file_mock.content_type = "application/pdf"
-    file_mock.file = BytesIO(file_content)
-    file_mock.read = AsyncMock(return_value=file_content)
-
-    return file_mock
-
-
-@pytest.fixture
-def temp_upload_dir_backend():
+def temp_upload_dir():
     """Create temporary upload directory"""
     import tempfile
     from pathlib import Path
@@ -391,51 +47,57 @@ def temp_upload_dir_backend():
 
 
 @pytest.fixture
-def mock_db_crud_operations():
-    """Mock database CRUD operations"""
-    from unittest.mock import patch
-
-    with patch("Backend.services.document_service.create_document") as mock_create:
-        with patch(
-            "Backend.services.document_service.get_documents_by_quiz"
-        ) as mock_get:
-            with patch("Backend.services.document_service.log_activity") as mock_log:
-                mock_doc = Mock()
-                mock_doc.doc_id = "doc_123"
-                mock_doc.filename = "test.pdf"
-                mock_doc.size_bytes = 1024
-                mock_doc.file_type = "pdf"
-                mock_doc.uploaded_at = "2025-01-15T10:00:00Z"
-                mock_doc.indexed = False
-
-                mock_create.return_value = mock_doc
-                mock_get.return_value = [mock_doc]
-                mock_log.return_value = None
-
-                yield {
-                    "create_document": mock_create,
-                    "get_documents": mock_get,
-                    "log_activity": mock_log,
-                }
+def mock_document():
+    """Mock document object"""
+    doc = Mock()
+    doc.doc_id = "doc_123"
+    doc.filename = "test.pdf"
+    doc.file_path = "/path/to/test.pdf"
+    doc.size_bytes = 1024
+    doc.file_type = "pdf"
+    doc.uploaded_at = "2025-01-15T10:00:00Z"
+    doc.indexed = False
+    return doc
 
 
-# Environment setup for Backend tests
+@pytest.fixture
+def mock_quiz():
+    """Mock quiz object"""
+    quiz = Mock()
+    quiz.quiz_id = "quiz_456"
+    quiz.status = "documents_indexed"
+    quiz.collection_name = "quiz_456_collection"
+    quiz.suggested_topics = [
+        {"topic": "Algorithms", "weight": 0.4},
+        {"topic": "Data Structures", "weight": 0.3},
+    ]
+    quiz.confirmed_topics = None
+    quiz.langgraph_topic_state = None
+    quiz.langgraph_quiz_state = None
+    return quiz
+
+
+# Pytest configuration for async support
+def pytest_configure(config):
+    """Configure pytest markers"""
+    config.addinivalue_line("markers", "asyncio: async test support")
+
+
+# Environment setup
 @pytest.fixture(autouse=True)
-def setup_backend_test_env():
-    """Set up Backend test environment variables"""
+def setup_test_env():
+    """Set up test environment variables"""
     import os
 
-    backend_env = {
+    test_env = {
         "ENVIRONMENT": "test",
         "DATABASE_URL": "sqlite:///:memory:",
         "UPLOAD_DIR": "/tmp/test_uploads",
         "QDRANT_URL": "http://localhost:6333",
     }
 
-    # Only set if not already set (to avoid overriding existing config)
-    for key, value in backend_env.items():
+    for key, value in test_env.items():
         if key not in os.environ:
             os.environ[key] = value
 
     yield
-    # Cleanup if needed

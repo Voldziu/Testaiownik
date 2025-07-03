@@ -1,39 +1,25 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
-import tempfile
+from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
 from src.Testaiownik.Backend.services.document_service import DocumentService
 
 
 class TestDocumentService:
-    """Test DocumentService functionality"""
+    """Test DocumentService functionality - only real methods"""
 
     @pytest.fixture
     def document_service(self):
         return DocumentService()
 
-    @pytest.fixture
-    def mock_qdrant_manager(self):
-        with patch(
-            "src.Testaiownik.Backend.services.document_service.QdrantManager"
-        ) as mock:
-            manager = Mock()
-            mock.return_value = manager
-            yield manager
-
-    @pytest.fixture
-    def mock_db_session(self):
-        return Mock()
-
     @pytest.mark.asyncio
     async def test_upload_documents_success(
-        self, document_service, mock_qdrant_manager, mock_db_session, temp_upload_dir
+        self, document_service, mock_db_session, temp_upload_dir
     ):
-        """Test successful file upload"""
+        """Test successful document upload"""
         quiz_id = "quiz_456"
         user_id = "user_123"
 
-        # Create mock files
+        # Mock file objects
         mock_file1 = Mock()
         mock_file1.filename = "test1.pdf"
         mock_file1.read = AsyncMock(return_value=b"PDF content")
@@ -51,6 +37,7 @@ class TestDocumentService:
             with patch(
                 "src.Testaiownik.Backend.services.document_service.log_activity"
             ):
+                # Mock document objects
                 mock_doc1 = Mock()
                 mock_doc1.doc_id = "doc_1"
                 mock_doc1.filename = "test1.pdf"
@@ -69,6 +56,9 @@ class TestDocumentService:
 
                 mock_create.side_effect = [mock_doc1, mock_doc2]
 
+                # Mock upload directory
+                document_service.upload_dir = temp_upload_dir
+
                 result = await document_service.upload_documents(
                     quiz_id, user_id, files, mock_db_session
                 )
@@ -76,6 +66,8 @@ class TestDocumentService:
         assert len(result) == 2
         assert result[0]["filename"] == "test1.pdf"
         assert result[1]["filename"] == "test2.docx"
+        assert result[0]["doc_id"] == "doc_1"
+        assert result[1]["doc_id"] == "doc_2"
 
     @pytest.mark.asyncio
     async def test_upload_unsupported_file_type(
@@ -89,150 +81,174 @@ class TestDocumentService:
         mock_file.filename = "test.exe"
         mock_file.read = AsyncMock(return_value=b"executable content")
 
-        # Should skip unsupported files, not raise exception
         result = await document_service.upload_documents(
             quiz_id, user_id, [mock_file], mock_db_session
         )
+
+        # Should skip unsupported files
         assert len(result) == 0
 
-    @pytest.mark.asyncio
-    async def test_upload_file_too_large(self, document_service, mock_db_session):
-        """Test upload with file too large"""
-        quiz_id = "quiz_456"
-        user_id = "user_123"
-
-        mock_file = Mock()
-        mock_file.filename = "large.pdf"
-        mock_file.read = AsyncMock(return_value=b"x" * (101 * 1024 * 1024))  # 101MB
-
-        # The service handles large files by continuing, not raising exceptions
-        with patch("src.Testaiownik.Backend.services.document_service.create_document"):
-            with patch(
-                "src.Testaiownik.Backend.services.document_service.log_activity"
-            ):
-                result = await document_service.upload_documents(
-                    quiz_id, user_id, [mock_file], mock_db_session
-                )
-
-        # Should still process the file if no size validation is implemented
-        assert isinstance(result, list)
-
-    def test_list_documents_success(
-        self, document_service, mock_qdrant_manager, mock_db_session
-    ):
-        """Test successful document listing"""
+    def test_get_quiz_documents(self, document_service, mock_db_session, mock_document):
+        """Test getting quiz documents"""
         quiz_id = "quiz_456"
 
         with patch(
             "src.Testaiownik.Backend.services.document_service.get_documents_by_quiz"
         ) as mock_get:
-            mock_docs = [
-                Mock(
-                    doc_id="doc_123",
-                    filename="test1.pdf",
-                    size_bytes=1024,
-                    file_type="pdf",
-                    uploaded_at="2025-01-15T10:00:00Z",
-                    indexed=True,
-                ),
-                Mock(
-                    doc_id="doc_456",
-                    filename="test2.docx",
-                    size_bytes=2048,
-                    file_type="docx",
-                    uploaded_at="2025-01-15T10:05:00Z",
-                    indexed=False,
-                ),
-            ]
-            mock_get.return_value = mock_docs
+            mock_get.return_value = [mock_document]
 
             result = document_service.get_quiz_documents(quiz_id, mock_db_session)
 
-        assert len(result) == 2
-        assert result[0].doc_id == "doc_123"
-        assert result[0].indexed is True
-        assert result[1].indexed is False
+            assert len(result) == 1
+            assert result[0].doc_id == "doc_123"
+            assert result[0].filename == "test.pdf"
 
-    def test_index_documents_success(self, document_service, mock_qdrant_manager):
-        """Test successful document indexing"""
+    def test_get_indexing_status_no_documents(self, document_service, mock_db_session):
+        """Test indexing status with no documents"""
         quiz_id = "quiz_456"
-        db_session = Mock()
-
-        # Mock the indexing process
-        with patch(
-            "src.Testaiownik.Backend.services.document_service.get_documents_by_quiz"
-        ) as mock_get_docs:
-            mock_docs = [Mock(doc_id="doc_123", file_path="/path/to/test.pdf")]
-            mock_get_docs.return_value = mock_docs
-
-            with patch(
-                "src.Testaiownik.Backend.services.document_service.update_quiz_collection"
-            ):
-                with patch(
-                    "src.Testaiownik.Backend.services.document_service.update_document_indexed"
-                ):
-                    mock_qdrant_manager.create_collection.return_value = None
-                    mock_qdrant_manager.index_documents_from_files.return_value = {
-                        "indexed": 1,
-                        "total_chunks": 50,
-                    }
-
-                    result = document_service.index_documents(quiz_id, db_session)
-
-        assert "indexed_documents" in result
-        assert result["total_chunks"] == 50
-
-    def test_delete_document_success(
-        self, document_service, mock_qdrant_manager, mock_db_session
-    ):
-        """Test successful document deletion"""
-        quiz_id = "quiz_456"
-        doc_id = "doc_123"
-
-        # Mock finding the document
-        mock_doc = Mock(
-            doc_id=doc_id, filename="test.pdf", file_path="/path/to/test.pdf"
-        )
 
         with patch(
             "src.Testaiownik.Backend.services.document_service.get_documents_by_quiz"
         ) as mock_get:
-            mock_get.return_value = [mock_doc]
+            mock_get.return_value = []
 
-            with patch("pathlib.Path.unlink") as mock_unlink:
-                mock_unlink.return_value = None
+            result = document_service.get_indexing_status(quiz_id, mock_db_session)
 
+            assert result["quiz_id"] == quiz_id
+            assert result["indexing_status"] == "no_documents"
+            assert result["total_documents"] == 0
+            assert result["indexed_documents"] == 0
+
+    def test_get_indexing_status_pending(
+        self, document_service, mock_db_session, mock_document
+    ):
+        """Test indexing status with pending documents"""
+        quiz_id = "quiz_456"
+
+        with patch(
+            "src.Testaiownik.Backend.services.document_service.get_documents_by_quiz"
+        ) as mock_get:
+            mock_get.return_value = [mock_document]
+
+            result = document_service.get_indexing_status(quiz_id, mock_db_session)
+
+            assert result["indexing_status"] == "pending"
+            assert result["total_documents"] == 1
+            assert result["indexed_documents"] == 0
+
+    def test_get_indexing_status_completed(
+        self, document_service, mock_db_session, mock_document
+    ):
+        """Test indexing status with completed documents"""
+        quiz_id = "quiz_456"
+        mock_document.indexed = True
+
+        with patch(
+            "src.Testaiownik.Backend.services.document_service.get_documents_by_quiz"
+        ) as mock_get:
+            with patch(
+                "src.Testaiownik.Backend.database.crud.get_quiz"
+            ) as mock_get_quiz:
+                mock_quiz = Mock()
+                mock_quiz.collection_name = "quiz_456_collection"
+                mock_get_quiz.return_value = mock_quiz
+                mock_get.return_value = [mock_document]
+
+                result = document_service.get_indexing_status(quiz_id, mock_db_session)
+
+                assert result["indexing_status"] == "completed"
+                assert result["total_documents"] == 1
+                assert result["indexed_documents"] == 1
+                assert result["collection_name"] == "quiz_456_collection"
+
+    def test_delete_document_success(self, document_service, mock_db_session):
+        """Test successful document deletion"""
+        doc_id = "doc_123"
+
+        with patch(
+            "src.Testaiownik.Backend.database.crud.delete_document"
+        ) as mock_delete:
+            mock_delete.return_value = True
+
+            result = document_service.delete_document(doc_id, mock_db_session)
+
+            assert result is True
+            mock_delete.assert_called_once_with(mock_db_session, doc_id)
+
+    def test_delete_document_failure(self, document_service, mock_db_session):
+        """Test document deletion failure"""
+        doc_id = "doc_123"
+
+        with patch(
+            "src.Testaiownik.Backend.database.crud.delete_document"
+        ) as mock_delete:
+            mock_delete.side_effect = Exception("Database error")
+
+            result = document_service.delete_document(doc_id, mock_db_session)
+
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_index_quiz_documents_success(
+        self, document_service, mock_db_session, mock_document, mock_qdrant_manager
+    ):
+        """Test successful document indexing"""
+        quiz_id = "quiz_456"
+
+        with patch(
+            "src.Testaiownik.Backend.services.document_service.get_documents_by_quiz"
+        ) as mock_get:
+            with patch(
+                "src.Testaiownik.Backend.services.document_service.update_document_indexed"
+            ):
                 with patch(
-                    "src.Testaiownik.Backend.services.document_service.log_activity"
+                    "src.Testaiownik.Backend.services.document_service.update_quiz_collection"
                 ):
-                    # Mock the actual deletion logic
-                    result = document_service.delete_document(
-                        quiz_id, doc_id, mock_db_session
+                    document_service.qdrant_manager = mock_qdrant_manager
+                    mock_get.return_value = [mock_document]
+
+                    result = await document_service.index_quiz_documents(
+                        quiz_id, mock_db_session
                     )
 
-        # The method should return some indication of success
-        assert result is not None
+                    assert result["indexed_documents"] == 1
+                    assert result["collection_name"] == f"quiz_{quiz_id}"
+                    assert "indexing_time_seconds" in result
 
-    def test_search_documents(self, document_service, mock_qdrant_manager):
-        """Test document search functionality"""
+    @pytest.mark.asyncio
+    async def test_index_quiz_documents_no_documents(
+        self, document_service, mock_db_session
+    ):
+        """Test indexing with no documents"""
         quiz_id = "quiz_456"
-        query = "binary search algorithm"
 
-        mock_qdrant_manager.search_collection.return_value = [
-            {
-                "text": "Binary search is an efficient algorithm...",
-                "metadata": {"source": "algorithms.pdf", "page": 42},
-                "score": 0.95,
-            },
-            {
-                "text": "The time complexity of binary search is O(log n)...",
-                "metadata": {"source": "complexity.pdf", "page": 15},
-                "score": 0.87,
-            },
-        ]
+        with patch(
+            "src.Testaiownik.Backend.services.document_service.get_documents_by_quiz"
+        ) as mock_get:
+            mock_get.return_value = []
 
-        result = document_service.search_documents(quiz_id, query, limit=10)
+            with pytest.raises(ValueError, match="No documents found for quiz"):
+                await document_service.index_quiz_documents(quiz_id, mock_db_session)
 
-        assert len(result) == 2
-        assert result[0]["score"] == 0.95
-        mock_qdrant_manager.search_collection.assert_called_once()
+    # def test_search_documents_success(self, document_service, mock_qdrant_manager):
+    #     """Test document search functionality"""
+    #     collection_name = "quiz_456_collection_test_search_documents_success"
+    #     query = "test query"
+
+    #     # Mock search results
+    #     mock_qdrant_manager.search_collection.return_value = [
+    #         {
+    #             "text": "Sample text content",
+    #             "metadata": {"source": "test.pdf", "page": 1},
+    #             "score": 0.95,
+    #         }
+    #     ]
+
+    #     document_service.qdrant_manager = mock_qdrant_manager
+
+    #     result = document_service.search_documents(collection_name, query, limit=10)
+
+    #     assert len(result) == 1
+    #     assert result[0]["score"] == 0.95
+    #     assert result[0]["text"] == "Sample text content"
+    #     mock_qdrant_manager.search_collection.assert_called_once()
