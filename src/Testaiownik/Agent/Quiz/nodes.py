@@ -41,7 +41,7 @@ def initialize_quiz(state: QuizState) -> QuizState:
         total_questions=config.total_questions,
         difficulty=config.difficulty,
         batch_size=config.batch_size,
-        max_incorrect_recycles=config.max_incorrect_recycles,
+        copies_per_incorrect_answer=config.copies_per_incorrect_answer,
         quiz_mode=config.quiz_mode,
         questions_per_topic=questions_per_topic,
         user_id=config.user_id,
@@ -208,7 +208,6 @@ def process_answer(state: QuizState) -> QuizState:
         return {**state, "next_node": "present_question"}
 
     # Validate list of indices
-
     if not isinstance(user_input, list):
         logger.warning(f"User input not a list type")
         return {
@@ -239,8 +238,12 @@ def process_answer(state: QuizState) -> QuizState:
     # Check if answer is correct using Question's built-in method
     is_correct = current_question.is_answer_correct(selected_indices)
 
-    # Create answer record
-    attempt_number = session.incorrect_recycle_count.get(current_question.id, 0) + 1
+    # Create answer record - simplified attempt number logic
+    attempt_number = (
+        len([a for a in session.user_answers if a.question_id == current_question.id])
+        + 1
+    )
+
     answer = UserAnswer(
         question_id=current_question.id,
         selected_choice_indices=selected_indices,
@@ -248,7 +251,7 @@ def process_answer(state: QuizState) -> QuizState:
         attempt_number=attempt_number,
     )
 
-    # Add answer and handle recycling
+    # Add answer and handle recycling (now adds multiple copies if incorrect)
     session.add_answer(answer)
 
     # Prepare feedback
@@ -260,6 +263,7 @@ def process_answer(state: QuizState) -> QuizState:
     logger.info(
         f"Answer processed: {'✓' if is_correct else '✗'} "
         f"Question {session.current_question_index}/{len(session.active_question_pool)}"
+        f"{f' (added {session.copies_per_incorrect_answer} copies)' if not is_correct else ''}"
     )
 
     return {
