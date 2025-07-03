@@ -17,6 +17,7 @@ dependencies = [
   "pathlib>=1.0.1",
   "pdfplumber>=0.11.7",
   "pydantic>=2.11.5",
+  "pytest-asyncio>=1.0.0",
   "python-docx>=1.2.0",
   "python-multipart>=0.0.20",
   "python-pptx>=1.0.2",
@@ -52,14 +53,8 @@ addopts = [
     "--cov-report=html:htmlcov",
     "-v",
     "--tb=short",
-    "--strict-markers",
 ]
-markers = [
-    "unit: Unit tests (fast, isolated)",
-    "integration: Integration tests (slower, may require external resources)",
-    "requires_llm: Tests requiring real LLM API calls (expensive)",
-    "slow: Tests that take longer than 10 seconds",
-]
+
 
 [tool.coverage.run]
 source = ["src/Testaiownik"]
