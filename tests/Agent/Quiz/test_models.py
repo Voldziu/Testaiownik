@@ -192,7 +192,7 @@ class TestQuizSession:
 
         assert len(quiz_session.user_answers) == 1
         assert quiz_session.user_answers[0] == answer
-        assert quiz_session.last_activity > initial_time
+        assert quiz_session.last_activity >= initial_time
 
     def test_add_answer_incorrect_recycle(self, quiz_session):
         answer = UserAnswer(

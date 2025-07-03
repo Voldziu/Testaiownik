@@ -317,3 +317,125 @@ def cleanup_temp_files():
     yield
     # Any cleanup code here would run after each test
     pass
+
+
+@pytest.fixture
+def mock_user_id():
+    """Mock user ID for testing"""
+    return "test_user_123"
+
+
+@pytest.fixture
+def mock_quiz_id():
+    """Mock quiz ID for testing"""
+    return "quiz_456"
+
+
+@pytest.fixture
+def mock_request(mock_user_id):
+    """Mock request with user ID"""
+    request = Mock()
+    request.state = Mock()
+    request.state.user_id = mock_user_id
+    return request
+
+
+@pytest.fixture
+def mock_qdrant_manager_backend():
+    """Mock Qdrant manager for Backend testing"""
+    from unittest.mock import patch
+
+    with patch("Backend.services.document_service.QdrantManager") as mock:
+        manager = Mock()
+        manager.create_collection.return_value = None
+        manager.index_documents_from_files.return_value = {"indexed": 10, "chunks": 100}
+        manager.search_collection.return_value = [
+            {"text": "sample text", "metadata": {"source": "test.pdf"}, "score": 0.9}
+        ]
+        manager.get_collection_info.return_value = {
+            "name": "test_collection",
+            "vector_count": 100,
+        }
+        manager.list_collections.return_value = [
+            {"name": "quiz_456", "vector_count": 100}
+        ]
+        manager.delete_collection.return_value = True
+        mock.return_value = manager
+        yield manager
+
+
+@pytest.fixture
+def mock_file_upload_backend():
+    """Mock file upload for Backend testing"""
+    from io import BytesIO
+    from unittest.mock import AsyncMock
+
+    file_content = b"This is a test PDF content"
+    file_mock = Mock()
+    file_mock.filename = "test.pdf"
+    file_mock.content_type = "application/pdf"
+    file_mock.file = BytesIO(file_content)
+    file_mock.read = AsyncMock(return_value=file_content)
+
+    return file_mock
+
+
+@pytest.fixture
+def temp_upload_dir_backend():
+    """Create temporary upload directory"""
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield Path(temp_dir)
+
+
+@pytest.fixture
+def mock_db_crud_operations():
+    """Mock database CRUD operations"""
+    from unittest.mock import patch
+
+    with patch("Backend.services.document_service.create_document") as mock_create:
+        with patch(
+            "Backend.services.document_service.get_documents_by_quiz"
+        ) as mock_get:
+            with patch("Backend.services.document_service.log_activity") as mock_log:
+                mock_doc = Mock()
+                mock_doc.doc_id = "doc_123"
+                mock_doc.filename = "test.pdf"
+                mock_doc.size_bytes = 1024
+                mock_doc.file_type = "pdf"
+                mock_doc.uploaded_at = "2025-01-15T10:00:00Z"
+                mock_doc.indexed = False
+
+                mock_create.return_value = mock_doc
+                mock_get.return_value = [mock_doc]
+                mock_log.return_value = None
+
+                yield {
+                    "create_document": mock_create,
+                    "get_documents": mock_get,
+                    "log_activity": mock_log,
+                }
+
+
+# Environment setup for Backend tests
+@pytest.fixture(autouse=True)
+def setup_backend_test_env():
+    """Set up Backend test environment variables"""
+    import os
+
+    backend_env = {
+        "ENVIRONMENT": "test",
+        "DATABASE_URL": "sqlite:///:memory:",
+        "UPLOAD_DIR": "/tmp/test_uploads",
+        "QDRANT_URL": "http://localhost:6333",
+    }
+
+    # Only set if not already set (to avoid overriding existing config)
+    for key, value in backend_env.items():
+        if key not in os.environ:
+            os.environ[key] = value
+
+    yield
+    # Cleanup if needed
