@@ -35,6 +35,17 @@ def initialize_quiz(state: QuizState) -> QuizState:
         count = max(1, round(config.total_questions * topic.weight))
         questions_per_topic[topic.topic] = count
 
+    existing_session = state.get("quiz_session")
+    if existing_session and config.quiz_mode in ["retry_same", "retry_failed"]:
+        logger.info(f"Preserving existing session: {existing_session.session_id}")
+        return {
+            **state,
+            "quiz_session": existing_session,  # Keep the existing session
+            "questions_to_generate": {},  # Questions already exist
+            "current_topic_batch": None,
+            "next_node": "load_or_generate_questions",
+        }
+
     # Create quiz session
     quiz_session = QuizSession(
         topics=config.topics,
@@ -68,12 +79,27 @@ def load_or_generate_questions(state: QuizState) -> QuizState:
         logger.info("Starting fresh question generation")
         return {**state, "next_node": "generate_all_questions"}
     elif session.quiz_mode in ["retry_same", "retry_failed"]:
-        # TODO: Implement loading from previous session when RAG is implemented
-        logger.info(
-            f"Quiz mode {session.quiz_mode} - would load from previous session TODO."
-        )
-        # For now, fall back to fresh generation
-        return {**state, "next_node": "generate_all_questions"}
+        # Check if questions already exist in the session
+        logger.debug(f"Session: {session}")
+        if (
+            session.all_generated_questions
+            and len(session.all_generated_questions) > 0
+            and session.active_question_pool
+            and len(session.active_question_pool) > 0
+        ):
+
+            logger.info(
+                f"Quiz mode {session.quiz_mode} - questions already exist, skipping generation. "
+                f"Found {len(session.all_generated_questions)} questions, "
+                f"active pool: {len(session.active_question_pool)}"
+            )
+            return {**state, "next_node": "present_question"}
+        else:
+            # No existing questions found, generate new ones
+            logger.info(
+                f"Quiz mode {session.quiz_mode} - no existing questions found, generating new ones"
+            )
+            return {**state, "next_node": "generate_all_questions"}
     else:
         raise ValueError(f"Unknown quiz mode: {session.quiz_mode}")
 

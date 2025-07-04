@@ -407,37 +407,29 @@ async def restart_quiz(
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        if hard:
-            # Hard reset: Reset everything including questions (current behavior)
-            success = reset_quiz_execution(db, quiz_id)
-            reset_type = "hard"
-            message = "Quiz reset successfully. Start again to generate new questions."
-            regenerated_questions = False  # Will regenerate when started
-        else:
-            # Soft reset: Keep questions, reset only user progress/flow
-            success = soft_reset_quiz_execution(db, quiz_id)
-            reset_type = "soft"
-            message = "Quiz progress reset. Questions preserved."
-            regenerated_questions = False  # Questions preserved
 
-        if not success:
+        restart_quiz_return_dict = quiz_service.restart_quiz(
+            quiz_id=quiz_id, hard=hard, db=db
+        )
+
+        if not restart_quiz_return_dict["success"]:
             raise HTTPException(status_code=500, detail="Failed to restart quiz")
 
         log_activity(
             db,
             user_id,
             "quiz_restarted",
-            {"quiz_id": quiz_id, "reset_type": reset_type},
+            {"quiz_id": quiz_id, "reset_type": restart_quiz_return_dict["reset_type"]},
         )
 
         return {
             "quiz_id": quiz_id,
-            "reset_type": reset_type,
-            "regenerated_questions": regenerated_questions,
+            "reset_type": restart_quiz_return_dict["reset_type"],
+            "regenerated_questions": restart_quiz_return_dict["regenerated_questions"],
             "same_topics": True,
             "same_questions": not hard,  # Questions preserved in soft reset
             "status": "topic_ready" if hard else "quiz_active",
-            "message": message,
+            "message": restart_quiz_return_dict["message"],
         }
 
     except HTTPException:
