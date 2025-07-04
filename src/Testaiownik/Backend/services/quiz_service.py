@@ -23,6 +23,8 @@ from ..database.crud import (
     update_quiz_progress,
     complete_quiz,
     log_activity,
+    reset_quiz_execution,
+    soft_reset_quiz_execution,
 )
 
 from ..models.responses import (
@@ -628,14 +630,14 @@ class QuizService:
         """Serialize Question object for database storage"""
 
         # Try using model_dump() for Pydantic models first
-        logger.debug(f"Serializing question: {question}")
+        # logger.debug(f"Serializing question: {question}")
         if hasattr(question, "model_dump"):
             data = question.model_dump()
             # Convert datetime to string
             if "generated_at" in data and hasattr(data["generated_at"], "isoformat"):
                 data["generated_at"] = data["generated_at"].isoformat()
 
-            logger.debug(f"hasattr MODEL DUMP data : {data}")
+            # logger.debug(f"hasattr MODEL DUMP data : {data}")
             return data
 
         elif hasattr(question, "dict"):
@@ -643,11 +645,11 @@ class QuizService:
             # Convert datetime to string
             if "generated_at" in data and hasattr(data["generated_at"], "isoformat"):
                 data["generated_at"] = data["generated_at"].isoformat()
-            logger.debug(f"hasattr DICT data: {data}")
+            # logger.debug(f"hasattr DICT data: {data}")
             return data
         else:
 
-            logger.debug("Manual serialization of the question..")
+            # logger.debug("Manual serialization of the question..")
             # Manual serialization if needed
             generated_at = getattr(question, "generated_at", datetime.now())
             generated_at_str = (
@@ -675,9 +677,9 @@ class QuizService:
                         "slide": getattr(source_metadata, "slide", None),
                         "chunk_text": getattr(source_metadata, "chunk_text", None),
                     }
-            logger.debug(
-                f"Serialized source metadata after serialization: {serialized_source_metadata}"
-            )
+            # # logger.debug(
+            #     f"Serialized source metadata after serialization: {serialized_source_metadata}"
+            # )
 
             return {
                 "id": getattr(question, "id", str(uuid.uuid4())),
@@ -1122,8 +1124,20 @@ class QuizService:
         """Restore quiz session from database state"""
         try:
             quiz = get_quiz(db, quiz_id)
-            if not quiz or not quiz.langgraph_quiz_state:
+            if not quiz:
                 return False
+
+            # After restart, langgraph_quiz_state is None but questions_data might exist
+            if not quiz.langgraph_quiz_state:
+                # For soft reset: questions_data exists, recreate session from it
+                if quiz.questions_data:
+                    return await self._restore_from_questions_data(quiz_id, quiz, db)
+                # For hard reset: need to regenerate everything
+                else:
+                    logger.warning(
+                        f"No state or questions data found for quiz {quiz_id}"
+                    )
+                    return False
 
             # Recreate retriever
             collection_name = quiz.collection_name
@@ -1302,6 +1316,203 @@ class QuizService:
         except Exception as e:
             logger.error(f"Failed to restore quiz session: {e}")
             return False
+
+    async def _restore_from_questions_data(
+        self, quiz_id: str, quiz, db: Session
+    ) -> bool:
+        """Restore quiz session from questions_data after soft reset"""
+        try:
+            # Recreate retriever
+            collection_name = quiz.collection_name
+            if not collection_name:
+                return False
+
+            retriever = RAGRetriever(collection_name, self.qdrant_manager)
+
+            # Recreate quiz graph
+            quiz_graph = create_quiz_graph(retriever)
+            config = {"configurable": {"thread_id": f"quiz_{quiz_id}"}}
+
+            # Create quiz session from stored questions data
+            questions_data = quiz.questions_data or {}
+
+            logger.info(f"Questions data keys: {questions_data.keys()}")
+            logger.debug(f"Session id: {questions_data['session_id']}")
+            logger.debug(
+                f"All generated questions count: {len(questions_data.get('all_generated_questions', []))}"
+            )
+            logger.debug(
+                f"Active question pool: {questions_data.get('active_question_pool', [])}"
+            )
+
+            # Import required classes
+            from Agent.Quiz.models import (
+                QuizSession,
+                Question,
+                QuestionChoice,
+                QuizConfiguration,
+            )
+            from Agent.Shared import WeightedTopic
+            from datetime import datetime
+
+            # Reconstruct WeightedTopic objects
+            topics = []
+            if quiz.confirmed_topics:
+                for topic_data in quiz.confirmed_topics:
+                    topics.append(
+                        WeightedTopic(
+                            topic=topic_data.get("topic", ""),
+                            weight=topic_data.get("weight", 1.0),
+                        )
+                    )
+
+            # Reconstruct Question objects from preserved questions_data
+            all_questions = []
+            if questions_data.get("all_generated_questions"):
+                for q_data in questions_data["all_generated_questions"]:
+                    choices = [
+                        QuestionChoice(
+                            text=choice.get("text", ""),
+                            is_correct=choice.get("is_correct", False),
+                        )
+                        for choice in q_data.get("choices", [])
+                    ]
+
+                    # Parse datetime
+                    generated_at = datetime.now()
+                    if q_data.get("generated_at"):
+                        try:
+                            generated_at = datetime.fromisoformat(
+                                q_data["generated_at"]
+                            )
+                        except:
+                            pass
+
+                    question = Question(
+                        id=q_data.get("id", ""),
+                        topic=q_data.get("topic", ""),
+                        question_text=q_data.get("question_text", ""),
+                        choices=choices,
+                        explanation=q_data.get("explanation", ""),
+                        difficulty=q_data.get("difficulty", "medium"),
+                        is_multi_choice=q_data.get("is_multi_choice", False),
+                        generated_at=generated_at,
+                    )
+                    all_questions.append(question)
+
+            # Create fresh QuizSession (no user answers after restart)
+            quiz_session = QuizSession(
+                session_id=questions_data.get("session_id", f"session_{quiz_id}"),
+                topics=topics,
+                total_questions=quiz.total_questions or 20,
+                difficulty=quiz.difficulty or "medium",
+                batch_size=5,
+                copies_per_incorrect_answer=2,
+                quiz_mode="retry_same",
+                questions_per_topic=questions_data.get("questions_per_topic", {}),
+                all_generated_questions=all_questions.copy(),
+                active_question_pool=self.deduplicate_pool(
+                    questions_data.get("active_question_pool", [])
+                ),
+                current_question_index=0,  # Reset to first question
+                user_answers=[],  # Empty after restart
+                status="active",
+                user_id=quiz.user_id,
+            )
+            logger.debug(f"Created session with id: {quiz_session.session_id} ")
+
+            logger.debug(
+                f"Created session with {len(quiz_session.all_generated_questions)} questions"
+            )
+            logger.debug(
+                f"Created session with active pool: {quiz_session.active_question_pool}"
+            )
+            logger.debug(f"Session quiz_mode: {quiz_session.quiz_mode}")
+
+            quiz_config = QuizConfiguration(
+                topics=topics,
+                total_questions=quiz.total_questions,
+                difficulty=quiz.difficulty,
+                batch_size=5,
+                copies_per_incorrect_answer=2,
+                quiz_mode="retry_same",
+                user_questions=[],
+                user_id=quiz.user_id,
+            )
+
+            # Create quiz state for graph
+            quiz_state = {
+                "quiz_session": quiz_session,
+                "session_snapshot": None,
+                "current_question": quiz_session.get_current_question(),
+                "user_input": None,
+                "questions_to_generate": None,
+                "current_topic_batch": None,
+                "quiz_results": None,
+                "quiz_complete": False,
+                "next_node": "present_question",
+                "quiz_config": quiz_config,
+                "confirmed_topics": topics,
+            }
+
+            # Invoke the graph - it will run through the flow and interrupt at process_answer
+            quiz_graph.update_state(config, quiz_state)
+
+            # Invoke with None to continue from load_or_generate_questions
+            quiz_graph.invoke(None, config)
+
+            # Verify we're in the correct interrupted state
+            current_state = quiz_graph.get_state(config)
+            logger.debug(f"Graph state after manual setup: {current_state.next}")
+            if not (current_state.next and "process_answer" in current_state.next):
+                logger.warning(
+                    f"Graph not in expected interrupted state after restoration: {current_state.next}"
+                )
+            quiz_session = current_state.values.get("quiz_session")
+            if quiz_session:
+                # Sync database with graph state
+                update_quiz_progress(
+                    db,
+                    quiz_id,
+                    current_question_index=quiz_session.current_question_index,
+                )
+                logger.info(
+                    f"Synced database current_question_index to {quiz_session.current_question_index}"
+                )
+
+            # Store graph instance
+            self.active_quiz_graphs[quiz_id] = {
+                "graph": quiz_graph,
+                "config": config,
+                "retriever": retriever,
+            }
+
+            logger.info(
+                f"Successfully restored quiz session from questions data for {quiz_id}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to restore from questions data: {e}")
+            return False
+
+    def deduplicate_pool(self, active_question_pool: List):
+        import random
+
+        logger.info(f"Original active question pool: {active_question_pool}")
+
+        # Remove duplicates while preserving order (first occurrence wins)
+        seen = set()
+        deduplicated_pool = []
+        for question_id in active_question_pool:
+            if question_id not in seen:
+                deduplicated_pool.append(question_id)
+                seen.add(question_id)
+
+        logger.info(f"Deduplicated active question pool: {deduplicated_pool}")
+        if deduplicated_pool:
+            random.shuffle(deduplicated_pool)
+        return deduplicated_pool
 
     async def _update_quiz_from_session(
         self, quiz_id: str, quiz_session, graph_state, db: Session
@@ -1689,3 +1900,31 @@ class QuizService:
         except Exception as e:
             logger.error(f"Failed to get explanation context: {e}")
             return None
+
+    def restart_quiz(self, quiz_id: str, hard: bool, db: Session) -> Dict[str, Any]:
+        """Restart quiz with proper cleanup"""
+
+        # Clean up active graph instance
+        if quiz_id in self.active_quiz_graphs:
+            del self.active_quiz_graphs[quiz_id]
+            logger.info(f"Cleaned up active graph for quiz {quiz_id}")
+
+        # Then proceed with database reset
+        if hard:
+            success = reset_quiz_execution(db, quiz_id)
+            reset_type = "hard"
+            message = "Quiz reset successfully. Start again to generate new questions."
+            regenerated_questions = False  # Will regenerate when started
+        else:
+            success = soft_reset_quiz_execution(db, quiz_id)
+            # Soft reset: Keep questions, reset only user progress/flow
+            reset_type = "soft"
+            message = "Quiz progress reset. Questions preserved."
+            regenerated_questions = False  # Questions preserved
+
+        return {
+            "success": success,
+            "reset_type": reset_type,
+            "message": message,
+            "regenerated_questions": regenerated_questions,
+        }
