@@ -1,8 +1,7 @@
-# components/file_upload.py
-
-import streamlit as st
 import time
+import streamlit as st
 from typing import List
+from components.quiz_manager import return_to_main_menu
 from utils.session_manager import (
     get_user_id,
     get_quiz_id,
@@ -19,7 +18,33 @@ from components.status_display import render_indexing_status
 def render_file_upload():
     """Render file upload component based on current phase"""
     phase = get_app_phase()
-    
+
+    st.markdown("""
+    <style>
+        .main-menu-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #FF6F61;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .main-menu-button:hover {
+            background-color: #E55F4E;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns([5, 3])
+
+    with col2:
+        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
+            return_to_main_menu()
+            
+
     if phase == "file_upload":
         _render_upload_section()
     elif phase == "indexing_setup":
@@ -49,15 +74,13 @@ def _render_upload_section():
     if uploaded_files:
         _display_selected_files(uploaded_files)
         
-        # Upload button
-        col1, col2 = st.columns([1, 1])
-        with col1:
+        # Enable "Prześlij pliki" button only if files are uploaded
+        if uploaded_files:
             if st.button("📤 Prześlij pliki", type="primary", use_container_width=True):
                 _upload_files(quiz_id, uploaded_files)
-        
-        with col2:
-            if st.button("🔄 Wyczyść wybór", use_container_width=True):
-                st.rerun()
+        else:
+            # Disable button if no files are uploaded
+            st.button("📤 Prześlij pliki", disabled=True, type="primary", use_container_width=True)
     
     # Show upload status if files were uploaded
     if is_files_uploaded():
@@ -84,7 +107,7 @@ def _render_indexing_setup():
     
     # Indexing explanation
     with st.expander("ℹ️ Co to jest indeksowanie?", expanded=False):
-        st.markdown("""
+        st.markdown("""        
         **Indeksowanie** to proces przygotowania Twoich dokumentów do analizy:
         
         - 📄 **Analiza zawartości** - system czyta i analizuje teksty
@@ -167,7 +190,7 @@ def _upload_files(quiz_id: str, files: List):
             if 'uploaded_files' in result:
                 st.write("**Przesłane pliki:**")
                 for file_info in result['uploaded_files']:
-                    st.write(f"- {file_info.get('name', 'Nieznany plik')}")
+                    st.write(f"- {file_info.get('filename', 'Nieznany plik')}")
             
             time.sleep(1)
             st.rerun()

@@ -3,6 +3,7 @@
 import streamlit as st
 import time
 from typing import List, Dict, Any
+from components.quiz_manager import return_to_main_menu
 from utils.session_manager import (
     get_user_id,
     get_quiz_id,
@@ -21,7 +22,6 @@ from config.settings import (
     MAX_TOPIC_WEIGHT,
     DEFAULT_TOPIC_WEIGHT
 )
-from components.status_display import render_topic_generation_status
 
 # Weight mapping for user-friendly labels
 WEIGHT_OPTIONS = {
@@ -47,6 +47,7 @@ def render_topics_manager():
         st.error("❌ Brak ID quizu. Wróć do tworzenia quizu.")
         return
     
+    
     if not are_topics_generated():
         _render_topic_generation_setup()
     else:
@@ -54,13 +55,15 @@ def render_topics_manager():
 
 def _render_topic_generation_setup():
     """Render topic generation setup section"""
+
+    col1, col2 = st.columns([5, 3])  # 5 - przestrzeń na lewo, 1 - na prawo
+
+    with col2:
+        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
+            return_to_main_menu()
+            
     st.title("🎯 Generowanie tematów")
-    
-    quiz_id = get_quiz_id()
-    
-    if 'status_checked' not in st.session_state:
-        render_topic_generation_status(quiz_id)
-        st.session_state['status_checked'] = True
+
     
     st.divider()
     
@@ -105,6 +108,13 @@ def _render_topic_generation_setup():
 
 def _render_topic_management():
     """Render topic management section"""
+
+    col1, col2 = st.columns([5, 3])
+
+    with col2:
+        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
+            return_to_main_menu()
+
     st.title("📝 Zarządzanie tematami")
     
     quiz_id = get_quiz_id()

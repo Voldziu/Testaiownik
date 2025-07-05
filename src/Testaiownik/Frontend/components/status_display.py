@@ -148,30 +148,3 @@ def render_quiz_summary(quiz_id: str):
     except Exception as e:
         st.error(f"❌ Nieoczekiwany błąd: {str(e)}")
 
-def render_topic_generation_status(quiz_id: str):
-    """Render topic generation status"""
-    try:
-        api_client = get_api_client(get_user_id())
-        topics_data = api_client.get_topics(quiz_id)
-        
-        st.subheader("🎯 Status generowania tematów")
-        
-        suggested_topics = topics_data.get("suggested_topics", [])
-        
-        if suggested_topics:
-            st.success(f"✅ Wygenerowano {len(suggested_topics)} tematów")
-            
-            # Show topics preview
-            with st.expander("👀 Podgląd tematów", expanded=False):
-                for i, topic in enumerate(suggested_topics[:5], 1):  # Show first 5
-                    st.write(f"{i}. {topic.get('topic', 'Nieznany temat')} (waga: {topic.get('weight', 1.0)})")
-                
-                if len(suggested_topics) > 5:
-                    st.write(f"... i {len(suggested_topics) - 5} więcej")
-        else:
-            st.info("ℹ️ Tematy nie zostały jeszcze wygenerowane")
-            
-    except APIError as e:
-        st.error("❌ Nie udało się pobrać statusu tematów")
-    except Exception as e:
-        st.error(f"❌ Nieoczekiwany błąd: {str(e)}")

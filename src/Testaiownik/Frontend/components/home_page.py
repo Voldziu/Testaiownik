@@ -8,39 +8,23 @@ from typing import List, Dict, Any
 
 def render_home_page():
     """Render home page with main options"""
-    st.title("🏠 Strona Główna")
-    
+    st.title("🏠 Strona Główna")    
     st.subheader("Witaj w aplikacji TestAIownik!")
-    st.write("Wybierz jedną z poniższych opcji:")
-
-    # Przyciski do przejścia do generowania quizu i dotychczasowych testów
-    col1, col2 = st.columns([1, 1])
     
-    with col1:
-        if st.button("🎯 Utwórz nowy quiz", use_container_width=True):
-            reset_quiz_session()  # Resetujemy sesję przed rozpoczęciem nowego quizu
-            set_home_page_shown()
-            st.session_state["app_phase"] = "quiz_creation"  # Ustawiamy fazę aplikacji na quiz_creation
-            st.rerun()
+    # Przycisk do generowania nowego quizu
+    if st.button("🎯 Utwórz nowy quiz", use_container_width=True):
+        reset_quiz_session()  # Resetujemy sesję przed rozpoczęciem nowego quizu
+        set_home_page_shown()
+        st.session_state["app_phase"] = "quiz_creation"  # Ustawiamy fazę aplikacji na quiz_creation
+        st.rerun()
 
-    with col2:
-        if st.button("📋 Moje testy", use_container_width=True):
-            st.session_state["show_quiz_list"] = True
-            st.rerun()
-
-    # Show quiz list if requested
-    if st.session_state.get("show_quiz_list", False):
-        render_quiz_list()
+    # Automatyczne wyświetlanie listy quizów
+    render_quiz_list()
 
 def render_quiz_list():
     """Render list of user's quizzes"""
     st.divider()
     st.subheader("📋 Moje testy")
-    
-    # Back button
-    if st.button("🔙 Powrót", key="back_to_main"):
-        st.session_state["show_quiz_list"] = False
-        st.rerun()
     
     # Load quizzes
     with st.spinner("Ładowanie twoich quizów..."):
@@ -90,6 +74,7 @@ def render_quiz_item(quiz: Dict[str, Any]):
     # Status mapping
     status_map = {
         'created': ('🆕', 'Utworzony'),
+        'documents_uploaded': ('📄', 'Dokumenty przesłane'),
         'topic_ready': ('📝', 'Tematy gotowe'),
         'quiz_active': ('🎯', 'Aktywny'),
         'completed': ('✅', 'Ukończony'),
@@ -116,7 +101,17 @@ def render_quiz_item(quiz: Dict[str, Any]):
         
         # Action buttons
         st.write("**Akcje:**")
-        action_col1, action_col2, action_col3 = st.columns(3)
+        
+        # Sprawdzamy czy quiz się już rozpoczął (ma pytania/statystyki)
+        quiz_started = status in ['quiz_active', 'completed']
+        
+        # Główne przyciski akcji w rzędzie
+        if quiz_started:
+            # Jeśli quiz się rozpoczął, pokazujemy 2 kolumny w pierwszym rzędzie
+            action_col1, action_col2 = st.columns(2)
+        else:
+            # Jeśli quiz się nie rozpoczął, pokazujemy tylko 1 kolumnę w pierwszym rzędzie
+            action_col1, action_col2 = st.columns([1, 1])
         
         with action_col1:
             if status in ['topic_ready', 'quiz_active']:
@@ -125,17 +120,39 @@ def render_quiz_item(quiz: Dict[str, Any]):
             elif status == 'completed':
                 if st.button("🔄 Powtórz", key=f"retry_{quiz_id}", use_container_width=True):
                     retry_quiz(quiz_id)
-            elif status == 'created':
+            elif status in ['created', 'documents_uploaded']:
                 if st.button("⚙️ Skonfiguruj", key=f"configure_{quiz_id}", use_container_width=True):
                     configure_quiz(quiz_id)
         
         with action_col2:
-            if st.button("📊 Statystyki", key=f"stats_{quiz_id}", use_container_width=True):
-                show_quiz_stats(quiz_id)
-        
-        with action_col3:
             if st.button("🗑️ Usuń", key=f"delete_{quiz_id}", use_container_width=True):
                 delete_quiz(quiz_id)
+        
+        # Przycisk statystyk w osobnym rzędzie - szerszy i tylko dla rozpoczętych quizów
+        if quiz_started:
+            st.markdown("---")  # Separator
+            
+            # Sprawdzamy czy pokazać statystyki dla tego quizu
+            stats_state_key = f"stats_visible_{quiz_id}"
+            
+            # Inicjalizujemy stan na początku renderowania, żeby uniknąć odświeżenia
+            if stats_state_key not in st.session_state:
+                st.session_state[stats_state_key] = False
+            
+            # Sprawdzamy aktualny stan
+            stats_visible = st.session_state[stats_state_key]
+            
+            # Przycisk do pokazania/ukrycia statystyk - pełna szerokość
+            button_text = "📊 Ukryj statystyki" if stats_visible else "📊 Pokaż statystyki"
+            
+            if st.button(button_text, key=f"toggle_stats_{quiz_id}", use_container_width=True):
+                st.session_state[stats_state_key] = not stats_visible
+                # Używamy st.experimental_rerun() zamiast st.rerun() lub całkowicie usuwamy
+                # st.rerun()
+            
+            # Pokazujemy statystyki jeśli są włączone
+            if st.session_state[stats_state_key]:
+                show_quiz_stats_inline(quiz_id)
 
 def continue_quiz(quiz_id: str, status: str):
     """Continue an existing quiz"""
@@ -152,9 +169,6 @@ def continue_quiz(quiz_id: str, status: str):
             st.session_state["app_phase"] = "topic_confirmation"
         elif status == 'quiz_active':
             st.session_state["app_phase"] = "quiz_questions"
-        
-        # Hide quiz list
-        st.session_state["show_quiz_list"] = False
         
         st.success(f"🎯 Kontynuujesz quiz {quiz_id[:8]}...")
         st.rerun()
@@ -179,9 +193,6 @@ def retry_quiz(quiz_id: str):
         # Set app phase to quiz questions
         st.session_state["app_phase"] = "quiz_questions"
         
-        # Hide quiz list
-        st.session_state["show_quiz_list"] = False
-        
         st.success(f"🔄 Restartujesz quiz {quiz_id[:8]}...")
         st.rerun()
         
@@ -197,66 +208,164 @@ def configure_quiz(quiz_id: str):
         # Go to topic confirmation phase
         st.session_state["app_phase"] = "topic_confirmation"
         
-        # Hide quiz list
-        st.session_state["show_quiz_list"] = False
-        
         st.success(f"⚙️ Konfigurujesz quiz {quiz_id[:8]}...")
         st.rerun()
         
     except Exception as e:
         st.error(f"❌ Błąd podczas konfigurowania quizu: {str(e)}")
 
-def show_quiz_stats(quiz_id: str):
-    """Show quiz statistics"""
+def show_quiz_stats_inline(quiz_id: str):
+    """Show quiz statistics inline within the quiz item"""
     try:
-        with st.spinner("Ładowanie statystyk..."):
-            api_client = get_api_client(get_user_id())
-            # Try to get quiz progress for statistics
-            stats = api_client.get_quiz_progress(quiz_id)
+        api_client = get_api_client(get_user_id())
+        # Try to get quiz progress for statistics
+        stats = api_client.get_quiz_progress(quiz_id)
+        
+        if stats and 'progress' in stats:
+            progress = stats['progress']
             
-            if stats and 'progress' in stats:
-                progress = stats['progress']
+            # Stylizowany kontener na statystyki
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 15px;
+                padding: 20px;
+                margin: 15px 0;
+                color: white;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            ">
+                <h3 style="text-align: center; margin: 0 0 20px 0; font-weight: 600;">
+                    📊 Statystyki quizu
+                </h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Basic stats w kartach
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #74b9ff, #0984e3); padding: 15px; border-radius: 10px; margin: 5px 0; color: white;">
+                    <h4 style="margin: 0; font-size: 14px; opacity: 0.9;">Pytania w puli</h4>
+                    <h2 style="margin: 5px 0; font-size: 24px; font-weight: bold;">{progress.get('total_questions_in_pool', 0)}</h2>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                st.subheader(f"📊 Statystyki quizu {quiz_id[:8]}")
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #fd79a8, #e84393); padding: 15px; border-radius: 10px; margin: 5px 0; color: white;">
+                    <h4 style="margin: 0; font-size: 14px; opacity: 0.9;">Odpowiedzi udzielone</h4>
+                    <h2 style="margin: 5px 0; font-size: 24px; font-weight: bold;">{progress.get('unique_answered', 0)}</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #55efc4, #00b894); padding: 15px; border-radius: 10px; margin: 5px 0; color: white;">
+                    <h4 style="margin: 0; font-size: 14px; opacity: 0.9;">Unikalne pytania</h4>
+                    <h2 style="margin: 5px 0; font-size: 24px; font-weight: bold;">{progress.get('total_unique_questions', 0)}</h2>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                # Display stats in columns
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric("Pytania w puli", progress.get('total_questions_in_pool', 0))
-                    st.metric("Unikalne pytania", progress.get('total_unique_questions', 0))
-                
-                with col2:
-                    st.metric("Odpowiedzi udzielone", progress.get('unique_answered', 0))
-                    st.metric("Poprawne odpowiedzi", progress.get('unique_correct', 0))
-                
-                with col3:
-                    answered = progress.get('unique_answered', 0)
-                    if answered > 0:
-                        success_rate = (progress.get('unique_correct', 0) / answered) * 100
-                        st.metric("Skuteczność", f"{success_rate:.1f}%")
-                    else:
-                        st.metric("Skuteczność", "0%")
-                        
-                    total_attempts = progress.get('total_attemps', 0)  # Note: API typo
-                    st.metric("Łączne próby", total_attempts)
-                
-                # Additional stats if available
-                if progress.get('time_elapsed_seconds'):
-                    elapsed = progress.get('time_elapsed_seconds', 0)
-                    minutes = int(elapsed // 60)
-                    seconds = int(elapsed % 60)
-                    st.write(f"**Czas spędzony:** {minutes}min {seconds}s")
-                    
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #fdcb6e, #e17055); padding: 15px; border-radius: 10px; margin: 5px 0; color: white;">
+                    <h4 style="margin: 0; font-size: 14px; opacity: 0.9;">Poprawne odpowiedzi</h4>
+                    <h2 style="margin: 5px 0; font-size: 24px; font-weight: bold;">{progress.get('unique_correct', 0)}</h2>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Performance metrics
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                answered = progress.get('unique_answered', 0)
+                if answered > 0:
+                    success_rate = (progress.get('unique_correct', 0) / answered) * 100
+                    color = "#00b894" if success_rate >= 70 else "#fdcb6e" if success_rate >= 50 else "#e17055"
+                    st.markdown(f"""
+                    <div style="background: {color}; padding: 12px; border-radius: 8px; margin: 5px 0; color: white; text-align: center;">
+                        <h4 style="margin: 0; font-size: 12px; opacity: 0.9;">Skuteczność</h4>
+                        <h3 style="margin: 5px 0; font-size: 18px; font-weight: bold;">{success_rate:.1f}%</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="background: #636e72; padding: 12px; border-radius: 8px; margin: 5px 0; color: white; text-align: center;">
+                        <h4 style="margin: 0; font-size: 12px; opacity: 0.9;">Skuteczność</h4>
+                        <h3 style="margin: 5px 0; font-size: 18px; font-weight: bold;">0%</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col2:
+                total_attempts = progress.get('total_attemps', 0)
+                st.markdown(f"""
+                <div style="background: #74b9ff; padding: 12px; border-radius: 8px; margin: 5px 0; color: white; text-align: center;">
+                    <h4 style="margin: 0; font-size: 12px; opacity: 0.9;">Łączne próby</h4>
+                    <h3 style="margin: 5px 0; font-size: 18px; font-weight: bold;">{total_attempts}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
                 if progress.get('average_time_per_attempt'):
                     avg_time = progress.get('average_time_per_attempt', 0)
-                    st.write(f"**Średni czas na próbę:** {avg_time:.1f}s")
-                    
-            else:
-                st.info("📊 Brak dostępnych statystyk dla tego quizu.")
+                    st.markdown(f"""
+                    <div style="background: #a29bfe; padding: 12px; border-radius: 8px; margin: 5px 0; color: white; text-align: center;">
+                        <h4 style="margin: 0; font-size: 12px; opacity: 0.9;">Śr. czas/próbę</h4>
+                        <h3 style="margin: 5px 0; font-size: 18px; font-weight: bold;">{avg_time:.1f}s</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="background: #636e72; padding: 12px; border-radius: 8px; margin: 5px 0; color: white; text-align: center;">
+                        <h4 style="margin: 0; font-size: 12px; opacity: 0.9;">Śr. czas/próbę</h4>
+                        <h3 style="margin: 5px 0; font-size: 18px; font-weight: bold;">N/A</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Progress bar
+            if progress.get('total_unique_questions', 0) > 0:
+                total_questions = progress.get('total_unique_questions', 0)
+                answered_questions = progress.get('unique_answered', 0)
+                progress_percentage = (answered_questions / total_questions) * 100
                 
+                st.markdown("**📊 Postęp w quizie**")
+                st.progress(progress_percentage / 100)
+                st.markdown(f"""
+                <div style="text-align: center; margin: 10px 0;">
+                    <strong>{answered_questions}/{total_questions} pytań ({progress_percentage:.1f}%)</strong>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Time statistics if available
+            if progress.get('time_elapsed_seconds'):
+                elapsed = progress.get('time_elapsed_seconds', 0)
+                hours = int(elapsed // 3600)
+                minutes = int((elapsed % 3600) // 60)
+                seconds = int(elapsed % 60)
+                
+                if hours > 0:
+                    time_str = f"{hours}h {minutes}min {seconds}s"
+                elif minutes > 0:
+                    time_str = f"{minutes}min {seconds}s"
+                else:
+                    time_str = f"{seconds}s"
+                
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #ffeaa7, #fab1a0); padding: 15px; border-radius: 10px; text-align: center; margin: 10px 0; color: #2d3436;">
+                    <h4 style="margin: 0; font-size: 14px;">⏱️ Całkowity czas spędzony</h4>
+                    <h3 style="margin: 5px 0; font-size: 20px; font-weight: bold;">{time_str}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+                
+        else:
+            st.info("📊 Brak dostępnych statystyk dla tego quizu.")
+            
     except Exception as e:
         st.error(f"❌ Błąd podczas ładowania statystyk: {str(e)}")
+
+def show_quiz_stats(quiz_id: str):
+    """Show quiz statistics in a modal-like container (deprecated - use show_quiz_stats_inline)"""
+    # Ta funkcja jest zachowana dla kompatybilności wstecznej
+    show_quiz_stats_inline(quiz_id)
 
 def delete_quiz(quiz_id: str):
     """Delete a quiz with confirmation"""
