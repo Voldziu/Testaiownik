@@ -6,6 +6,7 @@ from services.api_client import get_api_client
 from typing import List
 
 
+
 def render_questions_manager():
     """Render quiz questions configuration"""
     quiz_id = get_quiz_id()
@@ -49,16 +50,16 @@ def render_questions_manager():
         col1, col2 = st.columns([4, 1])
 
         with col1:
-            # Set default value for input in session_state if it doesn't exist
-            if "new_question_input" not in st.session_state:
-                st.session_state["new_question_input"] = ""
+            # Inicjalizujemy klucz w session_state jeśli nie istnieje
+            if "question_input_key" not in st.session_state:
+                st.session_state["question_input_key"] = 0
 
             question = st.text_area(
                 "Treść pytania:",
-                value=st.session_state["new_question_input"],
                 height=100,
                 placeholder="Wpisz tutaj treść pytania...",
                 help="Wprowadź pytanie, które chcesz dodać do testu",
+                key=f"question_input_{st.session_state['question_input_key']}"
             )
 
         with col2:
@@ -67,7 +68,8 @@ def render_questions_manager():
             if st.button("✅ Dodaj", type="secondary", use_container_width=True):
                 if question.strip():
                     st.session_state["user_questions"].append(question.strip())
-                    st.session_state["new_question_input"] = ""  # Clear the input field
+                    # Zwiększamy klucz żeby wyczyścić pole tekstowe
+                    st.session_state["question_input_key"] += 1
                     st.rerun()  # Refresh to show the new question
                 else:
                     st.warning("⚠️ Pytanie nie może być puste!")
@@ -113,7 +115,6 @@ def render_questions_manager():
     # Main start button
     if st.button("🚀 Rozpocznij test", type="primary", use_container_width=True):
         start_test(quiz_id, num_questions, st.session_state["user_questions"])
-
 
 
 def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):

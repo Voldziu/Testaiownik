@@ -205,7 +205,7 @@ def load_current_question(quiz_id: str):
 
 
 def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
-    """Get quiz progress with enhanced error handling"""
+    """Get quiz progress with enhanced error handling and correct metrics calculation"""
     progress_cache_key = f"quiz_progress_{quiz_id}"
     
     # Force refresh or cache miss
@@ -217,33 +217,40 @@ def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
             if progress_data and 'progress' in progress_data:
                 progress = progress_data['progress']
                 
-                current_question_num = progress.get('current_question', 1)
-                total_questions = progress.get('total_questions_in_pool', 1)
-                unique_answered = progress.get('unique_answered', 0)
-                total_unique_questions = progress.get('total_unique_questions', 1)
+                # POPRAWIONE: Używaj aktualnych danych z API
+                total_attempts = progress.get('total_attemps', 0)  # Wszystkie próby
+                unique_answered = progress.get('unique_answered', 0)  # Unikalne odpowiedzi
+                total_questions_in_pool = progress.get('total_questions_in_pool', 1)  # Aktualna pula
+                total_unique_questions = progress.get('total_unique_questions', 1)  # Unikalne pytania
                 correct_answers = progress.get('unique_correct', 0)
                 
-                # Progress based on unique questions
+                # POPRAWIONE: Oblicz aktualny numer pytania na podstawie wszystkich prób
+                # Numer pytania = liczba wszystkich prób + 1 (następne pytanie)
+                current_question_num = total_attempts + 1
+                
+                # POPRAWIONE: Postęp bazuje na unikalnych pytaniach vs całkowitej puli
+                # Ale uwzględniamy że pula może się zwiększać przez recykling
                 if total_unique_questions > 0:
-                    progress_percentage = (unique_answered / total_questions) * 100
+                    # Postęp = ile unikalnych pytań opanowaliśmy / ile unikalnych pytań mamy do opanowania
+                    progress_percentage = (total_attempts / total_questions_in_pool) * 100
                 else:
                     progress_percentage = 0
                 
-                # Current question number based on unique answered
-                current_question_num = unique_answered + 1
-                
-                # Ensure we don't exceed total questions
-                if current_question_num > total_questions:
-                    current_question_num = total_questions
+                # POPRAWIONE: Ogranicz current_question_num do rozsądnych wartości
+                # Ale pozwól na przekroczenie jeśli są recyklingowe pytania
+                max_display_num = max(total_questions_in_pool, total_unique_questions)
+                if current_question_num > max_display_num:
+                    current_question_num = max_display_num
                 
                 # Cache the results
                 st.session_state[progress_cache_key] = {
                     'current_question_num': current_question_num,
-                    'total_questions': total_questions,
+                    'total_questions': total_questions_in_pool,  # Aktualna pula (może się zwiększać)
+                    'total_unique_questions': total_unique_questions,  # Podstawowe unikalne pytania
                     'progress_percentage': progress_percentage,
                     'unique_answered': unique_answered,
-                    'total_unique_questions': total_unique_questions,
                     'correct_answers': correct_answers,
+                    'total_attempts': total_attempts,
                     'raw_progress': progress
                 }
                 
@@ -253,10 +260,11 @@ def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
                 fallback_data = {
                     'current_question_num': 1,
                     'total_questions': 10,
+                    'total_unique_questions': 10,
                     'progress_percentage': 0,
                     'unique_answered': 0,
-                    'total_unique_questions': 10,
                     'correct_answers': 0,
+                    'total_attempts': 0,
                     'raw_progress': {}
                 }
                 st.session_state[progress_cache_key] = fallback_data
@@ -265,40 +273,39 @@ def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
         except Exception as e:
             error_msg = str(e).lower()
             
-            # ENHANCED ERROR HANDLING - Check for specific quiz state errors
             if any(phrase in error_msg for phrase in [
                 "quiz has not started yet", 
                 "not started", 
                 "quiz not found",
                 "quiz does not exist"
             ]):
-                # Quiz hasn't started yet - this is expected for new quizzes
-                # Don't show error, just return default values
+                # Quiz hasn't started yet
                 fallback_data = {
                     'current_question_num': 1,
                     'total_questions': 10,
+                    'total_unique_questions': 10,
                     'progress_percentage': 0,
                     'unique_answered': 0,
-                    'total_unique_questions': 10,
                     'correct_answers': 0,
+                    'total_attempts': 0,
                     'raw_progress': {}
                 }
                 return fallback_data
             else:
-                # Show warning for other errors
                 st.warning(f"Nie udało się pobrać postępu quizu: {str(e)}")
                 
-            # Return cached data if available, otherwise fallback
+            # Return cached data if available
             if progress_cache_key in st.session_state:
                 return st.session_state[progress_cache_key]
             else:
                 fallback_data = {
                     'current_question_num': 1,
                     'total_questions': 10,
+                    'total_unique_questions': 10,
                     'progress_percentage': 0,
                     'unique_answered': 0,
-                    'total_unique_questions': 10,
                     'correct_answers': 0,
+                    'total_attempts': 0,
                     'raw_progress': {}
                 }
                 return fallback_data
@@ -315,25 +322,26 @@ def render_question():
     
     quiz_id = get_quiz_id()
     
-    # Get current progress (use cached unless we need fresh data)
-    force_refresh = False
+    # POPRAWIONE: Zawsze odświeżaj postęp jeśli pytanie zostało już odpowiedziane
+    answered = st.session_state["quiz_state"]["answered"]
+    force_refresh = False  # Odśwież po każdej odpowiedzi
+    
     progress_data = get_quiz_progress(quiz_id, force_refresh=force_refresh)
     
     current_question_num = progress_data['current_question_num']
     total_questions = progress_data['total_questions']
     progress_percentage = progress_data['progress_percentage']
     
-    # If question is answered, don't increment the display numbers yet
-    if st.session_state["quiz_state"]["answered"]:
-        current_question_num = current_question_num
-        
+    # POPRAWIONE: Usuń niepotrzebną logikę "zamrażania" licznika
+    # Licznik powinien się zawsze aktualizować na podstawie danych z API
+    
     col1, col2 = st.columns([5, 3])
 
     with col2:
         if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
             return_to_main_menu()
             
-    # Quiz header with progress
+    # Quiz header with progress - POPRAWIONE: Dodaj debug info
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.title("📝 Quiz")
@@ -342,18 +350,18 @@ def render_question():
     with col3:
         st.metric("Postęp", f"{progress_percentage:.0f}%")
 
-    # Progress bar
-    progress_value = progress_percentage / 100 if progress_percentage <= 100 else 1.0
+    # Progress bar - POPRAWIONE: Ogranicz do 100%
+    progress_value = min(progress_percentage / 100, 1.0) if progress_percentage > 0 else 0.0
     st.progress(progress_value)
     
     st.divider()
     
-    # Question content
+
     st.subheader(f"❓ Pytanie {current_question_num}")
     st.write(question_data.get('question_text', 'Brak treści pytania'))
     
     # Answer options
-    if not st.session_state["quiz_state"]["answered"]:
+    if not answered:
         render_answer_options(question_data)
     else:
         render_disabled_answers(question_data)
@@ -844,6 +852,12 @@ def submit_answer(question_id: str, selected_choices: List[int]):
                 from datetime import datetime
                 st.session_state['quiz_completion_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
+
+            
+            # POPRAWIONE: Dodaj krótkie opóźnienie żeby API zdążył zaktualizować dane
+            import time
+            time.sleep(0.1)
+            
             # Force rerun to show the disabled answers and feedback
             st.rerun()
             
@@ -856,6 +870,7 @@ def submit_answer(question_id: str, selected_choices: List[int]):
             st.rerun()
         else:
             st.error(f"❌ Błąd podczas wysyłania odpowiedzi: {str(e)}")
+
 
 def render_answer_feedback(question_data: Dict[str, Any]):
     """Render feedback after answer submission"""
@@ -872,6 +887,8 @@ def render_answer_feedback(question_data: Dict[str, Any]):
         st.success("🎉 Brawo! Odpowiedź prawidłowa!")
     else:
         st.error("❌ Niestety, odpowiedź nieprawidłowa")
+        # DODANE: Informacja o recyklingu dla błędnych odpowiedzi
+        st.info("💡 To pytanie zostanie powtórzone później, abyś mógł/mogła lepiej opanować materiał.")
     
     st.subheader("✅ Prawidłowa odpowiedź:")
     
@@ -899,44 +916,45 @@ def render_answer_feedback(question_data: Dict[str, Any]):
         if not explanation:
             st.warning("❌ Brak wyjaśnienia dla tej odpowiedzi.")
         else:
-            # Expander for explanation
-            with st.expander("💡 Wyjaśnienie:", expanded=False):
-                st.info(explanation)
+           with st.expander("💡 Wyjaśnienie:", expanded=False):
+            # Wyświetlanie wyjaśnienia w kolorze i z odpowiednią pogrubioną czcionką
+            st.markdown(f"<h3 style='color: #FF6F61;'>💬 {explanation}</h3>", unsafe_allow_html=True)
 
-                # Display source chunks (file, page, slide, chunk text)
-                if source_chunks:
-                    for source_chunk in source_chunks:
-                        source = source_chunk.get('source', 'Brak źródła')
-                        page = source_chunk.get('page', None)
+            # Dodanie etykiety "Wygenerowane przez AI" poniżej wyjaśnienia, po prawej
+            st.markdown(
+                "<p style='text-align: right; color: #999; font-size: 12px; font-style: italic;'>Wygenerowane przez AI</p>", 
+                unsafe_allow_html=True
+            )
 
-                        st.write(f"📄 Źródło: {source}")
+            # Wyświetlanie źródeł
+            if source_chunks:
+                st.markdown("<h4 style='color: #FF6F61;'>📄 Źródło:</h4>", unsafe_allow_html=True)
+                for source_chunk in source_chunks:
+                    source = source_chunk.get('source', 'Brak źródła')
+                    page = source_chunk.get('page', None)
+                    slide = source_chunk.get('slide', None)
+                    
+                    # Display source info
+                    if source:
+                        st.markdown(f"**📄 Plik:** {source}", unsafe_allow_html=True)
 
-                        if page is not None:
-                            st.write(f"📄 Strona: {page}")
-                        
-                        # Optionally, display the chunk text (relevant text extracted)
-                        chunk_text = source_chunk.get('text', 'Brak wyciągu')
-                        if chunk_text:
-                            st.write(f"📖 Wyciąg z tekstu: {chunk_text}")
+                    if page is not None:
+                        st.markdown(f"**📄 Strona:** {page}", unsafe_allow_html=True)
+
+                    if slide is not None:
+                        st.markdown(f"**📄 Slajd:** {slide}", unsafe_allow_html=True)
+                    
+                    # Display chunk text (relevant text extracted)
+                    chunk_text = source_chunk.get('text', 'Brak wyciągu')
+                    if chunk_text:
+                        st.markdown(f"**📖 Fragment tekstu:** {chunk_text}", unsafe_allow_html=True)
             
     except Exception as e:
         st.warning(f"Nie udało się pobrać wyjaśnienia: {str(e)}")
         
     st.divider()
     
-    # Display updated progress from the API response
-    progress = result.get('progress', {})
-    if progress:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Aktualny wynik", f"{progress.get('correct', 0)}/{progress.get('answered', 0)}")
-        with col2:
-            answered = progress.get('answered', 0)
-            if answered > 0:
-                percentage = (progress.get('correct', 0) / answered) * 100
-                st.metric("Procent poprawnych", f"{percentage:.1f}%")
-    
-    st.divider()
+
     
     # Navigation buttons
     if st.button("➡️ Następne pytanie", use_container_width=True):
@@ -948,9 +966,12 @@ def render_answer_feedback(question_data: Dict[str, Any]):
         st.session_state["quiz_state"]["selected_choices"] = []
         st.session_state["quiz_state"]["current_question"] = None
         
-        # Refresh cache
         refresh_quiz_progress_cache(quiz_id)
         clear_quiz_cache()
+        
+        # POPRAWIONE: Krótkie opóźnienie dla stabilności
+        import time
+        time.sleep(0.1)
         
         st.rerun()
 

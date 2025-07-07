@@ -167,16 +167,25 @@ def _render_feedback_section(quiz_id: str):
     """Render feedback section for all topics"""
     st.subheader("📝 Podaj ogólny feedback na temat wszystkich tematów")
     
+    # Inicjalizuj klucz dla feedbacku
+    if "feedback_form_key" not in st.session_state:
+        st.session_state["feedback_form_key"] = 0
+    
     feedback = st.text_area(
         "Twoja opinia na temat wygenerowanych tematów", 
-        placeholder="Wprowadź feedback... (np. 'Zrób tematy bardziej ogólne, mniej szczegółowe.')"
+        placeholder="Wprowadź feedback... (np. 'Zrób tematy bardziej ogólne, mniej szczegółowe.')",
+        key=f"feedback_text_{st.session_state['feedback_form_key']}"  # Unikalny klucz
     )
     
     if st.button("💬 Prześlij feedback", use_container_width=True):
         if feedback.strip():
-            _submit_topic_feedback(quiz_id, feedback)
+            success = _submit_topic_feedback(quiz_id, feedback)
+            if success:  # Tylko zwiększ klucz jeśli wysłanie się powiodło
+                st.session_state["feedback_form_key"] += 1
+                st.rerun()
         else:
             st.warning("⚠️ Feedback nie może być pusty!")
+
 
 def _submit_topic_feedback(quiz_id: str, feedback: str):
     """Submit feedback to backend for all topics"""
@@ -189,28 +198,36 @@ def _submit_topic_feedback(quiz_id: str, feedback: str):
             if response:
                 st.success("✅ Feedback został przesłany! Tematy zostaną wygenerowane ponownie.")
                 time.sleep(1)
-                st.rerun()
+                return True  # Zwróć True jeśli się powiodło
             else:
                 st.error("❌ Wystąpił problem podczas wysyłania feedbacku")
+                return False
                 
     except APIError as e:
         st.error("❌ Nie udało się wysłać feedbacku")
         with st.expander("🔧 Szczegóły błędu", expanded=False):
             st.write(f"**Status:** {e.status_code}")
             st.write(f"**Komunikat:** {e.message}")
+        return False
     except Exception as e:
         st.error(f"❌ Nieoczekiwany błąd: {str(e)}")
+        return False
 
 def _render_add_topic_section(quiz_id: str):
     """Render add new topic section"""
     st.subheader("➕ Dodaj nowy temat")
     
     with st.expander("Dodaj własny temat", expanded=False):
-        with st.form("add_topic_form"):
+        # Inicjalizujemy klucz formularza w session_state jeśli nie istnieje
+        if "topic_form_key" not in st.session_state:
+            st.session_state["topic_form_key"] = 0
+            
+        with st.form(f"add_topic_form_{st.session_state['topic_form_key']}"):
             new_topic_name = st.text_input(
                 "Nazwa tematu",
                 placeholder="np. Podstawy programowania",
-                help="Wprowadź nazwę nowego tematu"
+                help="Wprowadź nazwę nowego tematu",
+                key=f"topic_name_{st.session_state['topic_form_key']}"  # Dodaj unikalny klucz
             )
             
             st.write("**Znaczenie tematu:**")
@@ -219,7 +236,8 @@ def _render_add_topic_section(quiz_id: str):
                 options=list(WEIGHT_OPTIONS.keys()), 
                 index=1,  # Default to "Normalne"
                 help="Niskie - mniej pytań, Normalne - standardowo, Wysokie - więcej pytań",
-                horizontal=True
+                horizontal=True,
+                key=f"topic_weight_{st.session_state['topic_form_key']}"  # Dodaj unikalny klucz
             )
             
             # Form submit button
@@ -228,9 +246,14 @@ def _render_add_topic_section(quiz_id: str):
             if submitted:
                 if new_topic_name.strip():
                     new_topic_weight = WEIGHT_OPTIONS[new_topic_weight_label]
-                    _add_new_topic(quiz_id, new_topic_name.strip(), new_topic_weight)
+                    success = _add_new_topic(quiz_id, new_topic_name.strip(), new_topic_weight)
+                    if success:  # Tylko zwiększ klucz jeśli dodanie się powiodło
+                        # Zwiększamy klucz formularza żeby wyczyścić pola
+                        st.session_state["topic_form_key"] += 1
+                        st.rerun()
                 else:
                     st.error("⚠️ Nazwa tematu nie może być pusta!")
+
 
 def _render_topics_list(quiz_id: str):
     """Render list of existing topics"""
@@ -364,7 +387,7 @@ def _start_topic_generation(num_topics: int):
         
         api_client = get_api_client(user_id)
         
-        with st.spinner("🚀 Rozpoczynanie generowania tematów..."):
+        with st.spinner("🚀 Generowanie tematów..."):
             response = api_client.start_topic_generation(quiz_id, num_topics)
             
             if response:
@@ -373,7 +396,7 @@ def _start_topic_generation(num_topics: int):
                 time.sleep(1)
                 st.rerun()
             else:
-                st.error("❌ Wystąpił problem podczas rozpoczynania generowania tematów")
+                st.error("❌ Wystąpił problem podczas generowania tematów")
                 
     except APIError as e:
         st.error("❌ Nie udało się rozpocząć generowania tematów")
@@ -394,17 +417,21 @@ def _add_new_topic(quiz_id: str, topic_name: str, weight: float):
             if response:
                 st.success(f"✅ Temat '{topic_name}' został dodany!")
                 time.sleep(1)
-                st.rerun()
+                return True  # Zwróć True jeśli się powiodło
             else:
                 st.error("❌ Wystąpił problem podczas dodawania tematu")
+                return False
                 
     except APIError as e:
         st.error("❌ Nie udało się dodać tematu")
         with st.expander("🔧 Szczegóły błędu", expanded=False):
             st.write(f"**Status:** {e.status_code}")
             st.write(f"**Komunikat:** {e.message}")
+        return False
     except Exception as e:
         st.error(f"❌ Nieoczekiwany błąd: {str(e)}")
+        return False
+
 
 def _update_topic(quiz_id: str, old_name: str, new_name: str, new_weight: float):
     """Update an existing topic"""
