@@ -1,5 +1,6 @@
 import time
 import streamlit as st
+from components.quiz_manager import return_to_main_menu
 from utils.session_manager import get_quiz_id, get_user_id, set_questions_generated
 from services.api_client import get_api_client
 from typing import List
@@ -13,7 +14,12 @@ def render_questions_manager():
         return
 
     st.title("📝 Konfiguracja pytań")
+    col1, col2 = st.columns([5, 3])
 
+    with col2:
+        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
+            return_to_main_menu()
+            
     # question config section
     st.subheader("⚙️ Ustawienia testu")
     num_questions = st.slider(

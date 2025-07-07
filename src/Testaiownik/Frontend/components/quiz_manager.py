@@ -326,7 +326,13 @@ def render_question():
     # If question is answered, don't increment the display numbers yet
     if st.session_state["quiz_state"]["answered"]:
         current_question_num = current_question_num
-    
+        
+    col1, col2 = st.columns([5, 3])
+
+    with col2:
+        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
+            return_to_main_menu()
+            
     # Quiz header with progress
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:

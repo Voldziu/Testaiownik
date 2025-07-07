@@ -1,6 +1,7 @@
 # components/quiz_creation.py
 
 import streamlit as st
+from components.quiz_manager import return_to_main_menu
 from utils.session_manager import (
     get_user_id,
     set_quiz_id,
@@ -24,10 +25,8 @@ def render_quiz_creation():
             _create_new_quiz()
     
     with col2:
-        if st.button("🔄 Reset sesji", use_container_width=True):
-            reset_quiz_session()
-            st.success("Sesja została zresetowana!")
-            st.rerun()
+        if st.button("🏠 Powrót do strony głównej", use_container_width=True):
+            return_to_main_menu()
     
     # Help section
     with st.expander("ℹ️ Jak to działa?", expanded=False):
