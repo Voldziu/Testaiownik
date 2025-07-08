@@ -4,8 +4,33 @@ from components.quiz_manager import return_to_main_menu
 from utils.session_manager import get_quiz_id, get_user_id, set_questions_generated
 from services.api_client import get_api_client
 from typing import List
+from config.settings import (
+    MIN_QUESTIONS,
+    DEFAULT_RATIO,
+    ERROR_MAX_QUESTION,
+)
 
 
+def get_max_questions_estimate(quiz_id: str, ratio: int = 2) -> int:
+    """Estimate max questions for documents"""
+    try:
+        # Pobierz API client z session_state
+        api_client = get_api_client(get_user_id())
+        if not api_client:
+            st.error("❌ Brak połączenia z API")
+            return ERROR_MAX_QUESTION
+        
+        response = api_client.get_question_estimate(quiz_id, ratio)
+        
+        if response and "estimated_max_questions" in response:
+            return response["estimated_max_questions"]
+        else:
+            st.warning("⚠️ Nie udało się pobrać oszacowania pytań")
+            return ERROR_MAX_QUESTION
+            
+    except Exception as e:
+        st.warning(f"⚠️ Błąd podczas pobierania oszacowania pytań: {e}")
+        return ERROR_MAX_QUESTION
 
 def render_questions_manager():
     """Render quiz questions configuration"""
@@ -18,23 +43,35 @@ def render_questions_manager():
     col1, col2 = st.columns([5, 3])
 
     with col2:
-        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
-            return_to_main_menu()
+        st.button("🏠 Powrót do strony głównej", 
+              key="return_to_main_menu", 
+              help="Wróć do głównej strony", 
+              on_click=return_to_main_menu)
             
     # question config section
     st.subheader("⚙️ Ustawienia testu")
+    
+    ratio = DEFAULT_RATIO
+    cache_key = f"max_questions_{quiz_id}_{ratio}"
+    if cache_key not in st.session_state:
+        with st.spinner("Sprawdzanie maksymalnej liczby pytań..."):
+            max_questions = get_max_questions_estimate(quiz_id, ratio)
+            st.session_state[cache_key] = max_questions
+    else:
+        max_questions = st.session_state[cache_key]
+    
+    if max_questions:
+        st.info(f"📊 Oszacowana maksymalna liczba pytań na podstawie dokumentów: **{max_questions}**")
+    
     num_questions = st.slider(
         "Wybierz liczbę pytań",
-        min_value=1,
-        max_value=50,
-        value=10,
-        help="Ustaw całkowitą liczbę pytań w teście",
+        min_value=MIN_QUESTIONS,
+        max_value=max_questions,
+        value=max_questions//2,  
+        help=f"Ustaw całkowitą liczbę pytań w teście (max: {max_questions})",
     )
 
-    # display question count
-    st.info(f"📊 Liczba pytań w teście: **{num_questions}**")
 
-    # Separator
     st.divider()
 
     # user question list

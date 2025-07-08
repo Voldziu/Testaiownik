@@ -77,8 +77,10 @@ def render_quiz_questions():
                     st.session_state["app_phase"] = "questions_manager"
                     st.rerun()
             with col2:
-                if st.button("🏠 Menu główne"):
-                    return_to_main_menu()
+                st.button("🏠 Powrót do strony głównej", 
+                key="return_to_main_menu", 
+                help="Wróć do głównej strony", 
+                on_click=return_to_main_menu)
 
 
 
@@ -338,8 +340,10 @@ def render_question():
     col1, col2 = st.columns([5, 3])
 
     with col2:
-        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
-            return_to_main_menu()
+        st.button("🏠 Powrót do strony głównej", 
+              key="return_to_main_menu", 
+              help="Wróć do głównej strony", 
+              on_click=return_to_main_menu)
             
     # Quiz header with progress - POPRAWIONE: Dodaj debug info
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -511,10 +515,6 @@ def render_mastery_summary():
             if unique_questions > 0:
                 if avg_attempts <= 1.0:
                     st.write("• **Wszystkie pytania** opanowane za pierwszym razem!")
-                else:
-                    # Show unique correct vs unique answered
-                    first_try_success = (unique_correct / unique_questions) * 100 if unique_questions > 0 else 0
-                    st.write(f"• **{first_try_success:.1f}%** pytań opanowanych za pierwszym razem")
                     
                 st.write(f"• **{unique_questions}** unikalnych pytań przeanalizowanych")
                 st.write(f"• **{unique_correct}** poprawnych odpowiedzi")
@@ -541,8 +541,10 @@ def render_mastery_summary():
             restart_quiz_with_message("Sprawdź, czy tym razem opanujesz materiał jeszcze szybciej!")
 
     with col2:
-        if st.button("🏠 Menu główne", use_container_width=True, key="main_menu"):
-            return_to_main_menu()
+        st.button("🏠 Powrót do strony głównej", 
+              key="return_to_main_menu", 
+              help="Wróć do głównej strony", 
+              on_click=return_to_main_menu)
 
 
 def restart_quiz_with_message(message: str):
@@ -703,8 +705,6 @@ def return_to_main_menu():
     st.session_state["topics_confirmed"] = False
     st.session_state["questions_generated_flag"] = False
     
-    st.success("🏠 Powracasz do menu głównego...")
-    st.rerun()
 
 
 def refresh_quiz_progress_cache(quiz_id: str):
@@ -930,6 +930,7 @@ def render_answer_feedback(question_data: Dict[str, Any]):
             if source_chunks:
                 st.markdown("<h4 style='color: #FF6F61;'>📄 Źródło:</h4>", unsafe_allow_html=True)
                 for source_chunk in source_chunks:
+                    print(source_chunk)
                     source = source_chunk.get('source', 'Brak źródła')
                     page = source_chunk.get('page', None)
                     slide = source_chunk.get('slide', None)

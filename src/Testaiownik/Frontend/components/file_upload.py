@@ -23,8 +23,10 @@ def render_file_upload():
     col1, col2 = st.columns([5, 3])
 
     with col2:
-        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
-            return_to_main_menu()
+        st.button("🏠 Powrót do strony głównej", 
+              key="return_to_main_menu", 
+              help="Wróć do głównej strony", 
+              on_click=return_to_main_menu)
             
 
     if phase == "file_upload":

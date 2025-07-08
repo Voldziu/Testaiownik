@@ -2,7 +2,7 @@
 
 import streamlit as st
 import time
-from typing import List, Dict, Any
+from typing import Dict, Any
 from components.quiz_manager import return_to_main_menu
 from utils.session_manager import (
     get_user_id,
@@ -18,9 +18,6 @@ from config.settings import (
     DEFAULT_TOPIC_COUNT,
     MIN_TOPIC_COUNT,
     MAX_TOPIC_COUNT,
-    MIN_TOPIC_WEIGHT,
-    MAX_TOPIC_WEIGHT,
-    DEFAULT_TOPIC_WEIGHT
 )
 
 # Weight mapping for user-friendly labels
@@ -56,11 +53,13 @@ def render_topics_manager():
 def _render_topic_generation_setup():
     """Render topic generation setup section"""
 
-    col1, col2 = st.columns([5, 3])  # 5 - przestrzeń na lewo, 1 - na prawo
+    col1, col2 = st.columns([5, 3])
 
     with col2:
-        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
-            return_to_main_menu()
+        st.button("🏠 Powrót do strony głównej", 
+              key="return_to_main_menu", 
+              help="Wróć do głównej strony", 
+              on_click=return_to_main_menu)
             
     st.title("🎯 Generowanie tematów")
 

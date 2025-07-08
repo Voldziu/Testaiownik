@@ -18,6 +18,11 @@ MIN_TOPIC_WEIGHT = 0.01
 MAX_TOPIC_WEIGHT = 1.0
 DEFAULT_TOPIC_WEIGHT = 0.1
 
+# questions settings
+MIN_QUESTIONS = 1
+DEFAULT_RATIO = 2
+ERROR_MAX_QUESTION = 50
+
 
 # API Headers template
 def get_api_headers(user_id: str) -> dict:

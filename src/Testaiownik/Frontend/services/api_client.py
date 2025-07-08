@@ -205,6 +205,15 @@ class QuizAPIClient:
             params={"limit": limit, "offset": offset},  
         )
         return self._handle_response(response)
+    
+    def get_question_estimate(self, quiz_id: str, ratio: int = 2) -> Dict[str, Any]:
+        """Get estimate of maximum number of questions based on document chunks"""
+        response = requests.get(
+            f"{BASE_URL}/api/documents/{quiz_id}/question-estimate",
+            headers=self.headers,
+            params={"ratio": ratio}
+        )
+        return self._handle_response(response)
 
 # Convenience function to get API client
 def get_api_client(user_id: str) -> QuizAPIClient:
