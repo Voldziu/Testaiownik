@@ -361,7 +361,7 @@ This is an active development project in Sprint 3.
 
 ## 📄 License
 
-Machalski & Mleczak Corp
+Machalski & Mleczak  Corp
 
 ## 🙋‍♂️ Support
 
