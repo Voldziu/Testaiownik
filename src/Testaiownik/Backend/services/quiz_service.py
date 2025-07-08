@@ -1886,6 +1886,7 @@ class QuizService:
                         "text": result["text"],
                         "source": result["source"],
                         "page": result.get("page"),
+                        "slide": result.get("slide"),
                         "relevance_score": result["relevance_score"],
                     }
                 )

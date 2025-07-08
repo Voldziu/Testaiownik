@@ -260,6 +260,7 @@ class DocumentService:
                                     "text": payload.get("text", ""),
                                     "source": payload.get("source", ""),
                                     "page": payload.get("page"),
+                                    "slide": payload.get("slide"),
                                     "relevance_score": (
                                         result.score
                                         if hasattr(result, "score")
