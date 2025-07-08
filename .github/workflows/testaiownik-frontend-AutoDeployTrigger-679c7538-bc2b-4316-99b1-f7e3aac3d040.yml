@@ -14,7 +14,7 @@ on:
     branches: 
       [ master ]
     paths:
-    - 'src/Testaiownik/Backend/**'
+    - 'src/Testaiownik/Frontend/**'
     - '.github/workflows/testaiownik-frontend-AutoDeployTrigger-679c7538-bc2b-4316-99b1-f7e3aac3d040.yml'
 
   # Allow manual trigger 
