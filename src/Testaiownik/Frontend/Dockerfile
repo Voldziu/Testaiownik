@@ -24,7 +24,7 @@ COPY .env* ./
 COPY src/Testaiownik/ ./
 
 # Install dependencies
-RUN uv sync --frozen
+RUN uv sync 
 
 
 
