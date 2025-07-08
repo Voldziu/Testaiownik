@@ -119,7 +119,6 @@ def main():
             server_config.update(
                 {
                     "reload": False,
-                    "debug": False,
                     "workers": args.workers,
                     "access_log": True,
                 }

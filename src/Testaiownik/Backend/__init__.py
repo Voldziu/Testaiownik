@@ -67,7 +67,7 @@ def validate_environment():
     required_env_vars = [
         "AZURE_OPENAI_ENDPOINT",
         "AZURE_OPENAI_API_KEY",
-        "CHAT_MODEL_NAME_DEV",
+        "CHAT_MODEL_NAME",
         "EMBEDDING_MODEL_NAME",
     ]
 

@@ -1,4 +1,5 @@
 import os
+import httpx
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
 from AzureModels.models import get_embedding_model
@@ -17,42 +18,60 @@ class QdrantManager:
 
     def __init__(
         self,
-        url: str = os.getenv("QDRANT_URL", "localhost:6333"),  # From dockercompose
+        url: str = os.getenv(
+            "QDRANT_URL",
+            "localhost:6333",
+        ),  # From dockercompose
         vector_size: int = 1536,
-        timeout: int = None,
+        timeout: int = 120,
     ):
-        # Remove timeout completely or set very high value
-        self.client = QdrantClient(url=url, timeout=timeout)
+
+        local = not os.getenv("QDRANT_URL")
+        if local:
+
+            self.client = QdrantClient(url=url, timeout=timeout)
+        else:
+            self.client = QdrantClient(
+                url=url,
+                timeout=timeout,
+                port=None,
+                grpc_port=None,
+                prefer_grpc=False,  # for azure deployment
+            )
         self.vector_size = vector_size
         self.embedding_model = get_embedding_model(api_version="2024-12-01-preview")
         self.last_used_id = 0
+        self.timeout = timeout
 
     def create_collection(
         self, collection_name: str, distance_metric: str = "Dot"
     ) -> bool:
-        """Creates a collection in Qdrant with error handling."""
-        if not collection_name:
-            raise ValueError("Collection name cannot be empty")
-
+        """Creates a collection in Qdrant with comprehensive debugging."""
         try:
-            self.client.get_collection(collection_name=collection_name)
-            logger.info(f"Kolekcja '{collection_name}' już istnieje.")
+            logger.info(f"QdrantClient create_collection(): {collection_name}")
+            self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config={
+                    "size": self.vector_size,
+                    "distance": distance_metric,
+                },
+            )
+            logger.info(f"✅ CREATE COLLECTION SUCCESS: {collection_name}")
             return True
-        except Exception:
-            try:
-                logger.info(f"Tworzę nową kolekcję '{collection_name}'...")
-                self.client.create_collection(
-                    collection_name=collection_name,
-                    vectors_config={
-                        "size": self.vector_size,
-                        "distance": distance_metric,
-                    },
+
+        except Exception as e:
+            logger.error(f"❌ CREATE COLLECTION FAILED: {type(e).__name__}: {e}")
+            import traceback
+
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+
+            # Additional debug for timeouts
+            if "timeout" in str(e).lower():
+                logger.error(
+                    "This is a TIMEOUT error - check Container App performance"
                 )
-                logger.info(f"Kolekcja '{collection_name}' została utworzona.")
-                return True
-            except Exception as e:
-                logger.error(f"Błąd podczas tworzenia kolekcji: {e}")
-                return False
+
+            return False
 
     def safe_to_list(self, data):
         """Convert safely to list"""
@@ -225,22 +244,19 @@ class QdrantManager:
             raise ValueError("Limit must be positive")
 
         try:
+
             query_vector = self.embedding_model.embed_query(query)
 
             safe_query_vector = self.safe_to_list(query_vector)
 
-            search_result = self.client.query_points(
+            search_result = self.client.search(
                 collection_name=collection_name,
-                query=safe_query_vector,
+                query_vector=safe_query_vector,
                 limit=limit,
                 with_payload=True,
                 score_threshold=score_threshold,
             )
-
-            if hasattr(search_result, "points"):
-                return search_result.points
-            else:
-                raise ValueError("Brak punktów w wynikach zapytania.")
+            return search_result
 
         except Exception as e:
             logger.error(f"Błąd podczas wyszukiwania: {e}")

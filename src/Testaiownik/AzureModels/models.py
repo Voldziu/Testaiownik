@@ -20,9 +20,9 @@ def get_llm(
     azure_endpoint = azure_endpoint or config.AZURE_ENDPOINT
     api_key = api_key or config.API_KEY
     deployment_name = (
-        deployment_name or config.DEPLOYMENT_NAME_DEV
+        deployment_name or config.DEPLOYMENT_NAME
     )  #  gpt4o-mini for CHAT_MODEL_NAME_DEV and gpt4o for CHAT_MODEL_NAME
-    api_version = api_version or config.API_VERSION_DEV
+    api_version = api_version or config.API_VERSION
     # 2024-07-18 for CHAT_MODEL_VERSION_DEV and 2024-11-20 for CHAT_MODEL_VERSION
     temperature = temperature if temperature is not None else LLM_TEMPERATURE
     max_tokens = max_tokens if max_tokens is not None else LLM_MAX_TOKENS
