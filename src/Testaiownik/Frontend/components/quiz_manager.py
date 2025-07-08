@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 import time
 import streamlit as st
 from utils.session_manager import get_quiz_id, get_user_id
@@ -930,14 +931,19 @@ def render_answer_feedback(question_data: Dict[str, Any]):
             if source_chunks:
                 st.markdown("<h4 style='color: #FF6F61;'>📄 Źródło:</h4>", unsafe_allow_html=True)
                 for source_chunk in source_chunks:
-                    print(source_chunk)
                     source = source_chunk.get('source', 'Brak źródła')
                     page = source_chunk.get('page', None)
                     slide = source_chunk.get('slide', None)
                     
-                    # Display source info
                     if source:
-                        st.markdown(f"**📄 Plik:** {source}", unsafe_allow_html=True)
+                        filename = os.path.basename(source)
+                        
+                        if '_' in filename:
+                            parts = filename.split('_', 1)
+                            if len(parts) > 1:
+                                filename = parts[1]
+                        
+                        st.markdown(f"**📄 Plik:** {filename}", unsafe_allow_html=True)
 
                     if page is not None:
                         st.markdown(f"**📄 Strona:** {page}", unsafe_allow_html=True)
@@ -975,7 +981,7 @@ def render_answer_feedback(question_data: Dict[str, Any]):
         time.sleep(0.1)
         
         st.rerun()
-
+        
 # Utility function to check if quiz is completed
 def is_quiz_completed(question_data: Dict[str, Any]) -> bool:
     """Check if quiz is completed"""
