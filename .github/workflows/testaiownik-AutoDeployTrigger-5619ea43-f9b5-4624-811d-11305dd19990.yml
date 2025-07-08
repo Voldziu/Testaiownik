@@ -9,6 +9,14 @@ on:
     paths:
     - 'src/Testaiownik/Backend/**'
     - '.github/workflows/testaiownik-AutoDeployTrigger-5619ea43-f9b5-4624-811d-11305dd19990.yml'
+  
+
+  pull_request:
+    branches: 
+      [ master ]
+    paths:
+    - 'src/Testaiownik/Backend/**'
+    - '.github/workflows/testaiownik-AutoDeployTrigger-5619ea43-f9b5-4624-811d-11305dd19990.yml'
 
   # Allow manual trigger 
   workflow_dispatch:      
