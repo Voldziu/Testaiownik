@@ -16,7 +16,6 @@ from ..models.responses import (
     SearchResponse,
     SearchResultItem,
     DocumentItem,
-    BaseResponse,
 )
 from ..database.sql_database_connector import get_db
 from ..database.crud import get_quiz, log_activity
