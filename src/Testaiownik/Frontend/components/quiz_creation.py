@@ -25,8 +25,10 @@ def render_quiz_creation():
             _create_new_quiz()
     
     with col2:
-        if st.button("🏠 Powrót do strony głównej", use_container_width=True):
-            return_to_main_menu()
+        st.button("🏠 Powrót do strony głównej", 
+              key="return_to_main_menu", 
+              help="Wróć do głównej strony", 
+              on_click=return_to_main_menu)
     
     # Help section
     with st.expander("ℹ️ Jak to działa?", expanded=False):

@@ -19,30 +19,14 @@ def render_file_upload():
     """Render file upload component based on current phase"""
     phase = get_app_phase()
 
-    st.markdown("""
-    <style>
-        .main-menu-button {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background-color: #FF6F61;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .main-menu-button:hover {
-            background-color: #E55F4E;
-        }
-    </style>
-    """, unsafe_allow_html=True)
 
     col1, col2 = st.columns([5, 3])
 
     with col2:
-        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
-            return_to_main_menu()
+        st.button("🏠 Powrót do strony głównej", 
+              key="return_to_main_menu", 
+              help="Wróć do głównej strony", 
+              on_click=return_to_main_menu)
             
 
     if phase == "file_upload":
@@ -215,7 +199,7 @@ def _upload_files(quiz_id: str, files: List):
 def _start_indexing(quiz_id: str):
     """Handle indexing start logic"""
     try:
-        with st.spinner("Rozpoczynanie indeksowania..."):
+        with st.spinner("Indeksowanie..."):
             api_client = get_api_client(get_user_id())
             result = api_client.index_documents(quiz_id)
             
@@ -230,7 +214,7 @@ def _start_indexing(quiz_id: str):
             st.rerun()
             
     except APIError as e:
-        st.error("❌ Błąd podczas rozpoczynania indeksowania")
+        st.error("❌ Błąd podczas indeksowania")
         
         with st.expander("🔧 Szczegóły błędu", expanded=False):
             st.write(f"**Status:** {e.status_code}")

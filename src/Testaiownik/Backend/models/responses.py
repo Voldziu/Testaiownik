@@ -288,6 +288,7 @@ class SourceChunk(BaseModel):
     text: str
     source: str
     page: Optional[int] = None
+    slide: Optional[int] = None
     relevance_score: float
 
 

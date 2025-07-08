@@ -4,7 +4,33 @@ from components.quiz_manager import return_to_main_menu
 from utils.session_manager import get_quiz_id, get_user_id, set_questions_generated
 from services.api_client import get_api_client
 from typing import List
+from config.settings import (
+    MIN_QUESTIONS,
+    DEFAULT_RATIO,
+    ERROR_MAX_QUESTION,
+)
 
+
+def get_max_questions_estimate(quiz_id: str, ratio: int = 2) -> int:
+    """Estimate max questions for documents"""
+    try:
+        # Pobierz API client z session_state
+        api_client = get_api_client(get_user_id())
+        if not api_client:
+            st.error("❌ Brak połączenia z API")
+            return ERROR_MAX_QUESTION
+        
+        response = api_client.get_question_estimate(quiz_id, ratio)
+        
+        if response and "estimated_max_questions" in response:
+            return response["estimated_max_questions"]
+        else:
+            st.warning("⚠️ Nie udało się pobrać oszacowania pytań")
+            return ERROR_MAX_QUESTION
+            
+    except Exception as e:
+        st.warning(f"⚠️ Błąd podczas pobierania oszacowania pytań: {e}")
+        return ERROR_MAX_QUESTION
 
 def render_questions_manager():
     """Render quiz questions configuration"""
@@ -17,23 +43,35 @@ def render_questions_manager():
     col1, col2 = st.columns([5, 3])
 
     with col2:
-        if st.button("🏠 Powrót do strony głównej", key="return_to_main_menu", help="Wróć do głównej strony", on_click=return_to_main_menu):
-            return_to_main_menu()
+        st.button("🏠 Powrót do strony głównej", 
+              key="return_to_main_menu", 
+              help="Wróć do głównej strony", 
+              on_click=return_to_main_menu)
             
     # question config section
     st.subheader("⚙️ Ustawienia testu")
+    
+    ratio = DEFAULT_RATIO
+    cache_key = f"max_questions_{quiz_id}_{ratio}"
+    if cache_key not in st.session_state:
+        with st.spinner("Sprawdzanie maksymalnej liczby pytań..."):
+            max_questions = get_max_questions_estimate(quiz_id, ratio)
+            st.session_state[cache_key] = max_questions
+    else:
+        max_questions = st.session_state[cache_key]
+    
+    if max_questions:
+        st.info(f"📊 Oszacowana maksymalna liczba pytań na podstawie dokumentów: **{max_questions}**")
+    
     num_questions = st.slider(
         "Wybierz liczbę pytań",
-        min_value=1,
-        max_value=50,
-        value=10,
-        help="Ustaw całkowitą liczbę pytań w teście",
+        min_value=MIN_QUESTIONS,
+        max_value=max_questions,
+        value=max_questions//2,  
+        help=f"Ustaw całkowitą liczbę pytań w teście (max: {max_questions})",
     )
 
-    # display question count
-    st.info(f"📊 Liczba pytań w teście: **{num_questions}**")
 
-    # Separator
     st.divider()
 
     # user question list
@@ -49,16 +87,16 @@ def render_questions_manager():
         col1, col2 = st.columns([4, 1])
 
         with col1:
-            # Set default value for input in session_state if it doesn't exist
-            if "new_question_input" not in st.session_state:
-                st.session_state["new_question_input"] = ""
+            # Inicjalizujemy klucz w session_state jeśli nie istnieje
+            if "question_input_key" not in st.session_state:
+                st.session_state["question_input_key"] = 0
 
             question = st.text_area(
                 "Treść pytania:",
-                value=st.session_state["new_question_input"],
                 height=100,
                 placeholder="Wpisz tutaj treść pytania...",
                 help="Wprowadź pytanie, które chcesz dodać do testu",
+                key=f"question_input_{st.session_state['question_input_key']}"
             )
 
         with col2:
@@ -67,7 +105,8 @@ def render_questions_manager():
             if st.button("✅ Dodaj", type="secondary", use_container_width=True):
                 if question.strip():
                     st.session_state["user_questions"].append(question.strip())
-                    st.session_state["new_question_input"] = ""  # Clear the input field
+                    # Zwiększamy klucz żeby wyczyścić pole tekstowe
+                    st.session_state["question_input_key"] += 1
                     st.rerun()  # Refresh to show the new question
                 else:
                     st.warning("⚠️ Pytanie nie może być puste!")
@@ -113,7 +152,6 @@ def render_questions_manager():
     # Main start button
     if st.button("🚀 Rozpocznij test", type="primary", use_container_width=True):
         start_test(quiz_id, num_questions, st.session_state["user_questions"])
-
 
 
 def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):

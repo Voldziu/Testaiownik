@@ -148,3 +148,30 @@ def get_app_phase() -> str:
         return "question_generation"
     else:
         return "test"
+
+
+# Dodaj tę funkcję do session_manager.py
+def set_session_flags_for_status(status: str):
+    """Set appropriate session flags based on quiz status"""
+    
+    # Zawsze ustawiamy home_page_shown na True, bo przecież jesteśmy w aplikacji
+    set_home_page_shown(True)
+    
+    # Set flags based on status progression
+    if status in ['documents_uploaded', 'documents_indexed', 'topic_analysis', 
+                  'topic_feedback', 'topic_ready', 'quiz_active', 'quiz_completed']:
+        set_files_uploaded(True)
+    
+    if status in ['documents_indexed', 'topic_analysis', 'topic_feedback', 
+                  'topic_ready', 'quiz_active', 'quiz_completed']:
+        set_indexing_started(True)
+    
+    if status in ['topic_analysis', 'topic_feedback', 'topic_ready', 
+                  'quiz_active', 'quiz_completed']:
+        set_topics_generated(True)
+    
+    if status in ['topic_ready', 'quiz_active', 'quiz_completed']:
+        set_topics_confirmed(True)
+    
+    if status in ['quiz_active', 'quiz_completed']:
+        set_questions_generated(True)
