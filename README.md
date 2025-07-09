@@ -119,31 +119,6 @@ AI-powered learning assistant that automatically generates test questions from e
 
    Make sure Qdrant is running!
 
-
-
-
-
-
-   
-
-### Infrastructure Deployment (Optional)
-
-Deploy and Clean up Azure resources using Bicep:
-
-```powershell
-cd IaaC
-./deploy.ps1 -Environment dev
-./cleanup.ps1 -Environment dev
-```
-
-**Resources created:**
-- Azure OpenAI Hub & Project
-- PostgreSQL Flexible Server
-- Storage Account
-- Application Insights
-- Container App Environment
-
-
 ### Code Quality
 
 ```bash
