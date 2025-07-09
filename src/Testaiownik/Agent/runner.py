@@ -23,7 +23,7 @@ class TestaiownikRunner:
         self,
         desired_topic_count: int = 10,
         total_questions: int = 20,
-        difficulty: str = "very hard",  # Literal ["easy", "medium", "hard", "very hard"]
+        difficulty: str = "very hard",  
         user_questions: Optional[List[str]] = None,
     ) -> None:
         """Run the complete workflow: TopicSelection -> Quiz"""
@@ -31,7 +31,6 @@ class TestaiownikRunner:
         print("🎓 Welcome to TESTAIOWNIK - AI-powered Learning Assistant")
         print("=" * 60)
 
-        # Phase 1: Topic Selection
         print("\n📚 PHASE 1: Topic Selection from your materials")
         print("-" * 40)
 
@@ -41,7 +40,6 @@ class TestaiownikRunner:
             print("❌ No topics confirmed. Exiting...")
             return
 
-        # Phase 2: Quiz Generation and Execution
         print(f"\n🧠 PHASE 2: Quiz with {total_questions} questions")
         print("-" * 40)
 
@@ -70,13 +68,11 @@ class TestaiownikRunner:
             "desired_topic_count": desired_topic_count,
         }
 
-        # Start topic selection
         self.topic_graph.invoke(initial_state, config)
 
         while True:
             current_state = self.topic_graph.get_state(config)
 
-            # Check if finished
             if current_state.next == ():
                 final_topics = current_state.values.get("confirmed_topics", [])
                 if final_topics:
@@ -85,21 +81,18 @@ class TestaiownikRunner:
                 else:
                     return []
 
-            # Get and display feedback request
             feedback_request = current_state.values.get("feedback_request", "")
             if feedback_request:
                 print(f"\n{feedback_request}")
 
-            # Get user input
             user_input = input("\n👤 Your response: ").strip()
 
             if user_input.lower() in ["quit", "exit", "q"]:
                 print("Exiting topic selection...")
                 return []
 
-            # Continue with user input
             self.topic_graph.update_state(config, {"user_input": user_input})
-            self.topic_graph.invoke(None, config)  # Continue processing
+            self.topic_graph.invoke(None, config)  
 
     def _run_quiz(
         self,
@@ -112,7 +105,6 @@ class TestaiownikRunner:
 
         config = {"configurable": {"thread_id": "quiz-session"}}
 
-        # Create initial quiz state
         quiz_state = create_initial_quiz_state(
             confirmed_topics=confirmed_topics,
             total_questions=total_questions,
@@ -123,28 +115,23 @@ class TestaiownikRunner:
             user_id="cli-user",
         )
 
-        # Add user questions to config if provided
         if user_questions:
             quiz_state["quiz_config"].user_questions = user_questions
             print(f"📝 Including {len(user_questions)} user-provided questions")
 
-        # Start quiz
         self.quiz_graph.invoke(quiz_state, config)
 
         while True:
             current_state = self.quiz_graph.get_state(config)
 
-            # Check if finished
             if current_state.next == ():
                 print(
                     f"\n{current_state.values.get('feedback_request', 'Quiz completed!')}"
                 )
                 break
 
-            # If we have a current question, display it nicely
             current_question = current_state.values.get("current_question")
             if current_question:
-                # Get quiz session for progress info
                 quiz_session = current_state.values.get("quiz_session")
                 if quiz_session:
                     question_num = quiz_session.current_question_index + 1
@@ -155,21 +142,18 @@ class TestaiownikRunner:
                 else:
                     self._display_question_cli(current_question)
 
-            # Display current feedback (question or results)
             feedback = current_state.values.get("feedback_request", "")
             logger.debug(f"Current feedback: {feedback}")
             if feedback:
                 print(f"\n{feedback}")
 
-            # If we're at process_answer, we need user input
             if "process_answer" in current_state.next:
                 user_input = self._get_quiz_answer_input()
 
-                if user_input is None:  # User wants to quit
+                if user_input is None:  
                     print("Quiz terminated by user.")
                     break
 
-                # Continue with user answer
                 self.quiz_graph.update_state(config, {"user_input": user_input})
 
             self.quiz_graph.invoke(None, config)
@@ -180,7 +164,6 @@ class TestaiownikRunner:
         question_number: int = None,
         total_questions: int = None,
     ) -> None:
-        # Header with progress
         if question_number and total_questions:
             progress = f"Question {question_number}/{total_questions}"
             print(f"\n{'=' * 60}")
@@ -195,17 +178,14 @@ class TestaiownikRunner:
             )
             print(f"{'=' * 60}")
 
-        # Question text
         print(f"\n❓ {question.question_text}")
         print()
 
-        # Answer choices
         for i, choice in enumerate(question.choices, 1):
             print(f"   {i}. {choice.text}")
 
         logger.debug(f"Question explanation: {question.explanation}")
 
-        # Instructions
         print()
         if question.is_multi_choice:
             print(
@@ -228,16 +208,13 @@ class TestaiownikRunner:
                 if response.lower() in ["quit", "exit", "q"]:
                     return None
 
-                # Parse comma-separated numbers
                 if "," in response:
-                    # Multiple choice
                     indices = [
                         int(x.strip()) - 1
                         for x in response.split(",")
                         if x.strip().isdigit()
                     ]
                 else:
-                    # Single choice
                     if response.isdigit():
                         indices = [int(response) - 1]
                     else:
@@ -255,53 +232,4 @@ class TestaiownikRunner:
                 continue
 
 
-# LEGACY RUNNER - ONLY TOPIC SELECTION FEATURE
 
-# from Agent.TopicSelection import create_agent_graph
-# from RAG.Retrieval import MockRetriever, RAGRetriever, DocumentRetriever
-
-
-# def run_agent(retriever: DocumentRetriever):
-#     graph = create_agent_graph(retriever=retriever)
-#     config = {"configurable": {"thread_id": "test-run"}}
-
-#     state = {
-#         "materials": [],
-#         "suggested_topics": [],
-#         "confirmed_topics": [],
-#         "rejected_topics": [],
-#         "user_input": None,
-#         "feedback_request": None,
-#         "next_node": "",
-#         "messages": [],
-#         "wanted_topic_count": 10,  # Set the desired number of topics
-#     }
-
-#     # Run until interrupt
-#     graph.invoke(state, config)
-
-#     while True:
-#         # logger.info(f"Graph state result: {result}")
-#         # Show feedback request
-#         current_state = graph.get_state(config)
-
-#         if current_state.next == ():  # Execution finished
-#             break
-
-#         # Get user input
-#         print(current_state.values.get("feedback_request", ""))
-#         user_input = input("\nYour feedback: ")
-
-#         # Continue with user input
-#         graph.update_state(config, {"user_input": user_input})
-#         graph.invoke(None, config)
-
-#     print(
-#         f"\nFinal topics: {graph.get_state(config).values.get('confirmed_topics', [])}"
-#     )
-
-
-# if __name__ == "__main__":
-#     run_agent()
-
-# / LEGACY RUNNER - ONLY TOPIC SELECTION FEATURE

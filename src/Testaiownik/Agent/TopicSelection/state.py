@@ -12,4 +12,4 @@ class AgentState(TypedDict):
     conversation_history: List[Dict[str, Any]]
     next_node: str
     messages: List[str]
-    desired_topic_count: int  # WILL BE SET IN BACKED IN PROPER PLACE
+    desired_topic_count: int  

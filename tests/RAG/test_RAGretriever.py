@@ -19,25 +19,22 @@ class TestRAGRetriever:
         return RAGRetriever("test_collection", mock_vector_store)
 
     def test_get_all_chunks_success(self, rag_retriever, mock_vector_store):
-        # Mock first scroll result
         mock_point1 = Mock()
         mock_point1.payload = {"text": "chunk1"}
 
         mock_point2 = Mock()
         mock_point2.payload = {"text": "chunk2"}
 
-        # Mock second scroll result
         mock_point3 = Mock()
         mock_point3.payload = {"text": "chunk3"}
 
         mock_vector_store.client.scroll.side_effect = [
-            ([mock_point1, mock_point2], "offset1"),  # First call
-            ([mock_point3], None),  # Second call
+            ([mock_point1, mock_point2], "offset1"),  
+            ([mock_point3], None),  
         ]
 
         chunks = list(rag_retriever.get_all_chunks())
 
-        # Changed: Now expects payload objects, not just text
         assert chunks == [{"text": "chunk1"}, {"text": "chunk2"}, {"text": "chunk3"}]
         assert mock_vector_store.client.scroll.call_count == 2
 
@@ -56,7 +53,6 @@ class TestRAGRetriever:
 
         chunks = list(rag_retriever.get_all_chunks())
 
-        # Changed: Now expects payload objects
         assert chunks == [{"text": "chunk1"}]
 
     def test_get_all_chunks_error(self, rag_retriever, mock_vector_store):

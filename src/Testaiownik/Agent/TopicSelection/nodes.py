@@ -51,7 +51,6 @@ def _process_single_batch(
 ) -> str:
     """Process a single batch of chunks"""
 
-    # Extract text from chunk dictionaries
     batch_texts = [chunk["text"] for chunk in batch_chunks]
     batch_text = "\n---\n".join(batch_texts)
 
@@ -66,7 +65,6 @@ def _process_single_batch(
     batch_analysis = _process_batch(batch_text, previous_context, extractor)
     all_topics.extend(batch_analysis["current_topics"])
 
-    # Update accumulated summary
     accumulated_summary = batch_analysis["accumulated_summary"]
 
     logger.info(
@@ -89,20 +87,17 @@ def _process_batches(
     current_batch = []
     batch_number = 1
 
-    # Stream chunks and process in batches
     for chunk in retriever.get_all_chunks():
         current_batch.append(chunk)
-        processed_chunks.append(chunk)  # Keep track for final state
+        processed_chunks.append(chunk)  
 
-        # When we have a full batch, process it
         if len(current_batch) >= batch_size:
             _process_single_batch(
                 current_batch, batch_number, all_topics, extractor, accumulated_summary
             )
-            current_batch.clear()  # Free memory
+            current_batch.clear()  
             batch_number += 1
 
-    # Process any remaining chunks in the last partial batch
     if current_batch:
         _process_single_batch(
             current_batch, batch_number, all_topics, extractor, accumulated_summary
@@ -112,14 +107,12 @@ def _process_batches(
         f"Total topics found: {len(all_topics)}. Accumulated summary: {accumulated_summary}"
     )
 
-    # Normalize weights
     total_weight = sum(topic["weight"] for topic in all_topics)
     if total_weight > 0:
         for topic in all_topics:
             topic["weight"] = round(topic["weight"] / total_weight, 2)
 
 
-# _prepare_history_fields output
 HistoryFields = namedtuple(
     "HistoryFields",
     [
@@ -247,7 +240,7 @@ def _consolidate_topics_with_history(
 def analyze_documents(
     state: AgentState,
     retriever: DocumentRetriever = None,
-    batch_size: int = 40,  # 50 is too much.
+    batch_size: int = 40,  
 ) -> AgentState:
     """Main document analysis orchestrator"""
     if retriever is None:
@@ -256,17 +249,14 @@ def analyze_documents(
     chunk_count = retriever.get_chunk_count()
     logger.info(f"Processing {chunk_count} chunks in batches of {batch_size}.")
 
-    # Setup extraction
     llm = get_llm()
     extractor = create_extractor(
         llm, tools=[BatchAnalysis], tool_choice="BatchAnalysis"
     )
 
-    all_topics = []  # List to accumulate topics with weights
+    all_topics = []  
     accumulated_summary = ""
     processed_chunks = []
-
-    # Process in batches
 
     _process_batches(
         retriever,
@@ -280,7 +270,6 @@ def analyze_documents(
     history = state.get("conversation_history", [])
     rejected_topics = state.get("rejected_topics", [])
     desired_topic_count = state.get("desired_topic_count", 10)
-    # Consolidate topics with conversation history
     final_topics = _consolidate_topics_with_history(
         all_topics, rejected_topics, history, desired_topic_count
     )
@@ -317,19 +306,16 @@ def _calculate_new_topic_count(
 ) -> int:
     """Calculate new desired topic count based on user feedback"""
 
-    # Calculate based on modifications
-    # Start with topics user wants to keep
+
     kept_topics = (
         set(feedback.accepted_topics)
         if feedback.accepted_topics
         else set(current_topics)
     )
 
-    # Remove rejected topics
     if feedback.rejected_topics:
         kept_topics -= set(feedback.rejected_topics)
 
-    # Add new topics user wants
     total_wanted = len(kept_topics) + len(feedback.want_to_add_topics or [])
 
     return max(1, total_wanted)
@@ -341,7 +327,6 @@ def process_feedback(state: AgentState) -> AgentState:
     history = state.get("conversation_history", [])
     logger.info(f"Processing user input: {user_input}")
 
-    # Add current interaction to history
     if user_input and suggested:
         history.append(
             {
@@ -384,7 +369,7 @@ def process_feedback(state: AgentState) -> AgentState:
         return {
             **state,
             "confirmed_topics": suggested,
-            "conversation_history": history,  # Because history is a copy
+            "conversation_history": history,  
             "next_node": "END",
         }
     elif feedback.action == "modify":
@@ -393,23 +378,21 @@ def process_feedback(state: AgentState) -> AgentState:
             current_topics=suggested,
         )
         rejected_topics = state.get("rejected_topics", []).copy()
-        rejected_topics.extend(feedback.rejected_topics or [])  # Extend black list
+        rejected_topics.extend(feedback.rejected_topics or [])
 
         return {
             **state,
             "feedback_request": feedback.modification_request,
             "rejected_topics": rejected_topics,
-            "conversation_history": history,  # Because history is a copy
+            "conversation_history": history,  
             "desired_topic_count": new_desired_count,
-            "next_node": "analyze_documents",  # loop
+            "next_node": "analyze_documents", 
         }
     else:
-        # Error
         logger.error("Literal of [accept,modify] broken")
-        return {**state, "next_node": "request_feedback"}  # loop
+        return {**state, "next_node": "request_feedback"}  
 
 
-# Function to route in conditional edges
 def route_next(state: AgentState) -> str:
     next_node = state.get("next_node", "END")
     logger.info(f"Routing to next node: {next_node}")

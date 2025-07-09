@@ -1,7 +1,7 @@
 # services/api_client.py
 
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from config.settings import BASE_URL, get_api_headers, BASIC_TIMEOUT, SHORT_TIMEOUT
 
 
@@ -29,7 +29,6 @@ class QuizAPIClient:
         else:
             raise APIError(response.status_code, response.text)
 
-    # Quiz operations
     def create_quiz(self, name) -> Dict[str, Any]:
         """Create a new quiz"""
 
@@ -39,7 +38,6 @@ class QuizAPIClient:
 
         return self._handle_response(response)
 
-    # Document operations
     def upload_files(self, quiz_id: str, files: List) -> Dict[str, Any]:
         """Upload files to quiz"""
         response = requests.post(
@@ -66,7 +64,6 @@ class QuizAPIClient:
         )
         return self._handle_response(response)
 
-    # Topic operations
     def start_topic_generation(self, quiz_id: str, topic_count: int) -> Dict[str, Any]:
         """Start topic generation"""
         response = requests.post(
@@ -114,8 +111,8 @@ class QuizAPIClient:
     def submit_topic_feedback(self, quiz_id: str, feedback: str) -> Dict[str, Any]:
         """Submit feedback for all topics"""
         response = requests.post(
-            f"{BASE_URL}/api/topics/{quiz_id}/feedback",  # Endpoint to send feedback
-            json={"user_input": feedback},  # Sending feedback data
+            f"{BASE_URL}/api/topics/{quiz_id}/feedback", 
+            json={"user_input": feedback},
             headers=self.headers,
             timeout=BASIC_TIMEOUT,
         )
@@ -156,7 +153,6 @@ class QuizAPIClient:
         )
         return self._handle_response(response)
 
-    # Submit the user's answer to a question
     def submit_answer(
         self, quiz_id: str, question_id: str, selected_choices: List[str]
     ) -> Dict[str, Any]:
@@ -167,7 +163,6 @@ class QuizAPIClient:
         )
         return self._handle_response(response)
 
-    # Fetch explanation for a specific question
     def get_explanation(self, quiz_id: str, question_id: str) -> Dict[str, Any]:
         """Get the explanation for a question"""
         response = requests.get(
@@ -193,7 +188,7 @@ class QuizAPIClient:
     def restart_quiz(self, quiz_id: str, hard: bool = False) -> Dict[str, Any]:
         """Restart the quiz, either soft or hard reset"""
         url = f"{BASE_URL}/api/quiz/{quiz_id}/restart"
-        params = {"hard": hard}  # Soft reset - hard=False
+        params = {"hard": hard} 
         response = requests.post(url, params=params, headers=self.headers)
         return self._handle_response(response)
 
@@ -216,7 +211,6 @@ class QuizAPIClient:
         return self._handle_response(response)
 
 
-# Convenience function to get API client
 def get_api_client(user_id: str) -> QuizAPIClient:
     """Get configured API client"""
     return QuizAPIClient(user_id)

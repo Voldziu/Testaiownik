@@ -2,7 +2,7 @@
 
 import streamlit as st
 from components.quiz_manager import return_to_main_menu
-from utils.session_manager import get_user_id, set_quiz_id, reset_quiz_session
+from utils.session_manager import get_user_id, set_quiz_id
 from services.api_client import get_api_client, APIError
 
 
@@ -10,7 +10,6 @@ def render_quiz_creation():
     """Render quiz creation component"""
     st.title("Generowanie Quizu")
     
-    # Quiz name input section
     st.subheader("📝 Nazwij swój quiz")
     
     quiz_name = st.text_input(
@@ -19,18 +18,14 @@ def render_quiz_creation():
         help="Nadaj swojemu quizowi unikalną nazwę. Nazwa nie może zawierać podłogi ani spacji (_)."
     )
     
-    # Validate quiz name
     name_error = _validate_quiz_name(quiz_name)
     if name_error:
         st.error(f"❌ {name_error}")
 
     
-
-    # Create new quiz section
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Disable button if name is invalid or empty
         button_disabled = bool(name_error) or not quiz_name.strip()
         
         if st.button("🎯 Stwórz nowy quiz", 
@@ -47,7 +42,6 @@ def render_quiz_creation():
             on_click=return_to_main_menu,
         )
 
-    # Help section
     with st.expander("ℹ️ Jak to działa?", expanded=False):
         st.markdown(
             """
@@ -69,7 +63,7 @@ def render_quiz_creation():
 def _validate_quiz_name(name):
     """Validate quiz name according to rules"""
     if not name:
-        return None  # Empty name is handled by button disable
+        return None  
     
     name = name.strip()
     
@@ -88,28 +82,23 @@ def _validate_quiz_name(name):
 def _create_new_quiz(name):
     """Handle quiz creation logic"""
     try:
-        # Show loading spinner
         with st.spinner("Tworzenie quizu..."):
             user_id = get_user_id()
             api_client = get_api_client(user_id)
 
-            # Create quiz via API
             quiz_data = api_client.create_quiz(name)
             quiz_id = quiz_data['quiz_id']
             
-            # Save to session
             set_quiz_id(quiz_id)
             
             
 
-            # Auto-advance to next step
             st.info("Przekierowuję do uploadu plików...")
             st.rerun()
 
     except APIError as e:
         st.error(f"❌ Wystąpił problem podczas tworzenia quizu")
 
-        # Show detailed error info in expander
         with st.expander("🔧 Szczegóły błędu", expanded=False):
             st.write(f"**Status code:** {e.status_code}")
             st.write(f"**Komunikat:** {e.message}")

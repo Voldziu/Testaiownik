@@ -5,7 +5,6 @@ from qdrant_client.models import PointStruct
 from utils.logger import logger
 
 
-# DocumentRetriever is an abstract base class for retrieving documents.
 class DocumentRetriever(ABC):
     @abstractmethod
     def get_all_chunks(self) -> Iterator[dict]:
@@ -24,10 +23,9 @@ class DocumentRetriever(ABC):
         pass
 
 
-# MockRetriever is a mock implementation of DocumentRetriever for testing purposes.
 class MockRetriever(DocumentRetriever):
     class MockRetriever(DocumentRetriever):
-        def get_all_chunks(self) -> Iterator[dict]:  # Changed return type annotation
+        def get_all_chunks(self) -> Iterator[dict]:
             chunks = [
                 {
                     "text": "Algorytmy sortowania to fundamentalne narzędzia w informatyce...",

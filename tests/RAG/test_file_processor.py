@@ -37,7 +37,7 @@ class TestFileProcessor:
     def test_extract_text_from_txt_encoding_error(self):
         """Test TXT extraction with encoding issues."""
         with tempfile.NamedTemporaryFile(mode="wb", suffix=".txt", delete=False) as f:
-            f.write(b"\xff\xfe\x00\x00")  # Invalid UTF-8
+            f.write(b"\xff\xfe\x00\x00")  
             temp_path = f.name
 
         try:
@@ -49,7 +49,6 @@ class TestFileProcessor:
     @patch("src.Testaiownik.RAG.file_processor.pdfplumber")
     def test_extract_text_from_pdf_success(self, mock_pdfplumber):
         """Test successful PDF text extraction."""
-        # Mock PDF structure
         mock_page1 = Mock()
         mock_page1.extract_text.return_value = "Page 1 content\n"
 
@@ -88,7 +87,6 @@ class TestFileProcessor:
     @patch("src.Testaiownik.RAG.file_processor.Document")
     def test_extract_text_from_docx_success(self, mock_document_class):
         """Test successful DOCX text extraction."""
-        # Mock paragraphs
         mock_para1 = Mock()
         mock_para1.text = "First paragraph"
 
@@ -117,14 +115,13 @@ class TestFileProcessor:
     @patch("src.Testaiownik.RAG.file_processor.Presentation")
     def test_extract_text_from_pptx_success(self, mock_presentation_class):
         """Test successful PPTX text extraction."""
-        # Mock shapes with text
         mock_shape1 = Mock()
         mock_shape1.text = "Slide 1 text"
 
         mock_shape2 = Mock()
         mock_shape2.text = "Slide 1 more text"
 
-        mock_shape3 = Mock(spec=[])  # No text attribute
+        mock_shape3 = Mock(spec=[])  
 
         mock_slide1 = Mock()
         mock_slide1.shapes = [mock_shape1, mock_shape2, mock_shape3]

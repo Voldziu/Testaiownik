@@ -20,11 +20,10 @@ class TopicService:
 
         total_weight = sum(topic.get("weight", 0) for topic in topics)
         if total_weight == 0:
-            # Assign equal weights
             weight = 1.0 / len(topics)
             for topic in topics:
                 topic["weight"] = weight
-        elif abs(total_weight - 1.0) > 0.01:  # Need normalization
+        elif abs(total_weight - 1.0) > 0.01: 
             for topic in topics:
                 topic["weight"] = round(topic["weight"] / total_weight, 2)
         return topics
@@ -45,19 +44,15 @@ class TopicService:
 
             current_topics = quiz.suggested_topics or []
 
-            # Check if topic already exists
             existing_names = [topic.get("topic", "") for topic in current_topics]
             if topic_name in existing_names:
                 raise ValueError("Topic already exists")
 
-            # Add new topic
             new_topic = {"topic": topic_name, "weight": weight}
             current_topics = current_topics + [new_topic]
 
-            # Normalize weights
             normalized_topics = self.normalize_weights(current_topics)
 
-            # Update database
             update_topic_data(db, quiz_id, suggested_topics=normalized_topics)
 
             log_activity(
@@ -95,7 +90,6 @@ class TopicService:
 
             current_topics = quiz.suggested_topics or []
 
-            # Find and remove topic
             updated_topics = [
                 topic for topic in current_topics if topic.get("topic") != topic_name
             ]
@@ -106,10 +100,8 @@ class TopicService:
             if not updated_topics:
                 raise ValueError("Cannot delete all topics")
 
-            # Normalize weights
             normalized_topics = self.normalize_weights(updated_topics)
 
-            # Update database
             update_topic_data(db, quiz_id, suggested_topics=normalized_topics)
 
             log_activity(
@@ -147,7 +139,6 @@ class TopicService:
 
             current_topics = quiz.suggested_topics.copy() or []
 
-            # Find topic to update
             topic_index = None
             for i, topic in enumerate(current_topics):
                 if topic.get("topic") == current_topic_name:
@@ -157,11 +148,9 @@ class TopicService:
             if topic_index is None:
                 raise ValueError("Topic not found")
 
-            # Update topic
             updated_topic = current_topics[topic_index].copy()
 
             if new_name:
-                # Check if new name already exists
                 existing_names = [
                     topic.get("topic", "")
                     for i, topic in enumerate(current_topics)
@@ -174,13 +163,10 @@ class TopicService:
             if new_weight is not None:
                 updated_topic["weight"] = new_weight
 
-            # Replace topic in list
             current_topics[topic_index] = updated_topic
 
-            # Normalize weights
             normalized_topics = self.normalize_weights(current_topics)
 
-            # Update database
             update_topic_data(db, quiz_id, suggested_topics=normalized_topics)
 
             log_activity(
@@ -220,7 +206,6 @@ class TopicService:
 
             old_count = quiz.desired_topic_count
 
-            # Update database
             update_topic_data(db, quiz_id, desired_topic_count=desired_count)
 
             log_activity(
@@ -251,17 +236,14 @@ class TopicService:
 
         total_weight = sum(topic.get("weight", 0) for topic in topics)
 
-        # Check if all topics have valid names and weights
         for topic in topics:
             if not topic.get("topic", "").strip():
                 return False
             if topic.get("weight", 0) <= 0:
                 return False
 
-        # Check if weights are reasonable (sum close to 1.0)
         return abs(total_weight - 1.0) < 0.01
 
-    # TODO: INTEGRATE AI TOPIC SUGGESTIONS
     async def generate_topic_suggestions(
         self,
         quiz_id: str,
@@ -274,8 +256,7 @@ class TopicService:
             if not quiz or not quiz.collection_name:
                 return []
 
-            # This would integrate with your AI topic generation
-            # For now, return placeholder suggestions
+            
             suggestions = [
                 {"topic": "Machine Learning Basics", "weight": 1.0},
                 {"topic": "Data Structures", "weight": 1.0},
@@ -300,10 +281,8 @@ class TopicService:
             if not quiz.suggested_topics:
                 raise ValueError("No topics available to confirm")
 
-            # Move topics from suggested to confirmed
             confirmed_topics = quiz.suggested_topics.copy()
 
-            # Update database
             from ..database.crud import confirm_quiz_topics
 
             success = confirm_quiz_topics(db, quiz_id, confirmed_topics)
@@ -378,7 +357,6 @@ class TopicService:
     ) -> Dict:
         """Import topics configuration from backup"""
         try:
-            # Validate imported data
             if "suggested_topics" not in topics_data:
                 raise ValueError("Invalid topics data - missing suggested_topics")
 
@@ -386,7 +364,6 @@ class TopicService:
             if not self.validate_topics(topics):
                 raise ValueError("Invalid topic format or weights")
 
-            # Update database
             update_topic_data(
                 db,
                 quiz_id,
@@ -414,7 +391,6 @@ class TopicService:
     def reset_topic_analysis(self, quiz_id: str, user_id: str, db: Session) -> Dict:
         """Reset topic analysis to start over"""
         try:
-            # Reset topic data
             update_topic_data(
                 db,
                 quiz_id,

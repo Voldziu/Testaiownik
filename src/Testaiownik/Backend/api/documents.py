@@ -1,7 +1,6 @@
 # src/Testaiownik/Backend/api/documents.py
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from typing import List, Optional
-from datetime import datetime
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
@@ -18,7 +17,7 @@ from ..models.responses import (
     DocumentItem,
 )
 from ..database.sql_database_connector import get_db
-from ..database.crud import get_quiz, log_activity
+from ..database.crud import log_activity
 
 from .system import get_user_id, validate_quiz_access
 
@@ -43,7 +42,6 @@ async def upload_documents(
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
 
-    # Validate file types
     allowed_extensions = {"pdf", "docx", "txt", "pptx"}
     for file in files:
         if not file.filename:
@@ -61,7 +59,6 @@ async def upload_documents(
             quiz_id, user_id, files, db
         )
 
-        # Log the upload activity
         log_activity(
             db,
             user_id,
@@ -147,7 +144,6 @@ async def delete_document(
         if not success:
             raise HTTPException(status_code=404, detail="Document not found")
 
-        # Log the deletion
         log_activity(
             db,
             user_id,
@@ -183,7 +179,6 @@ async def index_documents(
     try:
         indexing_result = await document_service.index_quiz_documents(quiz_id, db)
 
-        # Log the indexing activity
         log_activity(
             db,
             user_id,
@@ -203,7 +198,6 @@ async def index_documents(
         raise HTTPException(status_code=500, detail="Document indexing failed")
 
 
-# Search endpoints
 @router.get("/search", response_model=SearchResponse)
 async def search_documents(
     request: Request,
@@ -221,7 +215,6 @@ async def search_documents(
     if limit <= 0 or limit > 100:
         raise HTTPException(status_code=400, detail="Limit must be between 1 and 100")
 
-    # Validate quiz access if specific quiz requested
     if quiz_id:
         validate_quiz_access(quiz_id, user_id, db)
 
@@ -254,11 +247,9 @@ async def search_quiz_documents(
     user_id = get_user_id(request)
     validate_quiz_access(quiz_id, user_id, db)
 
-    # Delegate to main search with quiz_id constraint
     return await search_documents(request, q=q, quiz_id=quiz_id, limit=limit)
 
 
-# Bulk operations
 @router.delete("/{quiz_id}/all")
 async def delete_all_documents(
     quiz_id: str, request: Request, db: Session = Depends(get_db)
@@ -268,23 +259,19 @@ async def delete_all_documents(
     validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        # Get all documents for the quiz
         documents = document_service.get_quiz_documents(quiz_id, db)
         deleted_count = 0
 
-        # Delete each document
         for doc in documents:
             success = document_service.delete_document(doc.doc_id, db)
             if success:
                 deleted_count += 1
 
-        # Reset quiz status if all documents deleted
         if deleted_count > 0:
             from ..database.crud import update_quiz_status
 
             update_quiz_status(quiz_id, "created")
 
-        # Log bulk deletion
         log_activity(
             db,
             user_id,
@@ -304,7 +291,6 @@ async def delete_all_documents(
         raise HTTPException(status_code=500, detail="Failed to delete documents")
 
 
-# Document information endpoints
 @router.get("/{quiz_id}/{doc_id}/info")
 async def get_document_info(
     quiz_id: str, doc_id: str, request: Request, db: Session = Depends(get_db)
@@ -348,12 +334,10 @@ async def get_document_stats(
                 "indexing_progress": 0.0,
             }
 
-        # Calculate statistics
         total_documents = len(documents)
         indexed_documents = sum(1 for doc in documents if doc.indexed)
         total_size = sum(doc.size_bytes for doc in documents)
 
-        # Count file types
         file_types = {}
         for doc in documents:
             file_type = doc.file_type
@@ -383,7 +367,7 @@ async def get_document_stats(
 async def estimate_max_questions(
     quiz_id: str,
     request: Request,
-    ratio: int = 2,  # Default: 2 chunks per question
+    ratio: int = 2,  
     db: Session = Depends(get_db),
 ):
     """Estimate maximum number of questions possible based on document chunks"""
@@ -395,16 +379,13 @@ async def estimate_max_questions(
             status_code=400, detail="Quiz documents must be indexed first"
         )
 
-    # Validate ratio parameter
     if ratio <= 0:
         raise HTTPException(status_code=400, detail="Ratio must be greater than 0")
 
     try:
-        # Check if collection exists
         if not document_service.qdrant_manager.collection_exists(quiz.collection_name):
             raise HTTPException(status_code=404, detail="Document collection not found")
 
-        # Get chunk count from collection
         from RAG.Retrieval import RAGRetriever
 
         retriever = RAGRetriever(quiz.collection_name, document_service.qdrant_manager)
@@ -419,7 +400,6 @@ async def estimate_max_questions(
                 "message": "No chunks available for question generation",
             }
 
-        # Calculate estimated questions based on provided ratio
         estimated_questions = max(1, int(total_chunks / ratio))
 
         return {

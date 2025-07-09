@@ -1,7 +1,6 @@
 # components/topics_manager.py
 
 import streamlit as st
-import time
 from typing import Dict, Any
 from components.quiz_manager import return_to_main_menu
 from utils.session_manager import (
@@ -21,7 +20,6 @@ from config.settings import (
 )
 
 
-# Weight mapping for user-friendly labels
 WEIGHT_OPTIONS = {"Niskie": 0.15, "Normalne": 0.30, "Wysokie": 0.50}
 
 
@@ -52,7 +50,6 @@ def render_topics_manager():
 def get_max_topics_estimate(quiz_id: str, ratio: int = 10) -> int:
     """Estimate max questions for documents"""
     try:
-        # Pobierz API client z session_state
         api_client = get_api_client(get_user_id())
         if not api_client:
             st.error("❌ Brak połączenia z API")
@@ -89,7 +86,6 @@ def _render_topic_generation_setup():
 
     st.divider()
 
-    # Topic generation configuration
     st.subheader("⚙️ Konfiguracja generowania")
     ratio = DEFAULT_TOPIC_RATIO
     cache_key = f"max_topics_{quiz_id}_{ratio}"
@@ -115,7 +111,6 @@ def _render_topic_generation_setup():
         help="Więcej tematów = bardziej szczegółowa analiza, ale dłuższy czas przetwarzania",
     )
 
-    # Generation settings
     with st.expander("🔧 Szczegóły", expanded=False):
         st.markdown(
             """
@@ -134,7 +129,6 @@ def _render_topic_generation_setup():
         """
         )
 
-    # Generate button
     st.divider()
 
     if st.button(
@@ -161,23 +155,20 @@ def _render_topic_management():
 
     quiz_id = get_quiz_id()
 
-    # Add new topic section
     _render_add_topic_section(quiz_id)
 
     st.divider()
 
-    # Display existing topics
     _render_topics_list(quiz_id)
 
-    # Add feedback section for all topics
     _render_feedback_section(quiz_id)
 
     col1, col2, col3 = st.columns(
         [1, 4, 1]
-    )  # 1 - empty space on left and right, 4 - middle space
+    ) 
     with col2:
         if st.button("✅ Zatwierdź tematy", use_container_width=True):
-            _confirm_topics(quiz_id)  # Call the API client to confirm topics
+            _confirm_topics(quiz_id) 
             st.rerun()
 
 
@@ -193,7 +184,6 @@ def _confirm_topics(quiz_id: str):
                 st.success("✅ Tematy zostały zatwierdzone!")
                 set_topics_confirmed()
                 st.session_state["app_phase"] = "question_generation"
-                # Move to the next stage (question generation)
                 st.info("Przechodzenie do formularza pytań...")
 
                 st.rerun()
@@ -213,20 +203,19 @@ def _render_feedback_section(quiz_id: str):
     """Render feedback section for all topics"""
     st.subheader("📝 Podaj ogólny feedback na temat wszystkich tematów")
 
-    # Inicjalizuj klucz dla feedbacku
     if "feedback_form_key" not in st.session_state:
         st.session_state["feedback_form_key"] = 0
 
     feedback = st.text_area(
         "Twoja opinia na temat wygenerowanych tematów",
         placeholder="Wprowadź feedback... (np. 'Zrób tematy bardziej ogólne, mniej szczegółowe.')",
-        key=f"feedback_text_{st.session_state['feedback_form_key']}",  # Unikalny klucz
+        key=f"feedback_text_{st.session_state['feedback_form_key']}", 
     )
 
     if st.button("💬 Prześlij feedback", use_container_width=True):
         if feedback.strip():
             success = _submit_topic_feedback(quiz_id, feedback)
-            if success:  # Tylko zwiększ klucz jeśli wysłanie się powiodło
+            if success:  
                 st.session_state["feedback_form_key"] += 1
                 st.rerun()
         else:
@@ -246,7 +235,7 @@ def _submit_topic_feedback(quiz_id: str, feedback: str):
                     "✅ Feedback został przesłany! Tematy zostaną wygenerowane ponownie."
                 )
 
-                return True  # Zwróć True jeśli się powiodło
+                return True  
             else:
                 st.error("❌ Wystąpił problem podczas wysyłania feedbacku")
                 return False
@@ -267,7 +256,6 @@ def _render_add_topic_section(quiz_id: str):
     st.subheader("➕ Dodaj nowy temat")
 
     with st.expander("Dodaj własny temat", expanded=False):
-        # Inicjalizujemy klucz formularza w session_state jeśli nie istnieje
         if "topic_form_key" not in st.session_state:
             st.session_state["topic_form_key"] = 0
 
@@ -276,20 +264,19 @@ def _render_add_topic_section(quiz_id: str):
                 "Nazwa tematu",
                 placeholder="np. Podstawy programowania",
                 help="Wprowadź nazwę nowego tematu",
-                key=f"topic_name_{st.session_state['topic_form_key']}",  # Dodaj unikalny klucz
+                key=f"topic_name_{st.session_state['topic_form_key']}", 
             )
 
             st.write("**Znaczenie tematu:**")
             new_topic_weight_label = st.radio(
                 "Wybierz znaczenie tematu",
                 options=list(WEIGHT_OPTIONS.keys()),
-                index=1,  # Default to "Normalne"
+                index=1,  
                 help="Niskie - mniej pytań, Normalne - standardowo, Wysokie - więcej pytań",
                 horizontal=True,
-                key=f"topic_weight_{st.session_state['topic_form_key']}",  # Dodaj unikalny klucz
+                key=f"topic_weight_{st.session_state['topic_form_key']}", 
             )
 
-            # Form submit button
             submitted = st.form_submit_button(
                 "➕ Dodaj temat", type="primary", use_container_width=True
             )
@@ -300,8 +287,7 @@ def _render_add_topic_section(quiz_id: str):
                     success = _add_new_topic(
                         quiz_id, new_topic_name.strip(), new_topic_weight
                     )
-                    if success:  # Tylko zwiększ klucz jeśli dodanie się powiodło
-                        # Zwiększamy klucz formularza żeby wyczyścić pola
+                    if success:  
                         st.session_state["topic_form_key"] += 1
                         st.rerun()
                 else:
@@ -322,14 +308,12 @@ def _render_topics_list(quiz_id: str):
 
         st.subheader(f"📋 Lista tematów ({len(suggested_topics)})")
 
-        # Topics summary
         st.write(f"**Łączna liczba tematów:** {len(suggested_topics)}")
 
-        # Topics list
         for i, topic in enumerate(suggested_topics):
             _render_topic_item(quiz_id, topic, i)
 
-            if i < len(suggested_topics) - 1:  # Don't add divider after last item
+            if i < len(suggested_topics) - 1:  
                 st.divider()
 
     except APIError as e:
@@ -346,7 +330,6 @@ def _render_topic_item(quiz_id: str, topic: Dict[str, Any], index: int):
     topic_name = topic.get("topic", "Nieznany temat")
     topic_weight = topic.get("weight", 1.0)
 
-    # Check if this topic is being edited
     is_editing = get_editing_topic() == topic_name
 
     if is_editing:
@@ -362,7 +345,6 @@ def _render_topic_display_mode(
     col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
 
     with col1:
-        # Topic info with visual indicators
         weight_label = get_weight_label_from_value(topic_weight)
         weight_indicator = (
             "🔥"
@@ -374,7 +356,6 @@ def _render_topic_display_mode(
         st.caption(f"Znaczenie: {weight_label}")
 
     with col2:
-        # Edit button
         if st.button(
             "✏️ Edytuj", key=f"edit_{topic_name}_{index}", use_container_width=True
         ):
@@ -382,7 +363,6 @@ def _render_topic_display_mode(
             st.rerun()
 
     with col3:
-        # Delete button with confirmation
         if st.button(
             "🗑️ Usuń", key=f"delete_{topic_name}_{index}", use_container_width=True
         ):
@@ -393,7 +373,6 @@ def _render_topic_edit_mode(quiz_id: str, topic_name: str, current_weight: float
     """Render topic in edit mode"""
     st.write(f"**✏️ Edytujesz temat:** {topic_name}")
 
-    # Initialize edit values in session state if they don't exist
     edit_name_key = f"edit_name_{topic_name}"
     edit_weight_key = f"edit_weight_{topic_name}"
 
@@ -486,7 +465,7 @@ def _add_new_topic(quiz_id: str, topic_name: str, weight: float):
             if response:
                 st.success(f"✅ Temat '{topic_name}' został dodany!")
 
-                return True  # Zwróć True jeśli się powiodło
+                return True  
             else:
                 st.error("❌ Wystąpił problem podczas dodawania tematu")
                 return False
@@ -532,7 +511,6 @@ def _delete_topic(quiz_id: str, topic_name: str):
             response = api_client.delete_topic(quiz_id, topic_name)
 
             if response:
-                # Usuń z session_state jeśli tam przechowujesz
                 if "topics" in st.session_state:
                     st.session_state.topics = [
                         topic
@@ -566,7 +544,6 @@ def _clear_edit_state(topic_name: str):
         del st.session_state[edit_weight_key]
 
 
-# Navigation helper functions
 def render_navigation_buttons():
     """Render navigation buttons for topic management"""
     st.divider()
@@ -575,7 +552,6 @@ def render_navigation_buttons():
 
     with col1:
         if st.button("⬅️ Wróć do indeksowania", use_container_width=True):
-            # Reset topics generation state
             set_topics_generated(False)
             st.info("Powrót do indeksowania...")
 
@@ -583,11 +559,8 @@ def render_navigation_buttons():
 
     with col3:
         if st.button("➡️ Dalej do pytań", type="primary", use_container_width=True):
-            # Navigate to questions generation
             st.info("Przechodzenie do generowania pytań...")
 
-            # This would navigate to the next step
-            # Implementation depends on your navigation system
 
 
 def get_topics_summary(quiz_id: str) -> Dict[str, Any]:

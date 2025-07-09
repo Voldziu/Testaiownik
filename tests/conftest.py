@@ -5,20 +5,16 @@ from pathlib import Path
 from unittest.mock import Mock
 from dotenv import load_dotenv
 
-# Add src to path for imports
 test_dir = Path(__file__).parent
 src_dir = test_dir.parent / "src"
 sys.path.insert(0, str(src_dir))
 
-# Also add the Testaiownik package to path
 testaiownik_dir = src_dir / "Testaiownik"
 sys.path.insert(0, str(testaiownik_dir))
 
-# Load test environment
 load_dotenv(test_dir.parent / ".env.test")
 
 
-# Service-specific fixtures
 @pytest.fixture
 def mock_db_session():
     """Mock database session"""
@@ -77,13 +73,11 @@ def mock_quiz():
     return quiz
 
 
-# Pytest configuration for async support
 def pytest_configure(config):
     """Configure pytest markers"""
     config.addinivalue_line("markers", "asyncio: async test support")
 
 
-# Environment setup
 @pytest.fixture(autouse=True)
 def setup_test_env():
     """Set up test environment variables"""

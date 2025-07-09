@@ -91,7 +91,6 @@ class QuizSession(BaseModel):
         default="fresh", description="Quiz generation mode"
     )
 
-    # Question management
     questions_per_topic: Dict[str, int] = Field(
         description="Question distribution per topic"
     )
@@ -105,7 +104,6 @@ class QuizSession(BaseModel):
         default_factory=dict, description="Question ID -> recycle count"
     )
 
-    # Session state
     current_question_index: int = Field(
         default=0, description="Current position in active_question_pool"
     )
@@ -116,7 +114,6 @@ class QuizSession(BaseModel):
         default="generating", description="Quiz status"
     )
 
-    # Timestamps and persistence
     created_at: datetime = Field(
         default_factory=datetime.now, description="Session creation time"
     )
@@ -141,7 +138,6 @@ class QuizSession(BaseModel):
         self.last_activity = datetime.now()
 
         if not answer.is_correct:
-            # Add multiple copies of the question to the end of the pool
             for _ in range(self.copies_per_incorrect_answer):
                 self.active_question_pool.append(answer.question_id)
 

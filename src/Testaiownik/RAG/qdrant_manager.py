@@ -1,5 +1,4 @@
 import os
-import httpx
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
 from AzureModels.models import get_embedding_model
@@ -20,7 +19,7 @@ class QdrantManager:
         url: str = os.getenv(
             "QDRANT_URL",
             "localhost:6333",
-        ),  # From dockercompose
+        ), 
         vector_size: int = 1536,
         timeout: int = 300,
     ):
@@ -33,7 +32,7 @@ class QdrantManager:
                 timeout=timeout,
                 port=None,
                 grpc_port=None,
-                prefer_grpc=False,  # for azure deployment
+                prefer_grpc=False,  
             )
         self.vector_size = vector_size
         self.embedding_model = get_embedding_model(api_version="2024-12-01-preview")
@@ -62,7 +61,6 @@ class QdrantManager:
 
             logger.error(f"Full traceback: {traceback.format_exc()}")
 
-            # Additional debug for timeouts
             if "timeout" in str(e).lower():
                 logger.error(
                     "This is a TIMEOUT error - check Container App performance"
@@ -87,19 +85,16 @@ class QdrantManager:
         start_idx = 0
 
         while start_idx < len(text):
-            # Find the next reasonable split point (either by space or the `min_chunk_size`)
             end_idx = start_idx + min_chunk_size
             if end_idx >= len(text):
                 chunks.append(text[start_idx:])
                 break
 
-            # Find the last space within the chunk to avoid cutting off in the middle of a word
             if text[end_idx] != " ":
                 space_idx = text.rfind(" ", start_idx, end_idx)
                 if space_idx != -1:
                     end_idx = space_idx
 
-            # Append the chunk
             chunks.append(text[start_idx:end_idx].strip())
             start_idx = end_idx
 
@@ -132,13 +127,11 @@ class QdrantManager:
         try:
             logger.info(f"Starting indexing of {file_path}")
 
-            # Process the file and get list of (text, metadata) tuples
             text_sections = self.process_file(file_path)
             if not text_sections:
                 logger.warning(f"Nie udało się wyodrębnić tekstu z pliku: {file_path}")
                 return False
 
-            # Collect all chunks first to estimate total work
             all_chunks_data = []
             for section_text, metadata in text_sections:
                 chunks = self.chunk_text(section_text, min_chunk_size=500)
@@ -152,7 +145,6 @@ class QdrantManager:
                 logger.warning("No chunks to process")
                 return False
 
-            # Process in batches
             processed_chunks = 0
             total_batches = (total_chunks + batch_size - 1) // batch_size
 
@@ -164,10 +156,8 @@ class QdrantManager:
                     f"Processing batch {batch_num}/{total_batches} ({len(batch_chunks_data)} chunks)"
                 )
 
-                # Extract just the text for embedding
                 batch_texts = [chunk_data[0] for chunk_data in batch_chunks_data]
 
-                # Generate embeddings for this batch
                 start_time = time.time()
                 try:
                     vectors = self.embedding_model.embed_documents(batch_texts)
@@ -181,7 +171,6 @@ class QdrantManager:
                     )
                     continue
 
-                # Create points for this batch
                 points = []
                 for (chunk, metadata, chunk_id), vector in zip(
                     batch_chunks_data, vectors
@@ -199,7 +188,6 @@ class QdrantManager:
                         )
                     )
 
-                # Upsert this batch
                 start_time = time.time()
                 try:
                     self.client.upsert(collection_name=collection_name, points=points)
@@ -215,7 +203,6 @@ class QdrantManager:
                     logger.error(f"Error upserting batch {batch_num}: {e}")
                     continue
 
-                # Small delay to prevent overwhelming the system
                 time.sleep(0.1)
 
             logger.info(

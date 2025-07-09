@@ -15,7 +15,6 @@ class TestRequestFeedback:
         }
         result = request_feedback(state)
 
-        # Test format from your code
         expected_in_message = [
             "Found topics:",
             "0: {'topic': 'Algorithm', 'weight': 0.6}",
@@ -34,7 +33,6 @@ class TestRequestFeedback:
         state = {"suggested_topics": []}
         result = request_feedback(state)
 
-        # Your code should still create a feedback_request
         assert "feedback_request" in result
         assert "Found topics:" in result["feedback_request"]
         assert result["next_node"] == "process_feedback"
@@ -49,14 +47,12 @@ class TestRequestFeedback:
 
         result = request_feedback(original_state)
 
-        # Your code uses {**state, ...} so original fields should be preserved
         assert result["suggested_topics"] == [{"topic": "Topic1", "weight": 1.0}]
         assert result["documents"] == ["doc1"]
         assert result["user_input"] == "test_input"
 
     def test_request_feedback_with_consolidated_topics(self):
         """Test request_feedback works correctly with output from consolidate"""
-        # Topics that might come from consolidate_topics_with_history
         consolidated_topics = [
             {
                 "topic": "Advanced Sorting Algorithms (QuickSort, MergeSort, HeapSort)",
@@ -77,10 +73,8 @@ class TestRequestFeedback:
 
         result = request_feedback(state)
 
-        # Should format all topics correctly
         feedback = result["feedback_request"]
         assert "Found topics:" in feedback
         assert "Provide feedback on given topics please." in feedback
-        # Check that all topics are present
         for i, topic_data in enumerate(consolidated_topics):
             assert f"{i}: {topic_data}" in feedback

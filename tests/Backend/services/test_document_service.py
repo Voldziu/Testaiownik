@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from pathlib import Path
 from src.Testaiownik.Backend.services.document_service import DocumentService
 
 
@@ -19,7 +18,6 @@ class TestDocumentService:
         quiz_id = "quiz_456"
         user_id = "user_123"
 
-        # Mock file objects
         mock_file1 = Mock()
         mock_file1.filename = "test1.pdf"
         mock_file1.read = AsyncMock(return_value=b"PDF content")
@@ -30,14 +28,12 @@ class TestDocumentService:
 
         files = [mock_file1, mock_file2]
 
-        # Mock database operations
         with patch(
             "src.Testaiownik.Backend.services.document_service.create_document"
         ) as mock_create:
             with patch(
                 "src.Testaiownik.Backend.services.document_service.log_activity"
             ):
-                # Mock document objects
                 mock_doc1 = Mock()
                 mock_doc1.doc_id = "doc_1"
                 mock_doc1.filename = "test1.pdf"
@@ -56,7 +52,6 @@ class TestDocumentService:
 
                 mock_create.side_effect = [mock_doc1, mock_doc2]
 
-                # Mock upload directory
                 document_service.upload_dir = temp_upload_dir
 
                 result = await document_service.upload_documents(
@@ -85,7 +80,6 @@ class TestDocumentService:
             quiz_id, user_id, [mock_file], mock_db_session
         )
 
-        # Should skip unsupported files
         assert len(result) == 0
 
     def test_get_quiz_documents(self, document_service, mock_db_session, mock_document):
@@ -229,26 +223,3 @@ class TestDocumentService:
 
             with pytest.raises(ValueError, match="No documents found for quiz"):
                 await document_service.index_quiz_documents(quiz_id, mock_db_session)
-
-    # def test_search_documents_success(self, document_service, mock_qdrant_manager):
-    #     """Test document search functionality"""
-    #     collection_name = "quiz_456_collection_test_search_documents_success"
-    #     query = "test query"
-
-    #     # Mock search results
-    #     mock_qdrant_manager.search_collection.return_value = [
-    #         {
-    #             "text": "Sample text content",
-    #             "metadata": {"source": "test.pdf", "page": 1},
-    #             "score": 0.95,
-    #         }
-    #     ]
-
-    #     document_service.qdrant_manager = mock_qdrant_manager
-
-    #     result = document_service.search_documents(collection_name, query, limit=10)
-
-    #     assert len(result) == 1
-    #     assert result[0]["score"] == 0.95
-    #     assert result[0]["text"] == "Sample text content"
-    #     mock_qdrant_manager.search_collection.assert_called_once()

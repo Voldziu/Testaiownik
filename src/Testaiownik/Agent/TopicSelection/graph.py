@@ -13,7 +13,6 @@ def create_agent_graph(retriever: DocumentRetriever = None) -> StateGraph:
     workflow = StateGraph(AgentState)
     logger.info("Creating agent graph")
 
-    # workflow.add_node(START, "analyze_documents")
     workflow.add_node(
         "analyze_documents", partial(analyze_documents, retriever=retriever)
     )

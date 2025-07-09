@@ -3,7 +3,6 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
 
 
-# Topic Selection Requests
 class TopicAnalysisRequest(BaseModel):
     desired_topic_count: int = Field(default=10, ge=1, le=50)
 
@@ -22,10 +21,9 @@ class UpdateTopicRequest(BaseModel):
     new_weight: Optional[float] = Field(None, ge=0.0, le=1.0)
 
 
-# Quiz Requests
 class StartQuizRequest(BaseModel):
     confirmed_topics: Optional[List[Dict[str, Any]]] = (
-        None  # Optional WeightedTopic format
+        None  
     )
     total_questions: int = Field(default=20, ge=1)
     difficulty: Literal["easy", "medium", "hard", "very-hard"] = "very-hard"
@@ -49,7 +47,6 @@ class UserQuestionsRequest(BaseModel):
     user_questions: List[str] = Field(..., min_items=1, max_items=20)
 
 
-# Document Requests
 class IndexDocumentsRequest(BaseModel):
     chunk_size: int = Field(default=500, ge=100)
     batch_size: int = Field(default=50, ge=10)

@@ -1,10 +1,8 @@
 # tests/Agent/Quiz/test_state.py
 import pytest
-from unittest.mock import Mock
 from datetime import datetime
 
 from src.Testaiownik.Agent.Quiz.state import (
-    QuizState,
     create_initial_quiz_state,
     prepare_state_for_persistence,
     restore_state_from_persistence,
@@ -14,7 +12,7 @@ from src.Testaiownik.Agent.Quiz.models import (
     Question,
     QuestionChoice,
     QuizConfiguration,
-    WeightedTopic,  # I dont know why this is needed, but it must be like this
+    WeightedTopic, 
 )
 
 
@@ -36,7 +34,6 @@ class TestCreateInitialQuizState:
         assert state["quiz_complete"] == False
         assert state["next_node"] == "initialize_quiz"
 
-        # Check quiz config defaults
         config = state["quiz_config"]
         assert config.topics == sample_topics
         assert config.total_questions == 20
@@ -70,7 +67,6 @@ class TestCreateInitialQuizState:
     def test_create_initial_state_structure(self, sample_topics):
         state = create_initial_quiz_state(sample_topics)
 
-        # Check all required keys exist
         required_keys = [
             "quiz_session",
             "session_snapshot",
@@ -124,7 +120,6 @@ class TestPrepareStateForPersistence:
         assert "quiz_data" in result
         assert result["status"] == "active"
 
-        # Check snapshot
         snapshot = result["snapshot"]
         assert snapshot["quiz_complete"] == False
         assert snapshot["questions_to_generate"] == {"Test": 3}
@@ -141,7 +136,6 @@ class TestPrepareStateForPersistence:
         state = {
             "quiz_session": quiz_session,
             "quiz_complete": True,
-            # Missing some optional fields
         }
 
         result = prepare_state_for_persistence(state)
@@ -223,13 +217,12 @@ class TestRestoreStateFromPersistence:
 
         state = restore_state_from_persistence(db_data)
 
-        # Should handle missing snapshot gracefully
         assert state["quiz_session"] is not None
-        assert state["quiz_complete"] == False  # Default
+        assert state["quiz_complete"] == False  
         assert state["questions_to_generate"] is None
 
     def test_restore_state_partial_snapshot(self, db_data):
-        db_data["snapshot"] = {"quiz_complete": True}  # Only partial data
+        db_data["snapshot"] = {"quiz_complete": True}  
 
         state = restore_state_from_persistence(db_data)
 
@@ -242,7 +235,6 @@ class TestQuizStateIntegration:
     """Integration tests for the complete state lifecycle"""
 
     def test_full_state_lifecycle(self):
-        # 1. Create initial state
         topics = [
             WeightedTopic(topic="Algorithms", weight=1.0),
         ]
@@ -253,7 +245,6 @@ class TestQuizStateIntegration:
         assert initial_state["next_node"] == "initialize_quiz"
         assert initial_state["quiz_session"] is None
 
-        # 2. Simulate quiz session creation (normally done in initialize_quiz node)
         quiz_session = QuizSession(
             topics=topics,
             total_questions=3,
@@ -261,7 +252,6 @@ class TestQuizStateIntegration:
             user_id="test-user",
         )
 
-        # Add a question
         question = Question(
             topic="Algorithms",
             question_text="What is Big O?",
@@ -274,7 +264,6 @@ class TestQuizStateIntegration:
         quiz_session.all_generated_questions.append(question)
         quiz_session.active_question_pool.append(question.id)
 
-        # Update state
         active_state = {
             **initial_state,
             "quiz_session": quiz_session,
@@ -283,14 +272,12 @@ class TestQuizStateIntegration:
             "questions_to_generate": {"Algorithms": 2},
         }
 
-        # 3. Prepare for persistence
         persistence_data = prepare_state_for_persistence(active_state)
 
         assert persistence_data["session_id"] == quiz_session.session_id
         assert persistence_data["user_id"] == "test-user"
         assert "quiz_data" in persistence_data
 
-        # 4. Restore from persistence
         restored_state = restore_state_from_persistence(persistence_data)
 
         assert restored_state["quiz_session"].session_id == quiz_session.session_id
@@ -305,8 +292,7 @@ class TestQuizStateIntegration:
         ]
         state = create_initial_quiz_state(topics)
 
-        # Type checking - these should not raise TypeErrors if types are correct
-        session: QuizSession = state.get("quiz_session")  # Can be None
+        session: QuizSession = state.get("quiz_session") 
         complete: bool = state["quiz_complete"]
         next_node: str = state["next_node"]
         config: QuizConfiguration = state["quiz_config"]
@@ -322,22 +308,18 @@ class TestQuizStateIntegration:
         ]
         original_state = create_initial_quiz_state(topics)
 
-        # Simulate state update (how it should be done in nodes)
         updated_state = {
             **original_state,
             "quiz_complete": True,
             "next_node": "finalize_results",
         }
 
-        # Original state should be unchanged
         assert original_state["quiz_complete"] == False
         assert original_state["next_node"] == "initialize_quiz"
 
-        # Updated state should have new values
         assert updated_state["quiz_complete"] == True
         assert updated_state["next_node"] == "finalize_results"
 
-        # Shared references should still work
         assert updated_state["quiz_config"] is original_state["quiz_config"]
 
 

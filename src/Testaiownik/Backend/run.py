@@ -17,7 +17,6 @@ from pathlib import Path
 from Backend import app, validate_environment, init_db, create_test_data
 from utils import logger
 
-# Add project root to Python path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -74,11 +73,9 @@ def parse_args():
 
 def setup_environment():
     """Setup environment variables if not set"""
-    # Set default environment
     if not os.getenv("ENVIRONMENT"):
         os.environ["ENVIRONMENT"] = "development"
 
-    # Ensure upload directory exists
     upload_dir = Path("uploads")
     upload_dir.mkdir(exist_ok=True)
 
@@ -89,24 +86,19 @@ def main():
     args = parse_args()
 
     try:
-        # Setup environment
         setup_environment()
 
-        # Initialize database
         logger.info("Initializing database...")
         init_db()
 
-        # Validate environment
         if not args.skip_validation:
             logger.info("Validating environment...")
             validate_environment()
 
-        # Create test data if requested
         if args.create_test_data:
             logger.info("Creating test data...")
             create_test_data()
 
-        # Configure server
         server_config = {
             "app": "Backend.main:app",
             "host": args.host,
@@ -115,7 +107,6 @@ def main():
         }
 
         if args.production:
-            # Production configuration
             server_config.update(
                 {
                     "reload": False,
@@ -127,7 +118,6 @@ def main():
             logger.info(f"   Server: {args.host}:{args.port}")
             logger.info(f"   Workers: {args.workers}")
         else:
-            # Development configuration
             server_config.update(
                 {
                     "reload": True,
@@ -142,7 +132,6 @@ def main():
         logger.info(f"   API Docs: http://{args.host}:{args.port}/docs")
         logger.info(f"   Health Check: http://{args.host}:{args.port}/api/health")
 
-        # Start server
         uvicorn.run(**server_config)
 
     except KeyboardInterrupt:

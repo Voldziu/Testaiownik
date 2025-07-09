@@ -31,7 +31,6 @@ class DocumentService:
         self.upload_dir = Path("uploads")
         self.upload_dir.mkdir(exist_ok=True)
 
-        # Supported file types
         self.supported_types = {
             "pdf": "application/pdf",
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -54,26 +53,21 @@ class DocumentService:
             quiz_upload_dir.mkdir(exist_ok=True)
 
             for file in files:
-                # Validate file type
                 file_extension = Path(file.filename).suffix.lower().lstrip(".")
                 if file_extension not in self.supported_types:
                     logger.warning(f"Unsupported file type: {file_extension}")
                     continue
 
-                # Generate unique filename
                 file_id = str(uuid.uuid4())
                 filename = f"{file_id}_{file.filename}"
                 file_path = quiz_upload_dir / filename
 
-                # Save file
                 async with aiofiles.open(file_path, "wb") as f:
                     content = await file.read()
                     await f.write(content)
 
-                # Get file size
                 file_size = len(content)
 
-                # Create database record
                 document = create_document(
                     db=db,
                     quiz_id=quiz_id,
@@ -129,12 +123,10 @@ class DocumentService:
         else:
             status = "completed"
 
-        # Get collection info if available
         collection_name = None
         chunk_count = None
 
         if indexed_documents > 0:
-            # Try to find collection name from quiz
             from ..database.crud import get_quiz
 
             quiz = get_quiz(db, quiz_id)
@@ -182,23 +174,19 @@ class DocumentService:
 
             collection_name = f"quiz_{quiz_id}"
 
-            # Create collection if it doesn't exist
             if not self.qdrant_manager.collection_exists(collection_name):
                 self.qdrant_manager.create_collection(collection_name)
 
-            # Process each document
             total_chunks = 0
             indexed_count = 0
 
             for doc in documents:
                 try:
-                    # Index document to Qdrant
                     success = self.qdrant_manager.index_file_to_qdrant(
                         doc.file_path, collection_name
                     )
 
                     if success:
-                        # Update document status
                         update_document_indexed(db, doc.doc_id, True)
                         indexed_count += 1
                         logger.info(f"Indexed document: {doc.filename}")
@@ -207,7 +195,6 @@ class DocumentService:
 
                 except Exception as e:
                     logger.error(f"Failed to index document {doc.filename}: {e}")
-            # Get total chunks
             if indexed_count > 0:
                 try:
                     retriever = RAGRetriever(collection_name, self.qdrant_manager)
@@ -215,7 +202,6 @@ class DocumentService:
                 except Exception as e:
                     logger.warning(f"Could not get chunk count: {e}")
 
-            # Update quiz with collection name and status
             update_quiz_collection(db, quiz_id, collection_name)
             if indexed_count > 0:
                 update_quiz_status(db, quiz_id, "documents_indexed")
@@ -245,7 +231,6 @@ class DocumentService:
             results = []
 
             if quiz_id:
-                # Search specific quiz collection
                 collection_name = f"quiz_{quiz_id}"
                 if self.qdrant_manager.collection_exists(collection_name):
                     search_results = self.qdrant_manager.search_in_collection(
@@ -270,7 +255,7 @@ class DocumentService:
                                 }
                             )
 
-            search_time = (time.time() - start_time) * 1000  # Convert to ms
+            search_time = (time.time() - start_time) * 1000 
 
             return {
                 "query": query,
@@ -283,13 +268,10 @@ class DocumentService:
             logger.error(f"Search failed: {e}")
             raise
 
-    # PLACEHOLDER:
 
     def get_document_status(self, doc_id: str) -> Optional[Dict[str, Any]]:
         """Get processing status of a specific document"""
         try:
-            # Would need to implement get_document_by_id in crud
-            # For now, placeholder implementation
             return {
                 "doc_id": doc_id,
                 "status": "indexed",

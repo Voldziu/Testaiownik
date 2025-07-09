@@ -1,4 +1,3 @@
-import time
 import streamlit as st
 from components.quiz_manager import return_to_main_menu
 from utils.session_manager import get_quiz_id, get_user_id, set_questions_generated
@@ -14,7 +13,6 @@ from config.settings import (
 def get_max_questions_estimate(quiz_id: str, ratio: int = 2) -> int:
     """Estimate max questions for documents"""
     try:
-        # Pobierz API client z session_state
         api_client = get_api_client(get_user_id())
         if not api_client:
             st.error("❌ Brak połączenia z API")
@@ -51,7 +49,6 @@ def render_questions_manager():
             on_click=return_to_main_menu,
         )
 
-    # question config section
     st.subheader("⚙️ Ustawienia testu")
 
     ratio = DEFAULT_QUESTION_RATIO
@@ -79,20 +76,16 @@ def render_questions_manager():
 
     st.divider()
 
-    # user question list
     if "user_questions" not in st.session_state:
         st.session_state["user_questions"] = []
 
-    # add question section
     st.subheader("➕ Dodaj własne pytania")
     st.write("*Opcjonalnie: możesz dodać własne pytania do testu*")
 
-    # add question component
     with st.container():
         col1, col2 = st.columns([4, 1])
 
         with col1:
-            # Inicjalizujemy klucz w session_state jeśli nie istnieje
             if "question_input_key" not in st.session_state:
                 st.session_state["question_input_key"] = 0
 
@@ -105,23 +98,20 @@ def render_questions_manager():
             )
 
         with col2:
-            st.write("")  # Spacer
-            st.write("")  # Spacer
+            st.write("")  
+            st.write("")  
             if st.button("✅ Dodaj", type="secondary", use_container_width=True):
                 if question.strip():
                     st.session_state["user_questions"].append(question.strip())
-                    # Zwiększamy klucz żeby wyczyścić pole tekstowe
                     st.session_state["question_input_key"] += 1
-                    st.rerun()  # Refresh to show the new question
+                    st.rerun()  
                 else:
                     st.warning("⚠️ Pytanie nie może być puste!")
 
-    # Display added questions at the bottom
     if st.session_state["user_questions"]:
         st.divider()
         st.subheader("📋 Twoje pytania:")
 
-        # Scrollable container for questions
         with st.container():
             for idx, q in enumerate(st.session_state["user_questions"], 1):
                 col1, col2 = st.columns([10, 1])
@@ -130,7 +120,6 @@ def render_questions_manager():
                     st.write(f"**{idx}.** {q}")
 
                 with col2:
-                    # Button to remove question
                     if st.button("🗑️", key=f"delete_{idx}", help="Usuń pytanie"):
                         st.session_state["user_questions"].pop(idx - 1)
                         st.rerun()
@@ -141,20 +130,16 @@ def render_questions_manager():
     else:
         st.info("💡 Nie dodano jeszcze żadnych własnych pytań")
 
-    # Separator before the start button
     st.divider()
 
-    # Button to start the test - always visible
     st.subheader("🚀 Rozpocznij test")
 
-    # Summary of configuration
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Całkowita liczba pytań", num_questions)
     with col2:
         st.metric("Twoje pytania", len(st.session_state["user_questions"]))
 
-    # Main start button
     if st.button("🚀 Rozpocznij test", type="primary", use_container_width=True):
         start_test(quiz_id, num_questions, st.session_state["user_questions"])
 
@@ -165,14 +150,12 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
         with st.spinner("Rozpoczynanie testu..."):
             api_client = get_api_client(get_user_id())
 
-            # Prepare data to send
             request_data = {
                 "total_questions": total_questions,
-                "difficulty": "very-hard",  # Default difficulty level
+                "difficulty": "very-hard",  
                 "user_questions": user_questions if user_questions else [],
             }
 
-            # Call the /quiz/{quiz_id}/start endpoint
             response = api_client.start_quiz(quiz_id=quiz_id, **request_data)
 
             if response:
@@ -181,7 +164,6 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
                 if quiz_id and "_" in quiz_id:
                     quiz_name = quiz_id.split("_")[0]
 
-                # Display test information
                 with st.expander("📊 Szczegóły testu", expanded=True):
                     st.write(f"🆔 **Nazwa quizu:** {quiz_name}")
                     st.write(f"📝 **Liczba pytań:** {total_questions}")
@@ -190,16 +172,13 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
 
                 set_questions_generated()
 
-                # ENHANCED: Clear any existing quiz state before starting
                 if "quiz_state" in st.session_state:
                     del st.session_state["quiz_state"]
 
-                # Clear progress cache for this quiz
                 progress_cache_key = f"quiz_progress_{quiz_id}"
                 if progress_cache_key in st.session_state:
                     del st.session_state[progress_cache_key]
 
-                # Set the app phase to test
                 st.session_state["app_phase"] = "test"
 
                 st.info("🔄 Test jest generowany. Poczekaj chwilę...")
@@ -212,7 +191,6 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
     except Exception as e:
         st.error(f"❌ Błąd podczas rozpoczęcia testu: {str(e)}")
 
-        # Debug info in case of an error
         with st.expander("🔍 Szczegóły błędu", expanded=False):
             st.code(str(e))
             st.write("**Parametry wywołania:**")

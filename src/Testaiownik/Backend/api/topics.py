@@ -20,7 +20,6 @@ from ..models.responses import (
     TopicDeleteResponse,
     TopicUpdateResponse,
     TopicAddResponse,
-    BaseResponse,
     TopicSuggestionsResponse,
 )
 from ..database.crud import get_quiz, log_activity
@@ -46,14 +45,12 @@ def start_topic_analysis(
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
-    # Check if quiz has documents
     if quiz.status not in ["documents_uploaded", "documents_indexed"]:
         raise HTTPException(
             status_code=400,
             detail="Quiz must have documents uploaded and indexed before topic analysis",
         )
 
-    # Check if documents are indexed
     if not quiz.collection_name:
         raise HTTPException(
             status_code=400, detail="Documents must be indexed before topic analysis"
@@ -95,7 +92,7 @@ async def get_topic_status(
 
     try:
         return TopicSessionStatusResponse(
-            quiz_id=quiz_id,  # Using quiz_id consistently
+            quiz_id=quiz_id,  
             status=quiz.status,
             suggested_topics=[
                 WeightedTopicResponse(**topic)
@@ -162,7 +159,6 @@ async def confirm_topics(quiz_id: str, request: Request, db: Session = Depends(g
         raise HTTPException(status_code=500, detail="Failed to confirm topics")
 
 
-# Topic Management Endpoints
 @router.delete("/{quiz_id}/topic/{topic_name}", response_model=TopicDeleteResponse)
 async def delete_topic(
     quiz_id: str, topic_name: str, request: Request, db: Session = Depends(get_db)

@@ -8,7 +8,6 @@ import uuid
 from .models import User, Quiz, Document, ActivityLog
 
 
-# User Operations
 def create_user(db: Session, user_id: str) -> User:
     """Create new user"""
     try:
@@ -28,10 +27,9 @@ def create_user(db: Session, user_id: str) -> User:
             user.created_at,
             user.last_activity,
             user.quizzes,
-        )  ## Unpack to avoid weird 500 errors
+        )  
 
         log_activity(db, user_id, "user_created")
-        # db.expunge(user)
         return user
 
     except Exception as e:
@@ -64,7 +62,6 @@ def delete_user(db: Session, user_id: str) -> bool:
     return False
 
 
-# Quiz Operations
 def create_quiz(db: Session, user_id: str, name: str) -> Quiz:
     """Create new quiz"""
     quiz_id = f"{name}_{uuid.uuid4()}"
@@ -90,10 +87,8 @@ def create_quiz(db: Session, user_id: str, name: str) -> Quiz:
         quiz.questions_data,
         quiz.user_answers,
         quiz.langgraph_quiz_state,
-    )  ## Unpack to avoid weird 500 errors
-    # Log activity for creating a new quiz
+    )  
     log_activity(db, user_id, "quiz_created", {"quiz_id": quiz_id})
-    # db.expunge(quiz)  # Remove from session to avoid stale data issues
     return quiz
 
 
@@ -145,7 +140,6 @@ def update_quiz_collection(db: Session, quiz_id: str, collection_name: str):
         db.commit()
 
 
-# Topic Selection Operations
 def start_topic_analysis(db: Session, quiz_id: str, desired_topic_count: int = 10):
     """Start topic analysis for quiz"""
     quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
@@ -204,7 +198,6 @@ def confirm_quiz_topics(db: Session, quiz_id: str, confirmed_topics: List[Dict])
     return False
 
 
-# Quiz Execution Operations
 def start_quiz_execution(
     db: Session, quiz_id: str, total_questions: int, difficulty: str
 ):
@@ -280,34 +273,26 @@ def soft_reset_quiz_execution(db: Session, quiz_id: str, questions_data: Dict = 
     """Reset quiz progress but preserve questions and topics"""
     quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
     if quiz:
-        # Preserve: questions_data, total_questions, difficulty, confirmed_topics
-        # Reset: user progress, current position, timing, state
+        
 
-        quiz.status = "quiz_active"  # Ready to start with existing questions
-        quiz.current_question_index = 0  # Reset to first question
-        quiz.user_answers = []  # Clear all user answers/progress
+        quiz.status = "quiz_active"  
+        quiz.current_question_index = 0  
+        quiz.user_answers = []  
         quiz.langgraph_quiz_state = (
-            None  # Reset session state (questions will be restored)
+            None  
         )
 
-        # Reset timing but preserve question generation completion
         quiz.quiz_started_at = None
         quiz.quiz_completed_at = None
         quiz.updated_at = datetime.now()
 
-        # Note: Keep these fields unchanged:
-        # - questions_data (preserve generated questions)
-        # - total_questions (preserve question count)
-        # - difficulty (preserve difficulty setting)
-        # - confirmed_topics (preserve topic configuration)
-        # - topic_analysis_completed_at (preserve topic completion time)
+     
 
         db.commit()
         return True
     return False
 
 
-# Document Operations
 def create_document(
     db: Session,
     quiz_id: str,
@@ -330,13 +315,11 @@ def create_document(
     db.commit()
     db.refresh(document)
 
-    # Update quiz status if this is the first document
     quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
     if quiz and quiz.status == "created":
         quiz.status = "documents_uploaded"
         db.commit()
 
-    # Access all attributes to load them into memory before expunge
     _ = (
         document.doc_id,
         document.filename,
@@ -346,7 +329,7 @@ def create_document(
         document.uploaded_at,
         document.indexed,
     )
-    db.expunge(document)  # Remove from session to avoid stale data issues
+    db.expunge(document)  
     return document
 
 
@@ -362,7 +345,6 @@ def update_document_indexed(db: Session, doc_id: str, indexed: bool):
         document.indexed = indexed
         db.commit()
 
-        # If all documents are indexed, update quiz status
         if indexed:
             quiz_docs = (
                 db.query(Document).filter(Document.quiz_id == document.quiz_id).all()
@@ -384,7 +366,6 @@ def delete_document(db: Session, doc_id: str) -> bool:
     return False
 
 
-# Activity Logging
 def log_activity(
     db: Session, user_id: str, action: str, details: Optional[Dict[str, Any]] = None
 ):
@@ -394,19 +375,16 @@ def log_activity(
         db.add(activity)
         db.commit()
     except Exception as e:
-        # Log error but don't break the flow
         import logging
 
         logging.error(f"Failed to log activity: {e}")
 
 
-# Statistics
 def get_system_stats(db: Session) -> Dict[str, Any]:
     """Get system usage statistics"""
     total_quizzes = db.query(func.count(Quiz.quiz_id)).scalar()
     total_documents = db.query(func.count(Document.doc_id)).scalar()
 
-    # Active users (activity in last 24h)
     cutoff = datetime.now() - timedelta(hours=24)
     active_users = (
         db.query(func.count(User.user_id)).filter(User.last_activity > cutoff).scalar()
@@ -433,7 +411,6 @@ def get_user_stats(db: Session, user_id: str) -> Dict[str, Any]:
         .scalar()
     )
 
-    # Count questions answered from user_answers in quizzes
     questions_answered = 0
     user_quizzes = db.query(Quiz).filter(Quiz.user_id == user_id).all()
 
