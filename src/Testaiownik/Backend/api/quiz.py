@@ -407,7 +407,6 @@ async def restart_quiz(
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
     try:
-
         restart_quiz_return_dict = quiz_service.restart_quiz(
             quiz_id=quiz_id, hard=hard, db=db
         )
@@ -451,7 +450,6 @@ async def get_quiz_progress(
         raise HTTPException(status_code=400, detail="Quiz has not started yet")
 
     try:
-
         result = quiz_service.get_quiz_progress(quiz)
         return result
 

@@ -19,7 +19,6 @@ def create_user(db: Session, user_id: str) -> User:
         if user in db:
             db.refresh(user)
         else:
-
             user = db.query(User).filter(User.user_id == user_id).first()
             if not user:
                 raise Exception(f"Failed to create user {user_id}")
@@ -277,7 +276,7 @@ def reset_quiz_execution(db: Session, quiz_id: str):
     return False
 
 
-def soft_reset_quiz_execution(db: Session, quiz_id: str):
+def soft_reset_quiz_execution(db: Session, quiz_id: str, questions_data: Dict = None):
     """Reset quiz progress but preserve questions and topics"""
     quiz = db.query(Quiz).filter(Quiz.quiz_id == quiz_id).first()
     if quiz:

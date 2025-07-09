@@ -16,7 +16,6 @@ def get_llm(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
 ):
-
     azure_endpoint = azure_endpoint or config.AZURE_ENDPOINT
     api_key = api_key or config.API_KEY
     deployment_name = (
@@ -51,7 +50,7 @@ def get_llm(
     logger.debug(f"LLM Deployment: {getattr(llm, 'deployment_name', 'Unknown')}")
     logger.debug(f"LLM API Version: {getattr(llm, 'openai_api_version', 'Unknown')}")
     logger.debug(f"Model Version: {getattr(llm, 'model_version', 'Unknown')}")
-    logger.debug(f"LLM Model: {getattr(llm, 'model_name','Unknown')}")
+    logger.debug(f"LLM Model: {getattr(llm, 'model_name', 'Unknown')}")
     logger.debug(f"LLM Temperature: {getattr(llm, 'temperature', 'Unknown')}")
     logger.debug(f"LLM Max Tokens: {getattr(llm, 'max_tokens', 'Unknown')}")
     logger.debug(

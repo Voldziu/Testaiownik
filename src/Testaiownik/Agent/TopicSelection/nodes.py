@@ -134,7 +134,7 @@ HistoryFields = namedtuple(
 def _prepare_history_fields(history: List[Dict]) -> HistoryFields:
     history_context = "CONVERSATION HISTORY:\n".join(
         [
-            f"Iteration {i+1}: Generated {len(h['suggested_topics'])} topics, User said: '{h['user_feedback']}'"
+            f"Iteration {i + 1}: Generated {len(h['suggested_topics'])} topics, User said: '{h['user_feedback']}'"
             for i, h in enumerate(history)
         ]
     )
@@ -388,7 +388,6 @@ def process_feedback(state: AgentState) -> AgentState:
             "next_node": "END",
         }
     elif feedback.action == "modify":
-
         new_desired_count = _calculate_new_topic_count(
             feedback=feedback,
             current_topics=suggested,

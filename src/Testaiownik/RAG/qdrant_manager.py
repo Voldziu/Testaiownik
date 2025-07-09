@@ -15,7 +15,6 @@ import time
 
 
 class QdrantManager:
-
     def __init__(
         self,
         url: str = os.getenv(
@@ -25,10 +24,8 @@ class QdrantManager:
         vector_size: int = 1536,
         timeout: int = 120,
     ):
-
         local = not os.getenv("QDRANT_URL")
         if local:
-
             self.client = QdrantClient(url=url, timeout=timeout)
         else:
             self.client = QdrantClient(
@@ -212,7 +209,7 @@ class QdrantManager:
                     logger.info(
                         f"Batch {batch_num} upserted in {upsert_time:.2f}s. "
                         f"Progress: {processed_chunks}/{total_chunks} chunks "
-                        f"({processed_chunks/total_chunks*100:.1f}%)"
+                        f"({processed_chunks / total_chunks * 100:.1f}%)"
                     )
                 except Exception as e:
                     logger.error(f"Error upserting batch {batch_num}: {e}")
@@ -244,7 +241,6 @@ class QdrantManager:
             raise ValueError("Limit must be positive")
 
         try:
-
             query_vector = self.embedding_model.embed_query(query)
 
             safe_query_vector = self.safe_to_list(query_vector)
