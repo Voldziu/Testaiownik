@@ -66,9 +66,9 @@ def delete_user(db: Session, user_id: str) -> bool:
 
 
 # Quiz Operations
-def create_quiz(db: Session, user_id: str) -> Quiz:
+def create_quiz(db: Session, user_id: str, name: str) -> Quiz:
     """Create new quiz"""
-    quiz_id = f"quiz_{uuid.uuid4()}"
+    quiz_id = f"{name}_{uuid.uuid4()}"
     quiz = Quiz(quiz_id=quiz_id, user_id=user_id)
     db.add(quiz)
     db.commit()

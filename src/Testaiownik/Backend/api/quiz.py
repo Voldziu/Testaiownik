@@ -41,12 +41,12 @@ document_service = DocumentService()
 
 
 @router.post("/create", response_model=QuizCreateResponse)
-async def create_quiz_endpoint(request: Request, db: Session = Depends(get_db)):
+async def create_quiz_endpoint(request: Request, name: str, db: Session = Depends(get_db)):
     """Creates a new quiz instance and returns unique quiz ID"""
     user_id = get_user_id(request)
 
     try:
-        quiz = create_quiz(db, user_id)
+        quiz = create_quiz(db, user_id, name)
 
         return QuizCreateResponse(
             quiz_id=quiz.quiz_id, created_at=quiz.created_at, status=quiz.status

@@ -27,11 +27,12 @@ class QuizAPIClient:
             raise APIError(response.status_code, response.text)
     
     # Quiz operations
-    def create_quiz(self) -> Dict[str, Any]:
+    def create_quiz(self, name) -> Dict[str, Any]:
         """Create a new quiz"""
         response = requests.post(
             f"{BASE_URL}/api/quiz/create",
-            headers=self.headers
+            headers=self.headers,
+            params={"name": name}
         )
         return self._handle_response(response)
     
