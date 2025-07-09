@@ -5,7 +5,6 @@ from typing import List, Dict, Any, Optional
 from config.settings import BASE_URL, get_api_headers, BASIC_TIMEOUT, SHORT_TIMEOUT
 
 
-
 class APIError(Exception):
     """Custom exception for API errors"""
 
@@ -34,13 +33,8 @@ class QuizAPIClient:
     def create_quiz(self, name) -> Dict[str, Any]:
         """Create a new quiz"""
 
-        response = requests.post(f"{BASE_URL}/api/quiz/create", headers=self.headers)
-
         response = requests.post(
-            f"{BASE_URL}/api/quiz/create",
-            headers=self.headers,
-            params={"name": name}
-
+            f"{BASE_URL}/api/quiz/create", headers=self.headers, params={"name": name}
         )
 
         return self._handle_response(response)
@@ -59,7 +53,6 @@ class QuizAPIClient:
     def index_documents(self, quiz_id: str) -> Dict[str, Any]:
         """Start document indexing"""
         response = requests.post(
-
             f"{BASE_URL}/api/documents/{quiz_id}/index",
             headers=self.headers,
             timeout=BASIC_TIMEOUT,
@@ -81,7 +74,6 @@ class QuizAPIClient:
             json={"desired_topic_count": topic_count},
             headers=self.headers,
             timeout=BASIC_TIMEOUT,
-
         )
         return self._handle_response(response)
 
@@ -126,7 +118,6 @@ class QuizAPIClient:
             json={"user_input": feedback},  # Sending feedback data
             headers=self.headers,
             timeout=BASIC_TIMEOUT,
-
         )
         return self._handle_response(response)
 
@@ -151,12 +142,10 @@ class QuizAPIClient:
             "difficulty": difficulty,
         }
         response = requests.post(
-
             f"{BASE_URL}/api/quiz/{quiz_id}/start",
             json=data,
             headers=self.headers,
             timeout=BASIC_TIMEOUT,
-
         )
         return self._handle_response(response)
 

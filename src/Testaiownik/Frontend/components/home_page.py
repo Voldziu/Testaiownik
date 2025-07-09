@@ -3,7 +3,7 @@
 import streamlit as st
 from datetime import datetime
 
-from components.quiz_manager import restart_quiz_with_message
+from components.quiz_manager import restart_quiz
 from utils.session_manager import (
     reset_quiz_session,
     set_files_uploaded,
@@ -69,17 +69,17 @@ def load_user_quizzes(limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
 
 def render_quiz_item(quiz: Dict[str, Any]):
     """Render individual quiz item"""
-    quiz_id = quiz.get('quiz_id')
-    created_at = quiz.get('created_at')
-    status = quiz.get('status')
-    document_count = quiz.get('document_count', 0)
-    topic_count = quiz.get('topic_count', 0)
-    
+    quiz_id = quiz.get("quiz_id")
+    created_at = quiz.get("created_at")
+    status = quiz.get("status")
+    document_count = quiz.get("document_count", 0)
+    topic_count = quiz.get("topic_count", 0)
+
     # Extract quiz name from quiz_id (format: {name}_{uuid})
     quiz_name = "Quiz"
-    if quiz_id and '_' in quiz_id:
-        quiz_name = quiz_id.split('_')[0]
-    
+    if quiz_id and "_" in quiz_id:
+        quiz_name = quiz_id.split("_")[0]
+
     # Format creation date
     created_date = "Nieznana data"
     if created_at:
@@ -105,9 +105,9 @@ def render_quiz_item(quiz: Dict[str, Any]):
         "quiz_completed": ("✅", "Ukończony"),
         "failed": ("❌", "Błąd"),
     }
-    
-    status_icon, status_text = status_map.get(status, ('❓', status))
-    
+
+    status_icon, status_text = status_map.get(status, ("❓", status))
+
     # Create expandable container for each quiz with quiz name
     with st.expander(f"{status_icon} {quiz_name} - {created_date}", expanded=False):
 
@@ -116,44 +116,67 @@ def render_quiz_item(quiz: Dict[str, Any]):
 
         with col1:
             st.write(f"**Status:** {status_text}")
-        
+
         with col2:
             st.write(f"**Tematy:** {topic_count}")
 
-        
         with col3:
             st.write(f"**Dokumenty:** {document_count}")
-        
 
-        quiz_started = status in ['quiz_active', 'quiz_completed']
-        
+        quiz_started = status in ["quiz_active", "quiz_completed"]
+
         # Główny przycisk akcji - teraz na całą szerokość
         # Determine button text and action based on status
-        if status == 'created':
-            if st.button("📄 Prześlij dokumenty", key=f"continue_{quiz_id}", use_container_width=True):
+        if status == "created":
+            if st.button(
+                "📄 Prześlij dokumenty",
+                key=f"continue_{quiz_id}",
+                use_container_width=True,
+            ):
                 continue_quiz(quiz_id, status)
-        elif status == 'documents_uploaded':
-            if st.button("📊 Indeksuj dokumenty", key=f"continue_{quiz_id}", use_container_width=True):
+        elif status == "documents_uploaded":
+            if st.button(
+                "📊 Indeksuj dokumenty",
+                key=f"continue_{quiz_id}",
+                use_container_width=True,
+            ):
                 continue_quiz(quiz_id, status)
-        elif status == 'documents_indexed':
-            if st.button("🔍 Konfiguruj tematy", key=f"continue_{quiz_id}", use_container_width=True):
+        elif status == "documents_indexed":
+            if st.button(
+                "🔍 Konfiguruj tematy",
+                key=f"continue_{quiz_id}",
+                use_container_width=True,
+            ):
                 continue_quiz(quiz_id, status)
-        elif status in ['topic_analysis', 'topic_feedback']:
-            if st.button("💬 Kontynuuj konfigurację", key=f"continue_{quiz_id}", use_container_width=True):
+        elif status in ["topic_analysis", "topic_feedback"]:
+            if st.button(
+                "💬 Kontynuuj konfigurację",
+                key=f"continue_{quiz_id}",
+                use_container_width=True,
+            ):
                 continue_quiz(quiz_id, status)
-        elif status == 'topic_ready':
-            if st.button("🎯 Konfiguruj pytania", key=f"continue_{quiz_id}", use_container_width=True):
+        elif status == "topic_ready":
+            if st.button(
+                "🎯 Konfiguruj pytania",
+                key=f"continue_{quiz_id}",
+                use_container_width=True,
+            ):
                 continue_quiz(quiz_id, status)
-        elif status == 'quiz_active':
-            if st.button("▶️ Kontynuuj quiz", key=f"continue_{quiz_id}", use_container_width=True):
+        elif status == "quiz_active":
+            if st.button(
+                "▶️ Kontynuuj quiz", key=f"continue_{quiz_id}", use_container_width=True
+            ):
                 continue_quiz(quiz_id, status)
-        elif status == 'quiz_completed':
-            if st.button("🔄 Powtórz quiz", key=f"retry_{quiz_id}", use_container_width=True):
+        elif status == "quiz_completed":
+            if st.button(
+                "🔄 Powtórz quiz", key=f"retry_{quiz_id}", use_container_width=True
+            ):
                 retry_quiz(quiz_id)
-        elif status == 'failed':
-            if st.button("🔧 Spróbuj ponownie", key=f"retry_{quiz_id}", use_container_width=True):
+        elif status == "failed":
+            if st.button(
+                "🔧 Spróbuj ponownie", key=f"retry_{quiz_id}", use_container_width=True
+            ):
                 retry_quiz(quiz_id)
-        
 
         # Przycisk statystyk w osobnym rzędzie - szerszy i tylko dla rozpoczętych quizów
         if quiz_started:
@@ -267,8 +290,8 @@ def retry_quiz(quiz_id: str):
         response = api_client.restart_quiz(quiz_id, hard=False)
 
         quiz_name = "Quiz"
-        if quiz_id and '_' in quiz_id:
-            quiz_name = quiz_id.split('_')[0]
+        if quiz_id and "_" in quiz_id:
+            quiz_name = quiz_id.split("_")[0]
         st.success(f"🔄 Restartujesz quiz {quiz_name}...")
 
         st.rerun()
@@ -284,11 +307,13 @@ def configure_quiz(quiz_id: str):
         st.session_state["quiz_id"] = quiz_id
 
         # Go to topic confirmation phase - FIXED to match session_manager.py and main.py
-        st.session_state["app_phase"] = "topic_management"  # Changed from "topic_confirmation"
-        
+        st.session_state["app_phase"] = (
+            "topic_management"  # Changed from "topic_confirmation"
+        )
+
         quiz_name = "Quiz"
-        if quiz_id and '_' in quiz_id:
-            quiz_name = quiz_id.split('_')[0]
+        if quiz_id and "_" in quiz_id:
+            quiz_name = quiz_id.split("_")[0]
 
         st.success(f"⚙️ Konfigurujesz quiz {quiz_name}...")
 
@@ -383,9 +408,7 @@ def show_quiz_stats_inline(quiz_id: str):
                     color = (
                         "#00b894"
                         if success_rate >= 70
-                        else "#fdcb6e"
-                        if success_rate >= 50
-                        else "#e17055"
+                        else "#fdcb6e" if success_rate >= 50 else "#e17055"
                     )
                     st.markdown(
                         f"""

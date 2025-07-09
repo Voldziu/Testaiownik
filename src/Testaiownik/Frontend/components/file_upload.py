@@ -47,8 +47,6 @@ def _render_upload_section():
         st.error("❌ Brak ID quizu. Wróć do tworzenia quizu.")
         return
 
-    st.info(f"Quiz ID: {quiz_id}")
-
     # File uploader
     uploaded_files = st.file_uploader(
         "Wybierz pliki do uploadu",
@@ -97,8 +95,6 @@ def _render_indexing_setup():
 
     quiz_id = get_quiz_id()
 
-
-   
     # Indexing explanation
     with st.expander("ℹ️ Co to jest indeksowanie?", expanded=False):
         st.markdown(
@@ -197,7 +193,6 @@ def _upload_files(quiz_id: str, files: List):
                 for file_info in result["uploaded_files"]:
                     st.write(f"- {file_info.get('filename', 'Nieznany plik')}")
 
-            time.sleep(1)
             st.rerun()
 
     except APIError as e:
@@ -226,12 +221,10 @@ def _start_indexing(quiz_id: str):
             result = api_client.index_documents(quiz_id)
 
             set_indexing_started(True)
-                        
-            if 'message' in result:
-                st.info(result['message'])
-            
 
-            time.sleep(1)
+            if "message" in result:
+                st.info(result["message"])
+
             st.rerun()
 
     except APIError as e:

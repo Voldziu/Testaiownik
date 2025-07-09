@@ -20,6 +20,7 @@ from config.settings import (
     ERROR_MAX_TOPICS,
 )
 
+
 # Weight mapping for user-friendly labels
 WEIGHT_OPTIONS = {"Niskie": 0.15, "Normalne": 0.30, "Wysokie": 0.50}
 
@@ -56,15 +57,15 @@ def get_max_topics_estimate(quiz_id: str, ratio: int = 10) -> int:
         if not api_client:
             st.error("❌ Brak połączenia z API")
             return ERROR_MAX_TOPICS
-        
+
         response = api_client.get_question_estimate(quiz_id, ratio)
-        
+
         if response and "estimated_max_questions" in response:
             return response["estimated_max_questions"]
         else:
             st.warning("⚠️ Nie udało się pobrać oszacowania liczby tematów")
             return ERROR_MAX_TOPICS
-            
+
     except Exception as e:
         st.warning(f"⚠️ Błąd podczas pobierania oszacowania liczby tematów: {e}")
         return ERROR_MAX_TOPICS
@@ -99,19 +100,19 @@ def _render_topic_generation_setup():
             st.session_state[cache_key] = max_topics
     else:
         max_topics = st.session_state[cache_key]
-    
+
     if max_topics:
-        st.info(f"📊 Oszacowana maksymalna liczba tematów na podstawie dokumentów: **{max_topics}**")
-  
+        st.info(
+            f"📊 Oszacowana maksymalna liczba tematów na podstawie dokumentów: **{max_topics}**"
+        )
 
     st.write("**Liczba tematów do wygenerowania:**")
     num_topics = st.slider(
         "Wybierz liczbę tematów",
         min_value=MIN_TOPIC_COUNT,
         max_value=max_topics,
-        value=max_topics//2,
-        help="Więcej tematów = bardziej szczegółowa analiza, ale dłuższy czas przetwarzania"
-
+        value=max_topics // 2,
+        help="Więcej tematów = bardziej szczegółowa analiza, ale dłuższy czas przetwarzania",
     )
 
     # Generation settings
@@ -194,7 +195,7 @@ def _confirm_topics(quiz_id: str):
                 st.session_state["app_phase"] = "question_generation"
                 # Move to the next stage (question generation)
                 st.info("Przechodzenie do formularza pytań...")
-                time.sleep(1)
+
                 st.rerun()
             else:
                 st.error("❌ Wystąpił problem podczas zatwierdzania tematów")
@@ -244,7 +245,7 @@ def _submit_topic_feedback(quiz_id: str, feedback: str):
                 st.success(
                     "✅ Feedback został przesłany! Tematy zostaną wygenerowane ponownie."
                 )
-                time.sleep(1)
+
                 return True  # Zwróć True jeśli się powiodło
             else:
                 st.error("❌ Wystąpił problem podczas wysyłania feedbacku")
@@ -366,9 +367,7 @@ def _render_topic_display_mode(
         weight_indicator = (
             "🔥"
             if weight_label == "Wysokie"
-            else "⭐"
-            if weight_label == "Normalne"
-            else "📝"
+            else "⭐" if weight_label == "Normalne" else "📝"
         )
 
         st.write(f"{weight_indicator} **{topic_name}**")
@@ -462,7 +461,7 @@ def _start_topic_generation(num_topics: int):
 
             if response:
                 set_topics_generated(True)
-                time.sleep(1)
+
                 st.rerun()
             else:
                 st.error("❌ Wystąpił problem podczas generowania tematów")
@@ -486,7 +485,7 @@ def _add_new_topic(quiz_id: str, topic_name: str, weight: float):
 
             if response:
                 st.success(f"✅ Temat '{topic_name}' został dodany!")
-                time.sleep(1)
+
                 return True  # Zwróć True jeśli się powiodło
             else:
                 st.error("❌ Wystąpił problem podczas dodawania tematu")
@@ -542,7 +541,7 @@ def _delete_topic(quiz_id: str, topic_name: str):
                     ]
 
                 st.success(f"✅ Temat '{topic_name}' został usunięty!")
-                time.sleep(1)
+
                 st.rerun()
             else:
                 st.error("❌ Wystąpił problem podczas usuwania tematu")
@@ -579,14 +578,14 @@ def render_navigation_buttons():
             # Reset topics generation state
             set_topics_generated(False)
             st.info("Powrót do indeksowania...")
-            time.sleep(1)
+
             st.rerun()
 
     with col3:
         if st.button("➡️ Dalej do pytań", type="primary", use_container_width=True):
             # Navigate to questions generation
             st.info("Przechodzenie do generowania pytań...")
-            time.sleep(1)
+
             # This would navigate to the next step
             # Implementation depends on your navigation system
 

@@ -1409,7 +1409,7 @@ class QuizService:
                 questions_per_topic=questions_data.get("questions_per_topic", {}),
                 all_generated_questions=all_questions.copy(),
                 active_question_pool=self.deduplicate_pool(
-                    questions_data.get("active_question_pool", [])
+                    questions_data.get("active_question_pool", []), quiz_id=quiz_id
                 ),
                 current_question_index=0,  # Reset to first question
                 user_answers=[],  # Empty after restart
@@ -1425,6 +1425,16 @@ class QuizService:
                 f"Created session with active pool: {quiz_session.active_question_pool}"
             )
             logger.debug(f"Session quiz_mode: {quiz_session.quiz_mode}")
+
+            # Sync database with graph state
+            update_quiz_progress(
+                db,
+                quiz_id,
+                current_question_index=quiz_session.current_question_index,
+            )
+            logger.info(
+                f"Synced database current_question_index to {quiz_session.current_question_index}"
+            )
 
             quiz_config = QuizConfiguration(
                 topics=topics,
@@ -1466,16 +1476,6 @@ class QuizService:
                     f"Graph not in expected interrupted state after restoration: {current_state.next}"
                 )
             quiz_session = current_state.values.get("quiz_session")
-            if quiz_session:
-                # Sync database with graph state
-                update_quiz_progress(
-                    db,
-                    quiz_id,
-                    current_question_index=quiz_session.current_question_index,
-                )
-                logger.info(
-                    f"Synced database current_question_index to {quiz_session.current_question_index}"
-                )
 
             # Store graph instance
             self.active_quiz_graphs[quiz_id] = {
@@ -1493,22 +1493,33 @@ class QuizService:
             logger.error(f"Failed to restore from questions data: {e}")
             return False
 
-    def deduplicate_pool(self, active_question_pool: List):
+    def deduplicate_pool(self, active_question_pool: List, quiz_id: str = None):
         import random
+        import hashlib
 
         logger.info(f"Original active question pool: {active_question_pool}")
 
         # Remove duplicates while preserving order (first occurrence wins)
         seen = set()
         deduplicated_pool = []
+
         for question_id in active_question_pool:
             if question_id not in seen:
-                deduplicated_pool.append(question_id)
                 seen.add(question_id)
+                deduplicated_pool.append(question_id)
 
         logger.info(f"Deduplicated active question pool: {deduplicated_pool}")
-        if deduplicated_pool:
+        if (
+            deduplicated_pool
+            and quiz_id
+            and len(deduplicated_pool) != len(active_question_pool)
+        ):
+            # Create deterministic seed from quiz_id
+            seed = int(hashlib.md5(quiz_id.encode()).hexdigest()[:8], 16)
+            random.seed(seed)
             random.shuffle(deduplicated_pool)
+            random.seed()  # Reset to random state
+            logger.info(f"Shuffled with seed {seed}: {deduplicated_pool}")
         return deduplicated_pool
 
     async def _update_quiz_from_session(
@@ -1918,7 +1929,7 @@ class QuizService:
             quiz = get_quiz(db, quiz_id)
             if quiz and quiz.questions_data:
                 deduplicated_active_question_pool = self.deduplicate_pool(
-                    quiz.questions_data["active_question_pool"]
+                    quiz.questions_data["active_question_pool"], quiz_id=quiz_id
                 )
                 updated_questions_data = quiz.questions_data.copy()
                 updated_questions_data["active_question_pool"] = (

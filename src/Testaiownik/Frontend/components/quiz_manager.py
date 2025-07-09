@@ -60,7 +60,7 @@ def render_quiz_questions():
 
             # FIXED: Automatically redirect to questions manager instead of just showing info
             st.session_state["app_phase"] = "questions_manager"
-            time.sleep(0.5)  # Small delay to show the message
+
             st.rerun()
 
         elif "no current question available" in error_msg:
@@ -68,7 +68,7 @@ def render_quiz_questions():
 
             # FIXED: Automatically redirect to questions manager
             st.session_state["app_phase"] = "questions_manager"
-            time.sleep(0.5)
+
             st.rerun()
 
         else:
@@ -233,80 +233,86 @@ def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
         try:
             api_client = get_api_client(get_user_id())
             progress_data = api_client.get_quiz_progress(quiz_id)
-            
-            if progress_data and 'progress' in progress_data:
-                progress = progress_data['progress']
-                
+
+            if progress_data and "progress" in progress_data:
+                progress = progress_data["progress"]
+
                 # FIXED: Use actual data from API (backend knows the true state)
-                total_attempts = progress.get('total_attemps', 0)  # All attempts
-                unique_answered = progress.get('unique_answered', 0)  # Unique answers
-                total_questions_in_pool = progress.get('total_questions_in_pool', 1)  # Current pool
-                total_unique_questions = progress.get('total_unique_questions', 1)  # Unique questions
-                correct_answers = progress.get('unique_correct', 0)
-                
+                total_attempts = progress.get("total_attemps", 0)  # All attempts
+                unique_answered = progress.get("unique_answered", 0)  # Unique answers
+                total_questions_in_pool = progress.get(
+                    "total_questions_in_pool", 1
+                )  # Current pool
+                total_unique_questions = progress.get(
+                    "total_unique_questions", 1
+                )  # Unique questions
+                correct_answers = progress.get("unique_correct", 0)
+
                 # FIXED: Current question number should be total_attempts + 1
                 # This ensures that after restart, we start from 1 again
                 current_question_num = total_attempts + 1
-                
+
                 # FIXED: Progress should be based on actual pool size from backend
                 if total_questions_in_pool > 0:
-                    progress_percentage = (total_attempts / total_questions_in_pool) * 100
+                    progress_percentage = (
+                        total_attempts / total_questions_in_pool
+                    ) * 100
                 else:
                     progress_percentage = 0
-                
+
                 # FIXED: Don't artificially limit current_question_num
                 # Let the backend determine the correct values
-                
+
                 # Cache the results
                 st.session_state[progress_cache_key] = {
-                    'current_question_num': current_question_num,
-                    'total_questions': total_questions_in_pool,  # Use actual pool size
-                    'total_unique_questions': total_unique_questions,
-                    'progress_percentage': progress_percentage,
-                    'unique_answered': unique_answered,
-                    'correct_answers': correct_answers,
-                    'total_attempts': total_attempts,
-                    'raw_progress': progress
-
+                    "current_question_num": current_question_num,
+                    "total_questions": total_questions_in_pool,  # Use actual pool size
+                    "total_unique_questions": total_unique_questions,
+                    "progress_percentage": progress_percentage,
+                    "unique_answered": unique_answered,
+                    "correct_answers": correct_answers,
+                    "total_attempts": total_attempts,
+                    "raw_progress": progress,
                 }
 
                 return st.session_state[progress_cache_key]
             else:
                 # Fallback values
                 fallback_data = {
-                    'current_question_num': 1,
-                    'total_questions': 5,  
-                    'total_unique_questions': 5,
-                    'progress_percentage': 0,
-                    'unique_answered': 0,
-                    'correct_answers': 0,
-                    'total_attempts': 0,
-                    'raw_progress': {}
-
+                    "current_question_num": 1,
+                    "total_questions": 5,
+                    "total_unique_questions": 5,
+                    "progress_percentage": 0,
+                    "unique_answered": 0,
+                    "correct_answers": 0,
+                    "total_attempts": 0,
+                    "raw_progress": {},
                 }
                 st.session_state[progress_cache_key] = fallback_data
                 return fallback_data
 
         except Exception as e:
             error_msg = str(e).lower()
-            
-            if any(phrase in error_msg for phrase in [
-                "quiz has not started yet", 
-                "not started", 
-                "quiz not found",
-                "quiz does not exist"
-            ]):
+
+            if any(
+                phrase in error_msg
+                for phrase in [
+                    "quiz has not started yet",
+                    "not started",
+                    "quiz not found",
+                    "quiz does not exist",
+                ]
+            ):
                 # Quiz hasn't started yet - return fresh state
                 fallback_data = {
-                    'current_question_num': 1,
-                    'total_questions': 5,  # Default to 5 for new quiz
-                    'total_unique_questions': 5,
-                    'progress_percentage': 0,
-                    'unique_answered': 0,
-                    'correct_answers': 0,
-                    'total_attempts': 0,
-                    'raw_progress': {}
-
+                    "current_question_num": 1,
+                    "total_questions": 5,  # Default to 5 for new quiz
+                    "total_unique_questions": 5,
+                    "progress_percentage": 0,
+                    "unique_answered": 0,
+                    "correct_answers": 0,
+                    "total_attempts": 0,
+                    "raw_progress": {},
                 }
                 return fallback_data
             else:
@@ -316,15 +322,14 @@ def get_quiz_progress(quiz_id: str, force_refresh: bool = False):
                 return st.session_state[progress_cache_key]
             else:
                 fallback_data = {
-                    'current_question_num': 1,
-                    'total_questions': 5,
-                    'total_unique_questions': 5,
-                    'progress_percentage': 0,
-                    'unique_answered': 0,
-                    'correct_answers': 0,
-                    'total_attempts': 0,
-                    'raw_progress': {}
-
+                    "current_question_num": 1,
+                    "total_questions": 5,
+                    "total_unique_questions": 5,
+                    "progress_percentage": 0,
+                    "unique_answered": 0,
+                    "correct_answers": 0,
+                    "total_attempts": 0,
+                    "raw_progress": {},
                 }
                 return fallback_data
     else:
@@ -340,10 +345,10 @@ def render_question():
         return
 
     quiz_id = get_quiz_id()
-    
+
     # FIXED: Always force refresh progress after restart to get actual backend state
     answered = st.session_state["quiz_state"]["answered"]
-    
+
     # FIXED: Check if we just restarted by looking at start_time
     start_time_str = st.session_state.get("quiz_state", {}).get("start_time")
     just_restarted = False
@@ -351,32 +356,34 @@ def render_question():
         try:
             start_time = datetime.fromisoformat(start_time_str)
             time_since_start = datetime.now() - start_time
-            just_restarted = time_since_start.total_seconds() < 10  # Within 10 seconds of restart
+            just_restarted = (
+                time_since_start.total_seconds() < 10
+            )  # Within 10 seconds of restart
         except:
             just_restarted = False
-    
+
     # Force refresh if just restarted
     force_refresh = just_restarted
-    
+
     progress_data = get_quiz_progress(quiz_id, force_refresh=force_refresh)
-    
-    current_question_num = progress_data['current_question_num']
-    total_questions = progress_data['total_questions']
-    progress_percentage = progress_data['progress_percentage']
-    print(progress_data)
-    
+
+    current_question_num = progress_data["current_question_num"]
+    total_questions = progress_data["total_questions"]
+    progress_percentage = progress_data["progress_percentage"]
+
     col1, col3, col2 = st.columns([3, 2, 3])
 
-
     with col1:
-        if st.button("🔄 Sprawdź się ponownie", use_container_width=True, key="retry_quiz"):
+        if st.button("🔄 Zrestartuj quiz", use_container_width=True, key="retry_quiz"):
             restart_quiz()
     with col2:
-        st.button("🏠 Powrót do strony głównej", 
-              key="return_to_main_menu", 
-              help="Wróć do głównej strony", 
-              on_click=return_to_main_menu)
-            
+        st.button(
+            "🏠 Powrót do strony głównej",
+            key="return_to_main_menu",
+            help="Wróć do głównej strony",
+            on_click=return_to_main_menu,
+        )
+
     # Quiz header with progress
 
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -388,7 +395,9 @@ def render_question():
         st.metric("Postęp", f"{progress_percentage:.0f}%")
 
     # Progress bar - FIXED: Ensure proper percentage
-    progress_value = min(progress_percentage / 100, 1.0) if progress_percentage > 0 else 0.0
+    progress_value = (
+        min(progress_percentage / 100, 1.0) if progress_percentage > 0 else 0.0
+    )
 
     st.progress(progress_value)
 
@@ -420,7 +429,7 @@ def render_mastery_summary():
         st.session_state["balloons_shown"] = True
 
     quiz_id = get_quiz_id()
-    progress_data = get_quiz_progress(quiz_id, force_refresh=True)
+    progress_data = get_quiz_progress(quiz_id)
 
     # Header - focus on mastery
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -578,9 +587,10 @@ def render_mastery_summary():
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("🔄 Sprawdź się ponownie", use_container_width=True, key="retry_quiz"):
+        if st.button(
+            "🔄 Sprawdź się ponownie", use_container_width=True, key="retry_quiz"
+        ):
             restart_quiz()
-
 
     with col2:
         st.button(
@@ -605,36 +615,30 @@ def restart_quiz():
         # Pokazuj spinner podczas restartowania
         with st.spinner("Restartowanie quizu..."):
             api_client = get_api_client(get_user_id())
-            
+
             # FIXED: Clear ALL cache BEFORE making API call
             clear_quiz_cache()
-            
+
             # Clear specific progress cache BEFORE API call
             progress_cache_key = f"quiz_progress_{quiz_id}"
             if progress_cache_key in st.session_state:
                 del st.session_state[progress_cache_key]
-            
 
             # Try soft reset first (preserves questions)
             try:
                 response = api_client.restart_quiz(quiz_id, hard=False)  # Soft reset
 
-                # Wait for the backend to reset
-                import time
-                time.sleep(1.5)  # Increased delay to ensure backend is ready
-                
                 # FIXED: Clear cache AGAIN after API call to ensure fresh data
                 clear_quiz_cache()
                 progress_cache_key = f"quiz_progress_{quiz_id}"
                 if progress_cache_key in st.session_state:
                     del st.session_state[progress_cache_key]
-                
 
                 # Verify the reset worked by checking quiz status
                 try:
                     # FIXED: Force refresh progress data to get actual state
                     fresh_progress = get_quiz_progress(quiz_id, force_refresh=True)
-                    
+
                     # Try to get the first question to verify the reset worked
                     test_question = api_client.get_current_question(quiz_id)
                     if not test_question:
@@ -647,27 +651,25 @@ def restart_quiz():
             except Exception as soft_reset_error:
                 st.warning(f"Soft reset nie powiódł się: {str(soft_reset_error)}")
                 st.info("🔄 Próbuję hard reset...")
-                
+
                 # FIXED: Clear cache before hard reset too
                 clear_quiz_cache()
                 progress_cache_key = f"quiz_progress_{quiz_id}"
                 if progress_cache_key in st.session_state:
                     del st.session_state[progress_cache_key]
-                
+
                 # Fallback to hard reset if soft reset fails
                 try:
                     response = api_client.restart_quiz(quiz_id, hard=True)
-                    time.sleep(1.5)  # Increased delay
-                    
+
                     # FIXED: Clear cache after hard reset
                     clear_quiz_cache()
                     progress_cache_key = f"quiz_progress_{quiz_id}"
                     if progress_cache_key in st.session_state:
                         del st.session_state[progress_cache_key]
-                    
+
                     # Force refresh progress data
                     fresh_progress = get_quiz_progress(quiz_id, force_refresh=True)
-                    
 
                     # Verify hard reset worked
                     test_question = api_client.get_current_question(quiz_id)
@@ -702,20 +704,15 @@ def restart_quiz():
                 "completed": False,
                 "start_time": datetime.now().isoformat(),
             }
-            
+
             # FIXED: Final cache clear to ensure absolutely fresh data
             clear_quiz_cache()
-            
+
             # FIXED: Clear progress cache one more time
             progress_cache_key = f"quiz_progress_{quiz_id}"
             if progress_cache_key in st.session_state:
                 del st.session_state[progress_cache_key]
-        
 
-        # Additional delay before rerun to ensure backend is ready
-        import time
-
-        time.sleep(0.5)
         st.rerun()
 
     except Exception as e:
@@ -807,6 +804,7 @@ def clear_quiz_cache():
     for key in keys_to_remove:
         if key in st.session_state:
             del st.session_state[key]
+
 
 def render_disabled_answers(question_data: Dict[str, Any]):
     """Render disabled answer options after submission"""
@@ -935,11 +933,6 @@ def submit_answer(question_id: str, selected_choices: List[int]):
                     "%Y-%m-%d %H:%M:%S"
                 )
 
-            # POPRAWIONE: Dodaj krótkie opóźnienie żeby API zdążył zaktualizować dane
-            import time
-
-            time.sleep(0.1)
-
             # Force rerun to show the disabled answers and feedback
             st.rerun()
 
@@ -1051,35 +1044,6 @@ def render_answer_feedback(question_data: Dict[str, Any]):
                                 unsafe_allow_html=True,
                             )
 
-            # Wyświetlanie źródeł
-            if source_chunks:
-                st.markdown("<h4 style='color: #FF6F61;'>📄 Źródło:</h4>", unsafe_allow_html=True)
-                for source_chunk in source_chunks:
-                    source = source_chunk.get('source', 'Brak źródła')
-                    page = source_chunk.get('page', None)
-                    slide = source_chunk.get('slide', None)
-                    
-                    if source:
-                        filename = os.path.basename(source)
-                        
-                        if '_' in filename:
-                            parts = filename.split('_', 1)
-                            if len(parts) > 1:
-                                filename = parts[1]
-                        
-                        st.markdown(f"**📄 Plik:** {filename}", unsafe_allow_html=True)
-
-                    if page is not None:
-                        st.markdown(f"**📄 Strona:** {page}", unsafe_allow_html=True)
-
-                    if slide is not None:
-                        st.markdown(f"**📄 Slajd:** {slide}", unsafe_allow_html=True)
-                    
-                    # Display chunk text (relevant text extracted)
-                    chunk_text = source_chunk.get('text', 'Brak wyciągu')
-                    if chunk_text:
-                        st.markdown(f"**📖 Fragment tekstu:** {chunk_text}", unsafe_allow_html=True)
-      
     except Exception as e:
         st.warning(f"Nie udało się pobrać wyjaśnienia: {str(e)}")
 
@@ -1098,12 +1062,8 @@ def render_answer_feedback(question_data: Dict[str, Any]):
         refresh_quiz_progress_cache(quiz_id)
         clear_quiz_cache()
 
-        # POPRAWIONE: Krótkie opóźnienie dla stabilności
-        import time
-
-        time.sleep(0.1)
-
         st.rerun()
+
 
 # Utility function to check if quiz is completed
 def is_quiz_completed(question_data: Dict[str, Any]) -> bool:

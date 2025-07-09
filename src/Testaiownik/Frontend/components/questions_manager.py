@@ -53,7 +53,7 @@ def render_questions_manager():
 
     # question config section
     st.subheader("⚙️ Ustawienia testu")
-    
+
     ratio = DEFAULT_QUESTION_RATIO
 
     cache_key = f"max_questions_{quiz_id}_{ratio}"
@@ -178,8 +178,8 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
             if response:
 
                 quiz_name = "Quiz"
-                if quiz_id and '_' in quiz_id:
-                    quiz_name = quiz_id.split('_')[0]
+                if quiz_id and "_" in quiz_id:
+                    quiz_name = quiz_id.split("_")[0]
 
                 # Display test information
                 with st.expander("📊 Szczegóły testu", expanded=True):
@@ -204,8 +204,6 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
 
                 st.info("🔄 Test jest generowany. Poczekaj chwilę...")
 
-                # Wait a bit longer to ensure backend is ready
-                time.sleep(2)
                 st.rerun()
 
             else:
