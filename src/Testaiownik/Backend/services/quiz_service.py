@@ -648,7 +648,6 @@ class QuizService:
             # logger.debug(f"hasattr DICT data: {data}")
             return data
         else:
-
             # logger.debug("Manual serialization of the question..")
             # Manual serialization if needed
             generated_at = getattr(question, "generated_at", datetime.now())
@@ -700,7 +699,6 @@ class QuizService:
             }
 
     def get_quiz_progress(self, quiz) -> Dict:
-
         questions_data = quiz.questions_data or {}
         all_questions = questions_data.get("all_generated_questions", [])
         user_answers = quiz.user_answers or []
@@ -1281,7 +1279,6 @@ class QuizService:
                     and quiz_session.get_current_question()
                     and not quiz_session.is_completed()
                 ):
-
                     # Invoke graph to get to interrupted state at process_answer
                     try:
                         quiz_graph.invoke(None, config)
@@ -1917,7 +1914,23 @@ class QuizService:
             message = "Quiz reset successfully. Start again to generate new questions."
             regenerated_questions = False  # Will regenerate when started
         else:
-            success = soft_reset_quiz_execution(db, quiz_id)
+
+            quiz = get_quiz(db, quiz_id)
+            if quiz and quiz.questions_data:
+                deduplicated_active_question_pool = self.deduplicate_pool(
+                    quiz.questions_data["active_question_pool"]
+                )
+                updated_questions_data = quiz.questions_data.copy()
+                updated_questions_data["active_question_pool"] = (
+                    deduplicated_active_question_pool
+                )
+                quiz.questions_data = updated_questions_data
+                logger.debug(f"Question data in restart quiz: {quiz.questions_data}")
+                db.commit()
+                db.refresh(quiz)
+
+            success = soft_reset_quiz_execution(db, quiz_id, updated_questions_data)
+
             # Soft reset: Keep questions, reset only user progress/flow
             reset_type = "soft"
             message = "Quiz progress reset. Questions preserved."

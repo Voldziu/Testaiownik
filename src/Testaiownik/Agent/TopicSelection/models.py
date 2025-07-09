@@ -31,8 +31,6 @@ class BatchAnalysis(BaseModel):
     batch_summary: str = Field(description="Summary of current batch only")
 
 
-
-
 class TopicConsolidation(BaseModel):
     consolidated_topics: List[WeightedTopic] = Field(
         description="Final consolidated topic list with weights"
