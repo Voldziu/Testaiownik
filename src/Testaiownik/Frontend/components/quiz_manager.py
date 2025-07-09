@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 import time
 import streamlit as st
 from utils.session_manager import get_quiz_id, get_user_id
@@ -1029,6 +1030,35 @@ def render_answer_feedback(question_data: Dict[str, Any]):
                                 unsafe_allow_html=True,
                             )
 
+            # Wyświetlanie źródeł
+            if source_chunks:
+                st.markdown("<h4 style='color: #FF6F61;'>📄 Źródło:</h4>", unsafe_allow_html=True)
+                for source_chunk in source_chunks:
+                    source = source_chunk.get('source', 'Brak źródła')
+                    page = source_chunk.get('page', None)
+                    slide = source_chunk.get('slide', None)
+                    
+                    if source:
+                        filename = os.path.basename(source)
+                        
+                        if '_' in filename:
+                            parts = filename.split('_', 1)
+                            if len(parts) > 1:
+                                filename = parts[1]
+                        
+                        st.markdown(f"**📄 Plik:** {filename}", unsafe_allow_html=True)
+
+                    if page is not None:
+                        st.markdown(f"**📄 Strona:** {page}", unsafe_allow_html=True)
+
+                    if slide is not None:
+                        st.markdown(f"**📄 Slajd:** {slide}", unsafe_allow_html=True)
+                    
+                    # Display chunk text (relevant text extracted)
+                    chunk_text = source_chunk.get('text', 'Brak wyciągu')
+                    if chunk_text:
+                        st.markdown(f"**📖 Fragment tekstu:** {chunk_text}", unsafe_allow_html=True)
+      
     except Exception as e:
         st.warning(f"Nie udało się pobrać wyjaśnienia: {str(e)}")
 
@@ -1053,7 +1083,6 @@ def render_answer_feedback(question_data: Dict[str, Any]):
         time.sleep(0.1)
 
         st.rerun()
-
 
 # Utility function to check if quiz is completed
 def is_quiz_completed(question_data: Dict[str, Any]) -> bool:

@@ -22,7 +22,7 @@ class QdrantManager:
             "localhost:6333",
         ),  # From dockercompose
         vector_size: int = 1536,
-        timeout: int = 120,
+        timeout: int = 300,
     ):
         local = not os.getenv("QDRANT_URL")
         if local:

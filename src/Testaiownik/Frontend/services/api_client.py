@@ -2,7 +2,8 @@
 
 import requests
 from typing import List, Dict, Any, Optional
-from config.settings import BASE_URL, get_api_headers
+from config.settings import BASE_URL, get_api_headers, BASIC_TIMEOUT, SHORT_TIMEOUT
+
 
 
 class APIError(Exception):
@@ -32,7 +33,13 @@ class QuizAPIClient:
     # Quiz operations
     def create_quiz(self) -> Dict[str, Any]:
         """Create a new quiz"""
+
         response = requests.post(f"{BASE_URL}/api/quiz/create", headers=self.headers)
+
+        response = requests.post(
+            f"{BASE_URL}/api/quiz/create", headers=self.headers, timeout=SHORT_TIMEOUT
+        )
+
         return self._handle_response(response)
 
     # Document operations
@@ -42,13 +49,17 @@ class QuizAPIClient:
             f"{BASE_URL}/api/documents/{quiz_id}/upload",
             files=files,
             headers=self.headers,
+            timeout=SHORT_TIMEOUT,
         )
         return self._handle_response(response)
 
     def index_documents(self, quiz_id: str) -> Dict[str, Any]:
         """Start document indexing"""
         response = requests.post(
-            f"{BASE_URL}/api/documents/{quiz_id}/index", headers=self.headers
+
+            f"{BASE_URL}/api/documents/{quiz_id}/index",
+            headers=self.headers,
+            timeout=BASIC_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -66,6 +77,8 @@ class QuizAPIClient:
             f"{BASE_URL}/api/topics/{quiz_id}/start",
             json={"desired_topic_count": topic_count},
             headers=self.headers,
+            timeout=BASIC_TIMEOUT,
+
         )
         return self._handle_response(response)
 
@@ -109,6 +122,8 @@ class QuizAPIClient:
             f"{BASE_URL}/api/topics/{quiz_id}/feedback",  # Endpoint to send feedback
             json={"user_input": feedback},  # Sending feedback data
             headers=self.headers,
+            timeout=BASIC_TIMEOUT,
+
         )
         return self._handle_response(response)
 
@@ -133,7 +148,12 @@ class QuizAPIClient:
             "difficulty": difficulty,
         }
         response = requests.post(
-            f"{BASE_URL}/api/quiz/{quiz_id}/start", json=data, headers=self.headers
+
+            f"{BASE_URL}/api/quiz/{quiz_id}/start",
+            json=data,
+            headers=self.headers,
+            timeout=BASIC_TIMEOUT,
+
         )
         return self._handle_response(response)
 
