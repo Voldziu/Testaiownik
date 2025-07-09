@@ -17,7 +17,6 @@ from utils import logger
 
 
 def prepare_test_retriever() -> RAGRetriever:
-
     docx_path = r"test_files/testdocx.docx"
     pdf_path = r"test_files/testpdf.pdf"
     txt_path = r"test_files/testtxt.txt"

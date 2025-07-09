@@ -19,18 +19,19 @@ def get_max_questions_estimate(quiz_id: str, ratio: int = 2) -> int:
         if not api_client:
             st.error("❌ Brak połączenia z API")
             return ERROR_MAX_QUESTION
-        
+
         response = api_client.get_question_estimate(quiz_id, ratio)
-        
+
         if response and "estimated_max_questions" in response:
             return response["estimated_max_questions"]
         else:
             st.warning("⚠️ Nie udało się pobrać oszacowania pytań")
             return ERROR_MAX_QUESTION
-            
+
     except Exception as e:
         st.warning(f"⚠️ Błąd podczas pobierania oszacowania pytań: {e}")
         return ERROR_MAX_QUESTION
+
 
 def render_questions_manager():
     """Render quiz questions configuration"""
@@ -43,15 +44,18 @@ def render_questions_manager():
     col1, col2 = st.columns([5, 3])
 
     with col2:
-        st.button("🏠 Powrót do strony głównej", 
-              key="return_to_main_menu", 
-              help="Wróć do głównej strony", 
-              on_click=return_to_main_menu)
-            
+        st.button(
+            "🏠 Powrót do strony głównej",
+            key="return_to_main_menu",
+            help="Wróć do głównej strony",
+            on_click=return_to_main_menu,
+        )
+
     # question config section
     st.subheader("⚙️ Ustawienia testu")
     
     ratio = DEFAULT_QUESTION_RATIO
+
     cache_key = f"max_questions_{quiz_id}_{ratio}"
     if cache_key not in st.session_state:
         with st.spinner("Sprawdzanie maksymalnej liczby pytań..."):
@@ -59,18 +63,19 @@ def render_questions_manager():
             st.session_state[cache_key] = max_questions
     else:
         max_questions = st.session_state[cache_key]
-    
+
     if max_questions:
-        st.info(f"📊 Oszacowana maksymalna liczba pytań na podstawie dokumentów: **{max_questions}**")
-    
+        st.info(
+            f"📊 Oszacowana maksymalna liczba pytań na podstawie dokumentów: **{max_questions}**"
+        )
+
     num_questions = st.slider(
         "Wybierz liczbę pytań",
         min_value=MIN_QUESTIONS,
         max_value=max_questions,
-        value=max_questions//2,  
+        value=max_questions // 2,
         help=f"Ustaw całkowitą liczbę pytań w teście (max: {max_questions})",
     )
-
 
     st.divider()
 
@@ -96,7 +101,7 @@ def render_questions_manager():
                 height=100,
                 placeholder="Wpisz tutaj treść pytania...",
                 help="Wprowadź pytanie, które chcesz dodać do testu",
-                key=f"question_input_{st.session_state['question_input_key']}"
+                key=f"question_input_{st.session_state['question_input_key']}",
             )
 
         with col2:
@@ -184,21 +189,21 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
                     st.write(f"🎯 **Status:** Generowanie pytań...")
 
                 set_questions_generated()
-                
+
                 # ENHANCED: Clear any existing quiz state before starting
                 if "quiz_state" in st.session_state:
                     del st.session_state["quiz_state"]
-                
+
                 # Clear progress cache for this quiz
                 progress_cache_key = f"quiz_progress_{quiz_id}"
                 if progress_cache_key in st.session_state:
                     del st.session_state[progress_cache_key]
-                
+
                 # Set the app phase to test
                 st.session_state["app_phase"] = "test"
-                
+
                 st.info("🔄 Test jest generowany. Poczekaj chwilę...")
-                
+
                 # Wait a bit longer to ensure backend is ready
                 time.sleep(2)
                 st.rerun()

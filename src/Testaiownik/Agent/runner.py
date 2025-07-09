@@ -183,17 +183,17 @@ class TestaiownikRunner:
         # Header with progress
         if question_number and total_questions:
             progress = f"Question {question_number}/{total_questions}"
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(
                 f"📝 {progress} | Topic: {question.topic} | Difficulty: {question.difficulty.upper()}"
             )
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
         else:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(
                 f"📝 Topic: {question.topic} | Difficulty: {question.difficulty.upper()}"
             )
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
         # Question text
         print(f"\n❓ {question.question_text}")
@@ -214,7 +214,7 @@ class TestaiownikRunner:
         else:
             print("💡 Select one answer - enter the number")
 
-        print(f"{'─'*60}")
+        print(f"{'─' * 60}")
 
     def _get_quiz_answer_input(self) -> Optional[List[int]]:
         """Get user's answer input for quiz questions"""

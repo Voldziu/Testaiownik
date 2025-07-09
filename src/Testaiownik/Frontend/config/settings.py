@@ -23,6 +23,11 @@ MIN_QUESTIONS = 1
 DEFAULT_QUESTION_RATIO = 2
 ERROR_MAX_QUESTION = 50
 
+# timeouts
+
+BASIC_TIMEOUT = 1200
+SHORT_TIMEOUT = 30
+
 
 # API Headers template
 def get_api_headers(user_id: str) -> dict:

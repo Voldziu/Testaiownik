@@ -227,7 +227,6 @@ async def update_topic(
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
     try:
-
         topic_update_response = topic_service.update_topic(
             quiz_id=quiz_id,
             current_topic_name=topic_name,
@@ -319,7 +318,7 @@ async def validate_topics_endpoint(
 
         for i, topic in enumerate(topics):
             if not topic.get("topic", "").strip():
-                issues.append(f"Topic {i+1} has empty name")
+                issues.append(f"Topic {i + 1} has empty name")
             if topic.get("weight", 0) <= 0:
                 issues.append(f"Topic '{topic.get('topic', '')}' has invalid weight")
 

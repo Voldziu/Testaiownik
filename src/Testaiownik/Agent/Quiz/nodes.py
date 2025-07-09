@@ -87,7 +87,6 @@ def load_or_generate_questions(state: QuizState) -> QuizState:
             and session.active_question_pool
             and len(session.active_question_pool) > 0
         ):
-
             logger.info(
                 f"Quiz mode {session.quiz_mode} - questions already exist, skipping generation. "
                 f"Found {len(session.all_generated_questions)} questions, "
@@ -477,7 +476,7 @@ Provide structured response."""
             )
 
             processed_questions.append(question)
-            logger.info(f"Processed user question {i+1}: {question_text[:50]}...")
+            logger.info(f"Processed user question {i + 1}: {question_text[:50]}...")
 
         except Exception as e:
             logger.error(f"Failed to process user question '{question_text}': {e}")
@@ -724,7 +723,7 @@ def _create_fallback_questions(
 def _format_question_for_user(question: Question) -> str:
     """Format question for user presentation"""
     choices_text = "\n".join(
-        [f"{i+1}. {choice.text}" for i, choice in enumerate(question.choices)]
+        [f"{i + 1}. {choice.text}" for i, choice in enumerate(question.choices)]
     )
 
     instruction = ""
