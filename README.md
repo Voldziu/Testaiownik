@@ -8,9 +8,9 @@ AI-powered learning assistant that automatically generates test questions from e
 
 **Solution:** An intelligent system that processes educational documents (PDF/PPTX/TXT) and generates customized test questions with user feedback loops for continuous improvement.
 
-## 🚧 Current Status
+## 🚧 Progress overview
 
-**Sprint 1/4 - Infrastructure & Basic Agent** ✅ In Progress
+**Sprint 1/4 - Infrastructure & Basic Agent** ✅ Completed
 
 - ✅ Azure infrastructure setup with Bicep templates
 - ✅ Basic LangGraph agent with document analysis workflow
@@ -31,8 +31,7 @@ AI-powered learning assistant that automatically generates test questions from e
 
 **Sprint 3**: FastAPI backend + Streamlit frontend ✅ Completed
 
-*Current Sprint:*
-**Sprint 4**: Testing & production polish
+**Sprint 4**: Testing & production polish & Publishing on Azure ✅ Completed
 
 ## 🚀 Quick Start
 
@@ -60,16 +59,17 @@ AI-powered learning assistant that automatically generates test questions from e
    # Edit .env with your Azure credentials:
    # AZURE_OPENAI_ENDPOINT=your-endpoint
    # AZURE_OPENAI_API_KEY=your-api-key
-   # CHAT_MODEL_NAME_DEV=your-deployment-name
-   # CHAT_MODEL_VERSION_DEV=your-api-version
+   # CHAT_MODEL_NAME=your-deployment-name
+   # CHAT_MODEL_VERSION=your-api-version
    ```
 
 
 
-3. **Run locally-  docker**
+3. **Run locally-  docker (recommended)**
    Be in root directory
 
    ```bash
+   docker compose build
    docker compose up -d
    ```
 
@@ -143,91 +143,6 @@ cd IaaC
 - Application Insights
 - Container App Environment
 
-## 📁 Project Structure ( In active development)
-
-```
-testaiownik/
-├── src/Testaiownik/
-│   ├── Agent/                      # LangGraph agent implementation
-│   │   ├── TopicSelection/         # Topic selection subgraph
-│   │   │   ├── graph.py           # Topic selection workflow
-│   │   │   ├── nodes.py           # Topic selection nodes
-│   │   │   ├── models.py          # Topic selection models
-│   │   │   └── state.py           # Topic selection state
-│   │   ├── Quiz/                   # Quiz generation & execution subgraph
-│   │   │   ├── graph.py           # Quiz workflow
-│   │   │   ├── nodes.py           # Quiz nodes
-│   │   │   ├── models.py          # Quiz models
-│   │   │   └── state.py           # Quiz state
-│   │   ├── Shared/                 # Shared models between subgraphs
-│   │   │   └── models.py          # WeightedTopic model
-│   │   ├── main_graph.py          # Main orchestrating graph
-│   │   └── runner.py              # CLI runner for complete workflow
-│   ├── RAG/                        # Document retrieval system
-│   │   ├── Retrieval/             # Retriever implementations
-│   │   │   └── Retriever.py       # DocumentRetriever, MockRetriever, RAGRetriever
-│   │   ├── file_processor.py      # PDF/DOCX/PPTX/TXT extraction
-│   │   └── qdrant_manager.py      # Vector store management
-│   ├── AzureModels/               # Azure OpenAI integration
-│   │   └── models.py              # LLM and embedding model setup
-│   ├── config/                    # Configuration management
-│   │   └── config.py              # Environment variables & settings
-│   ├── utils/                     # Shared utilities
-│   │   └── logger.py              # Logging with Azure App Insights
-│   └── main.py                    # Main entry point with CLI args
-├── tests/                         # Test files
-│   ├── Agent/
-│   │   ├── Quiz/                  # Quiz component tests
-│   │   │   ├── test_models.py
-│   │   │   ├── test_nodes.py
-│   │   │   └── test_state.py
-│   │   └── TopicSelection/        # Topic selection tests
-│   │       ├── test_analyze_documents.py
-│   │       ├── test_data_processing.py
-│   │       ├── test_process_feedback.py
-│   │       ├── test_request_feedback.py
-│   │       └── test_route_next.py
-│   ├── RAG/                       # RAG component tests
-│   │   ├── test_file_processor.py
-│   │   ├── test_qdrant_manager.py
-│   │   └── test_RAGretriever.py
-│   └── conftest.py                # Pytest configuration & fixtures
-├── IaaC/                          # Infrastructure as Code (Azure)
-│   ├── main.bicep                 # Main Bicep template
-│   ├── modules/                   # Bicep modules
-│   ├── parameters/                # Environment parameters
-│   └── deploy.ps1                 # Deployment script
-├── pyproject.toml                 # UV project configuration
-├── README.md                      # Project documentation
-└── .env                          # Environment variables
-```
-
-## 🛠️ Development Workflow
-
-### Using UV (Recommended)
-
-```bash
-# Install dependencies
-uv sync
-
-# Install dev dependencies
-uv sync --group dev
-
-# Add new dependency
-uv add package-name
-
-# Add dev dependency
-uv add --group dev package-name
-
-# Run Python scripts
-uv run python src/Testaiownik/main.py
-
-# Create virtual environment
-uv venv
-source .venv/bin/activate  # Linux/Mac
-# or
-.venv\Scripts\activate     # Windows
-```
 
 ### Code Quality
 
@@ -238,58 +153,51 @@ uv run black src/
 # Lint code
 uv run ruff check src/
 
-# Type checking (if added)
+# Type checking
 uv run mypy src/
 ```
 
 ### Testing
 
 ```bash
-# Run tests (when implemented)
+# Run tests 
 uv run pytest tests/
 
 ```
 
-## 🔄 Current Agent Workflow
-
-The LangGraph agent currently implements this workflow:
-
-1. **Document Analysis** - Process chunks of educational material
-2. **Topic Extraction** - Extract relevant topics using GPT-4
-3. **User Feedback** - Present topics to user for approval/modification
-4. **Topic Refinement** - Adjust topics based on user input
-5. **Confirmation** - Finalize approved topics
-
-**Example interaction:**
-```
-Found topics:
-0: Algorytmy sortowania i ich złożoność
-1: Struktury danych liniowe i nieliniowe
-2: Analiza złożoności obliczeniowej
-
-Provide feedback on given topics please.
-Your feedback: > Remove topic 1, add more about graph algorithms
-```
 
 ## 🏗️ Architecture
 
 **Current Stack:**
 - **Agent Orchestration**: LangGraph
 - **LLM**: Azure OpenAI GPT-4
-- **Document Processing**: MockRetriever (temporary)
-- **Logging**: Custom logger with Azure Application Insights
-- **Infrastructure**: Azure (Bicep templates)
+- **Document Processing**: Azure Embedding Model
+- **Vector Store**: Qdrant
+- 
 
-**Planned Architecture:**
+**Architecture:**
 ```
-Documents → Vector Store → RAG Agent → FastAPI → Streamlit
-                ↓
-            Azure OpenAI GPT-4
-                ↓
-            PostgreSQL (progress tracking)
+               +------------------------------+
+               | PostgreSQL (serialization)   |
+               +------------------------------+
+                          |
+                          |
+                          v
++----------------+     +----------------+     +----------------+
+|   Streamlit    | <-- |  FastAPI API   | --> |     Qdrant     |
+|   Frontend     |     |    Backend     |     |  (Vector DB)   |
++----------------+     +----------------+     +----------------+
+                          |
+                          v
+              +-----------------------------+
+              |     RAG & Quiz Agent        |
+              +-----------------------------+
+
+                
+           
 ```
 
-## 🧪 What's Working Now
+## 🧪 Roadmap
 
 ### Sprint 1 - Basic Agent (Week 1)
 
@@ -304,42 +212,34 @@ Documents → Vector Store → RAG Agent → FastAPI → Streamlit
 - ✅ Question generation from topics
 - ✅ Complex questionaire (quiz) generation
 
-## 📋 Roadmap
+
 
 ### Sprint 3 - Web Interface (Week 3)
-- [ ] FastAPI backend with endpoints
-- [ ] Streamlit frontend for document upload
-- [ ] Progress tracking with PostgreSQL
-- [ ] User session management
+-✅ FastAPI backend with endpoints
+-✅ Streamlit frontend for document upload
+-✅ Progress tracking with PostgreSQL
+-✅ User session management
 
 ### Sprint 4 - Production Ready (Week 4)
-- [ ] Comprehensive testing
-- [ ] Performance optimization
-- [ ] User feedback system
-- [ ] Production deployment
+-✅ Comprehensive testing
+-✅ Performance optimization
+-✅ Production deployment on Azure
 
-## 🤝 Contributing
-
-This is an active development project in Sprint 3.
 
 ### Development Setup
 
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature/amazing-feature`
 3. Install dependencies: `uv sync --group dev`
-4. Make changes and test: `uv run python src/Testaiownik/main.py`
-5. Format code: `uv run black src/`
 6. Commit changes: `git commit -m 'Add amazing feature'`
 7. Push branch: `git push origin feature/amazing-feature`
 8. Open Pull Request
 
 ## 📚 Documentation
 
-- **Agent Architecture**: Check `src/Testaiownik/Agent/` for current implementation
-- **Infrastructure**: Review `IaaC/` for Azure deployment details
+- **Agents Architecture**: Check `src/Testaiownik/Agent/` for current Agents implementation
 
-
-
+- 
 ## 🔧 Troubleshooting
 
 **Common Issues:**
@@ -348,15 +248,6 @@ This is an active development project in Sprint 3.
    ```bash
    # Check .env file has correct credentials
    # Verify Azure OpenAI deployment is active
-   ```
-
-
-3. **Infrastructure Deployment**
-   ```powershell
-   # Check you're logged into Azure
-   Connect-AzAccount
-   # Verify subscription access
-   Get-AzSubscription
    ```
 
 ## 📄 License
@@ -369,4 +260,4 @@ For questions about the current implementation, check the code comments or creat
 
 ---
 
-**Built with:** LangGraph • Azure OpenAI • Python • UV • Bicep
+**Built with:** LangGraph • Azure OpenAI • Python • UV • Streamlit • Azure Container Apps • FastApi 
