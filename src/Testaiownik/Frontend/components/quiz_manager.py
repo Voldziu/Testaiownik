@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 import streamlit as st
 from utils.session_manager import get_quiz_id, get_user_id
 from services.api_client import get_api_client
@@ -919,8 +920,11 @@ def render_answer_feedback(question_data: Dict[str, Any]):
                         slide = source_chunk.get("slide", None)
 
                         if source:
+                            file_name = os.path.basename(source)
+                            if '_' in file_name:
+                                file_name = file_name.split('_', 1)[1]
                             st.markdown(
-                                f"**📄 Plik:** {source}", unsafe_allow_html=True
+                                f"**📄 Plik:** {file_name}", unsafe_allow_html=True
                             )
 
                         if page is not None:
