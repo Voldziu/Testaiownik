@@ -7,7 +7,6 @@ from utils.session_manager import (
     get_quiz_id,
     is_files_uploaded,
     set_files_uploaded,
-    is_indexing_started,
     set_indexing_started,
     get_app_phase,
 )
@@ -43,6 +42,7 @@ def _render_upload_section():
     st.title("📁 Upload plików do quizu")
 
     quiz_id = get_quiz_id()
+
     if not quiz_id:
         st.error("❌ Brak ID quizu. Wróć do tworzenia quizu.")
         return
@@ -74,6 +74,7 @@ def _render_upload_section():
             )
 
     # Show upload status if files were uploaded
+
     if is_files_uploaded():
         st.success("✅ Pliki zostały już przesłane!")
 
@@ -96,9 +97,8 @@ def _render_indexing_setup():
 
     quiz_id = get_quiz_id()
 
-    st.success("✅ Pliki zostały przesłane pomyślnie!")
-    st.info("Teraz możesz zaindeksować pliki, aby przygotować je do analizy.")
 
+   
     # Indexing explanation
     with st.expander("ℹ️ Co to jest indeksowanie?", expanded=False):
         st.markdown(
@@ -226,11 +226,10 @@ def _start_indexing(quiz_id: str):
             result = api_client.index_documents(quiz_id)
 
             set_indexing_started(True)
-
-            st.success("✅ Indeksowanie zostało rozpoczęte!")
-
-            if "message" in result:
-                st.info(result["message"])
+                        
+            if 'message' in result:
+                st.info(result['message'])
+            
 
             time.sleep(1)
             st.rerun()

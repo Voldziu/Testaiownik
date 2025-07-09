@@ -6,7 +6,7 @@ from services.api_client import get_api_client
 from typing import List
 from config.settings import (
     MIN_QUESTIONS,
-    DEFAULT_RATIO,
+    DEFAULT_QUESTION_RATIO,
     ERROR_MAX_QUESTION,
 )
 
@@ -53,8 +53,9 @@ def render_questions_manager():
 
     # question config section
     st.subheader("⚙️ Ustawienia testu")
+    
+    ratio = DEFAULT_QUESTION_RATIO
 
-    ratio = DEFAULT_RATIO
     cache_key = f"max_questions_{quiz_id}_{ratio}"
     if cache_key not in st.session_state:
         with st.spinner("Sprawdzanie maksymalnej liczby pytań..."):
@@ -175,15 +176,17 @@ def start_test(quiz_id: str, total_questions: int, user_questions: List[str]):
             response = api_client.start_quiz(quiz_id=quiz_id, **request_data)
 
             if response:
-                st.success("✅ Test został pomyślnie rozpoczęty!")
+
+                quiz_name = "Quiz"
+                if quiz_id and '_' in quiz_id:
+                    quiz_name = quiz_id.split('_')[0]
 
                 # Display test information
                 with st.expander("📊 Szczegóły testu", expanded=True):
-                    st.write(f"🆔 **ID Quizu:** {quiz_id}")
+                    st.write(f"🆔 **Nazwa quizu:** {quiz_name}")
                     st.write(f"📝 **Liczba pytań:** {total_questions}")
                     st.write(f"👤 **Twoje pytania:** {len(user_questions)}")
                     st.write(f"🎯 **Status:** Generowanie pytań...")
-                    st.write(f"⏱️ **Szacowany czas generowania:** ~30 sekund")
 
                 set_questions_generated()
 

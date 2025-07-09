@@ -15,9 +15,9 @@ from utils.session_manager import (
 )
 from services.api_client import get_api_client, APIError
 from config.settings import (
-    DEFAULT_TOPIC_COUNT,
+    DEFAULT_TOPIC_RATIO,
     MIN_TOPIC_COUNT,
-    MAX_TOPIC_COUNT,
+    ERROR_MAX_TOPICS,
 )
 
 # Weight mapping for user-friendly labels
@@ -48,8 +48,31 @@ def render_topics_manager():
         _render_topic_management()
 
 
+def get_max_topics_estimate(quiz_id: str, ratio: int = 10) -> int:
+    """Estimate max questions for documents"""
+    try:
+        # Pobierz API client z session_state
+        api_client = get_api_client(get_user_id())
+        if not api_client:
+            st.error("❌ Brak połączenia z API")
+            return ERROR_MAX_TOPICS
+        
+        response = api_client.get_question_estimate(quiz_id, ratio)
+        
+        if response and "estimated_max_questions" in response:
+            return response["estimated_max_questions"]
+        else:
+            st.warning("⚠️ Nie udało się pobrać oszacowania liczby tematów")
+            return ERROR_MAX_TOPICS
+            
+    except Exception as e:
+        st.warning(f"⚠️ Błąd podczas pobierania oszacowania liczby tematów: {e}")
+        return ERROR_MAX_TOPICS
+
+
 def _render_topic_generation_setup():
     """Render topic generation setup section"""
+    quiz_id = get_quiz_id()
 
     col1, col2 = st.columns([5, 3])
 
@@ -67,14 +90,28 @@ def _render_topic_generation_setup():
 
     # Topic generation configuration
     st.subheader("⚙️ Konfiguracja generowania")
+    ratio = DEFAULT_TOPIC_RATIO
+    cache_key = f"max_topics_{quiz_id}_{ratio}"
+
+    if cache_key not in st.session_state:
+        with st.spinner("Sprawdzanie maksymalnej liczby tematów..."):
+            max_topics = get_max_topics_estimate(quiz_id, ratio)
+            st.session_state[cache_key] = max_topics
+    else:
+        max_topics = st.session_state[cache_key]
+    
+    if max_topics:
+        st.info(f"📊 Oszacowana maksymalna liczba tematów na podstawie dokumentów: **{max_topics}**")
+  
 
     st.write("**Liczba tematów do wygenerowania:**")
     num_topics = st.slider(
         "Wybierz liczbę tematów",
         min_value=MIN_TOPIC_COUNT,
-        max_value=MAX_TOPIC_COUNT,
-        value=DEFAULT_TOPIC_COUNT,
-        help="Więcej tematów = bardziej szczegółowa analiza, ale dłuższy czas przetwarzania",
+        max_value=max_topics,
+        value=max_topics//2,
+        help="Więcej tematów = bardziej szczegółowa analiza, ale dłuższy czas przetwarzania"
+
     )
 
     # Generation settings
@@ -424,7 +461,6 @@ def _start_topic_generation(num_topics: int):
             response = api_client.start_topic_generation(quiz_id, num_topics)
 
             if response:
-                st.success("✅ Generowanie tematów zostało rozpoczęte!")
                 set_topics_generated(True)
                 time.sleep(1)
                 st.rerun()

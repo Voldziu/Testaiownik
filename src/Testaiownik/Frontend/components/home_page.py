@@ -2,6 +2,7 @@
 
 import streamlit as st
 from datetime import datetime
+
 from components.quiz_manager import restart_quiz_with_message
 from utils.session_manager import (
     reset_quiz_session,
@@ -68,12 +69,17 @@ def load_user_quizzes(limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
 
 def render_quiz_item(quiz: Dict[str, Any]):
     """Render individual quiz item"""
-    quiz_id = quiz.get("quiz_id")
-    created_at = quiz.get("created_at")
-    status = quiz.get("status")
-    document_count = quiz.get("document_count", 0)
-    topic_count = quiz.get("topic_count", 0)
-
+    quiz_id = quiz.get('quiz_id')
+    created_at = quiz.get('created_at')
+    status = quiz.get('status')
+    document_count = quiz.get('document_count', 0)
+    topic_count = quiz.get('topic_count', 0)
+    
+    # Extract quiz name from quiz_id (format: {name}_{uuid})
+    quiz_name = "Quiz"
+    if quiz_id and '_' in quiz_id:
+        quiz_name = quiz_id.split('_')[0]
+    
     # Format creation date
     created_date = "Nieznana data"
     if created_at:
@@ -99,99 +105,55 @@ def render_quiz_item(quiz: Dict[str, Any]):
         "quiz_completed": ("✅", "Ukończony"),
         "failed": ("❌", "Błąd"),
     }
+    
+    status_icon, status_text = status_map.get(status, ('❓', status))
+    
+    # Create expandable container for each quiz with quiz name
+    with st.expander(f"{status_icon} {quiz_name} - {created_date}", expanded=False):
 
-    status_icon, status_text = status_map.get(status, ("❓", status))
-
-    # Create expandable container for each quiz
-    with st.expander(f"{status_icon} Quiz z {created_date}", expanded=False):
         # Quiz details
         col1, col2, col3 = st.columns(3)
 
         with col1:
             st.write(f"**Status:** {status_text}")
-            st.write(f"**Dokumenty:** {document_count}")
-
+        
         with col2:
             st.write(f"**Tematy:** {topic_count}")
-            st.write(f"**ID:** `{quiz_id[:8]}...`")
 
+        
         with col3:
-            st.write(f"**Utworzono:** {created_date}")
+            st.write(f"**Dokumenty:** {document_count}")
+        
 
-        # Action buttons
-        st.write("**Akcje:**")
-
-        # Sprawdzamy czy quiz się już rozpoczął (ma pytania/statystyki)
-        quiz_started = status in ["quiz_active", "quiz_completed"]
-
-        # Główne przyciski akcji w rzędzie
-        if quiz_started:
-            # Jeśli quiz się rozpoczął, pokazujemy 2 kolumny w pierwszym rzędzie
-            action_col1, action_col2 = st.columns(2)
-        else:
-            # Jeśli quiz się nie rozpoczął, pokazujemy tylko 1 kolumnę w pierwszym rzędzie
-            action_col1, action_col2 = st.columns([1, 1])
-
-        with action_col1:
-            # Determine button text and action based on status
-            if status == "created":
-                if st.button(
-                    "📄 Prześlij dokumenty",
-                    key=f"continue_{quiz_id}",
-                    use_container_width=True,
-                ):
-                    continue_quiz(quiz_id, status)
-            elif status == "documents_uploaded":
-                if st.button(
-                    "📊 Indeksuj dokumenty",
-                    key=f"continue_{quiz_id}",
-                    use_container_width=True,
-                ):
-                    continue_quiz(quiz_id, status)
-            elif status == "documents_indexed":
-                if st.button(
-                    "🔍 Konfiguruj tematy",
-                    key=f"continue_{quiz_id}",
-                    use_container_width=True,
-                ):
-                    continue_quiz(quiz_id, status)
-            elif status in ["topic_analysis", "topic_feedback"]:
-                if st.button(
-                    "💬 Kontynuuj konfigurację",
-                    key=f"continue_{quiz_id}",
-                    use_container_width=True,
-                ):
-                    continue_quiz(quiz_id, status)
-            elif status == "topic_ready":
-                if st.button(
-                    "🎯 Konfiguruj pytania",
-                    key=f"continue_{quiz_id}",
-                    use_container_width=True,
-                ):
-                    continue_quiz(quiz_id, status)
-            elif status == "quiz_active":
-                if st.button(
-                    "▶️ Kontynuuj quiz",
-                    key=f"continue_{quiz_id}",
-                    use_container_width=True,
-                ):
-                    continue_quiz(quiz_id, status)
-            elif status == "quiz_completed":
-                if st.button(
-                    "🔄 Powtórz quiz", key=f"retry_{quiz_id}", use_container_width=True
-                ):
-                    retry_quiz(quiz_id)
-            elif status == "failed":
-                if st.button(
-                    "🔧 Spróbuj ponownie",
-                    key=f"retry_{quiz_id}",
-                    use_container_width=True,
-                ):
-                    retry_quiz(quiz_id)
-
-        with action_col2:
-            if st.button("🗑️ Usuń", key=f"delete_{quiz_id}", use_container_width=True):
-                delete_quiz(quiz_id)
+        quiz_started = status in ['quiz_active', 'quiz_completed']
+        
+        # Główny przycisk akcji - teraz na całą szerokość
+        # Determine button text and action based on status
+        if status == 'created':
+            if st.button("📄 Prześlij dokumenty", key=f"continue_{quiz_id}", use_container_width=True):
+                continue_quiz(quiz_id, status)
+        elif status == 'documents_uploaded':
+            if st.button("📊 Indeksuj dokumenty", key=f"continue_{quiz_id}", use_container_width=True):
+                continue_quiz(quiz_id, status)
+        elif status == 'documents_indexed':
+            if st.button("🔍 Konfiguruj tematy", key=f"continue_{quiz_id}", use_container_width=True):
+                continue_quiz(quiz_id, status)
+        elif status in ['topic_analysis', 'topic_feedback']:
+            if st.button("💬 Kontynuuj konfigurację", key=f"continue_{quiz_id}", use_container_width=True):
+                continue_quiz(quiz_id, status)
+        elif status == 'topic_ready':
+            if st.button("🎯 Konfiguruj pytania", key=f"continue_{quiz_id}", use_container_width=True):
+                continue_quiz(quiz_id, status)
+        elif status == 'quiz_active':
+            if st.button("▶️ Kontynuuj quiz", key=f"continue_{quiz_id}", use_container_width=True):
+                continue_quiz(quiz_id, status)
+        elif status == 'quiz_completed':
+            if st.button("🔄 Powtórz quiz", key=f"retry_{quiz_id}", use_container_width=True):
+                retry_quiz(quiz_id)
+        elif status == 'failed':
+            if st.button("🔧 Spróbuj ponownie", key=f"retry_{quiz_id}", use_container_width=True):
+                retry_quiz(quiz_id)
+        
 
         # Przycisk statystyk w osobnym rzędzie - szerszy i tylko dla rozpoczętych quizów
         if quiz_started:
@@ -304,7 +266,11 @@ def retry_quiz(quiz_id: str):
         api_client = get_api_client(get_user_id())
         response = api_client.restart_quiz(quiz_id, hard=False)
 
-        st.success(f"🔄 Restartujesz quiz {quiz_id[:8]}...")
+        quiz_name = "Quiz"
+        if quiz_id and '_' in quiz_id:
+            quiz_name = quiz_id.split('_')[0]
+        st.success(f"🔄 Restartujesz quiz {quiz_name}...")
+
         st.rerun()
 
     except Exception as e:
@@ -318,11 +284,14 @@ def configure_quiz(quiz_id: str):
         st.session_state["quiz_id"] = quiz_id
 
         # Go to topic confirmation phase - FIXED to match session_manager.py and main.py
-        st.session_state["app_phase"] = (
-            "topic_management"  # Changed from "topic_confirmation"
-        )
+        st.session_state["app_phase"] = "topic_management"  # Changed from "topic_confirmation"
+        
+        quiz_name = "Quiz"
+        if quiz_id and '_' in quiz_id:
+            quiz_name = quiz_id.split('_')[0]
 
-        st.success(f"⚙️ Konfigurujesz quiz {quiz_id[:8]}...")
+        st.success(f"⚙️ Konfigurujesz quiz {quiz_name}...")
+
         st.rerun()
 
     except Exception as e:
