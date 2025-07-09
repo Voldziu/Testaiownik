@@ -235,11 +235,27 @@ uv run pytest tests/
 7. Push branch: `git push origin feature/amazing-feature`
 8. Open Pull Request
 
-## 📚 Documentation
 
-- **Agents Architecture**: Check `src/Testaiownik/Agent/` for current Agents implementation
+### ⚙️ CI/CD Pipeline
+This project is integrated with Azure Container Registry and uses automated deployments for both the backend and frontend.
 
-- 
+The repository builds and pushes Docker images for:
+
+testaiownik-backend
+
+testaiownik-frontend
+
+On every pull request merge or push to master, GitHub Actions (or Azure Pipelines) automatically:
+
+Builds updated Docker images.
+
+Pushes them to Azure Container Registry.
+
+Triggers a redeployment on Azure infrastructure.
+
+✅ Continuous integration and delivery ensure that the latest version is always live without manual intervention.
+
+
 ## 🔧 Troubleshooting
 
 **Common Issues:**
