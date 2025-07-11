@@ -127,11 +127,9 @@ def reset_quiz_session():
 def get_app_phase() -> str:
     """Get current application phase"""
 
-    # Check if explicitly set to homepage
     if st.session_state.get("app_phase") == "homepage":
         return "homepage"
 
-    # Check normal flow
     if not is_home_page_shown():
         return "homepage"
     elif not is_quiz_created():
@@ -150,14 +148,11 @@ def get_app_phase() -> str:
         return "test"
 
 
-# Dodaj tę funkcję do session_manager.py
 def set_session_flags_for_status(status: str):
     """Set appropriate session flags based on quiz status"""
 
-    # Zawsze ustawiamy home_page_shown na True, bo przecież jesteśmy w aplikacji
     set_home_page_shown(True)
 
-    # Set flags based on status progression
     if status in [
         "documents_uploaded",
         "documents_indexed",

@@ -55,7 +55,6 @@ async def health_check(db: Session = Depends(get_db)):
         services = {}
         overall_status = "healthy"
 
-        # Check Qdrant
         try:
             from RAG.qdrant_manager import QdrantManager
 
@@ -66,7 +65,6 @@ async def health_check(db: Session = Depends(get_db)):
             services["qdrant"] = "disconnected"
             overall_status = "degraded"
 
-        # Check Azure OpenAI
         try:
             from AzureModels import get_llm
 
@@ -76,7 +74,6 @@ async def health_check(db: Session = Depends(get_db)):
             services["azure_openai"] = "disconnected"
             overall_status = "degraded"
 
-        # Check Database
         try:
             db.execute(text("SELECT 1"))
             services["database"] = "connected"

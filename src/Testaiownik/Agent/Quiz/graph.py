@@ -20,14 +20,12 @@ def create_quiz_graph(retriever: DocumentRetriever) -> StateGraph:
     workflow = StateGraph(QuizState)
     logger.info("Creating quiz graph")
 
-    # Bind retriever to the generate_all_questions node
     from functools import partial
 
     generate_questions_with_retriever = partial(
         generate_all_questions, retriever=retriever
     )
 
-    # Add all quiz nodes
     workflow.add_node("initialize_quiz", initialize_quiz)
     workflow.add_node("load_or_generate_questions", load_or_generate_questions)
     workflow.add_node("generate_all_questions", generate_questions_with_retriever)
@@ -36,7 +34,6 @@ def create_quiz_graph(retriever: DocumentRetriever) -> StateGraph:
     workflow.add_node("check_completion", check_completion)
     workflow.add_node("finalize_results", finalize_results)
 
-    # Set up conditional edges using route_next
     workflow.add_conditional_edges(
         "initialize_quiz",
         route_next,
@@ -102,11 +99,9 @@ def create_quiz_graph(retriever: DocumentRetriever) -> StateGraph:
         },
     )
 
-    # Set entry point
     workflow.set_entry_point("initialize_quiz")
 
-    # Compile with checkpointer and interrupt before user input
     return workflow.compile(
         checkpointer=MemorySaver(),
-        interrupt_before=["process_answer"],  # Interrupt to get user input
+        interrupt_before=["process_answer"],  
     )

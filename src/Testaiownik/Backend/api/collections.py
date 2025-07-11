@@ -1,6 +1,5 @@
 # src/Testaiownik/Backend/api/collections.py
 from fastapi import APIRouter, HTTPException, Request
-from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from fastapi import Depends
@@ -36,17 +35,14 @@ async def list_collections(
         collections = []
 
         if user_only:
-            # Get collections for user's quizzes only
             user_quizzes = get_quizzes_by_user(db, user_id)
 
             for quiz in user_quizzes:
                 if quiz.collection_name:
                     collection_name = quiz.collection_name
 
-                    # Check if collection exists in Qdrant
                     if qdrant_manager.collection_exists(collection_name):
                         try:
-                            # Get collection info
                             from RAG.Retrieval import RAGRetriever
 
                             retriever = RAGRetriever(collection_name, qdrant_manager)
@@ -65,9 +61,7 @@ async def list_collections(
                                 f"Collection {collection_name} referenced but not accessible: {e}"
                             )
         else:
-            # List all collections (admin feature)
             try:
-                # Get all collections from Qdrant
                 all_collections = qdrant_manager.client.get_collections()
 
                 for collection_info in all_collections.collections:
@@ -79,7 +73,6 @@ async def list_collections(
                         retriever = RAGRetriever(collection_name, qdrant_manager)
                         vector_count = retriever.get_chunk_count()
 
-                        # Try to find associated quiz
                         quiz_id = None
                         if collection_name.startswith("quiz_"):
                             potential_quiz_id = collection_name.replace("quiz_", "")
@@ -91,7 +84,7 @@ async def list_collections(
                             {
                                 "name": collection_name,
                                 "vector_count": vector_count,
-                                "created_at": datetime.now(),  # Placeholder
+                                "created_at": datetime.now(),  
                                 "quiz_id": quiz_id,
                             }
                         )
@@ -126,7 +119,6 @@ async def delete_collection(
     try:
         collection_name = quiz.collection_name
 
-        # Get vector count before deletion
         vector_count = 0
         if qdrant_manager.collection_exists(collection_name):
             from RAG.Retrieval import RAGRetriever
@@ -134,18 +126,15 @@ async def delete_collection(
             retriever = RAGRetriever(collection_name, qdrant_manager)
             vector_count = retriever.get_chunk_count()
 
-            # Delete the collection
             qdrant_manager.delete_collection(collection_name)
 
-        # Update quiz to remove collection reference
         from ..database.crud import update_quiz_collection, update_quiz_status
 
         update_quiz_collection(quiz_id, None)
         update_quiz_status(
             quiz_id, "documents_uploaded"
-        )  # Reset to pre-indexing status
+        ) 
 
-        # Log activity
         log_activity(
             db,
             user_id,
@@ -182,30 +171,21 @@ async def cleanup_collection(
     try:
         collection_name = quiz.collection_name
 
-        # Check if collection exists
         if not qdrant_manager.collection_exists(collection_name):
             raise HTTPException(status_code=404, detail="Collection does not exist")
 
-        # Get counts before optimization
         from RAG.Retrieval import RAGRetriever
 
         retriever = RAGRetriever(collection_name, qdrant_manager)
         vectors_before = retriever.get_chunk_count()
 
-        # Perform cleanup operations
         import time
 
         start_time = time.time()
 
-        # For now, just report current state
-        # In a real implementation, you might:
-        # - Remove duplicate vectors
-        # - Optimize vector storage
-        # - Rebuild indexes
-        # - Compact collection
 
         optimization_time = time.time() - start_time
-        vectors_after = vectors_before  # No actual optimization performed yet
+        vectors_after = vectors_before  
 
         log_activity(
             db,
@@ -247,20 +227,16 @@ async def get_collection_info(quiz_id: str, request: Request):
     try:
         collection_name = quiz.collection_name
 
-        # Check if collection exists
         if not qdrant_manager.collection_exists(collection_name):
             raise HTTPException(status_code=404, detail="Collection does not exist")
 
-        # Get collection statistics
         from RAG.Retrieval import RAGRetriever
 
         retriever = RAGRetriever(collection_name, qdrant_manager)
         vector_count = retriever.get_chunk_count()
 
-        # Get sample points for analysis
         sample_points = []
         try:
-            # Get a few sample vectors to analyze
             scroll_result = qdrant_manager.client.scroll(
                 collection_name=collection_name, limit=5, with_payload=True
             )
@@ -286,7 +262,6 @@ async def get_collection_info(quiz_id: str, request: Request):
         except Exception as e:
             logger.warning(f"Could not get sample points: {e}")
 
-        # Get collection configuration
         try:
             collection_info = qdrant_manager.client.get_collection(collection_name)
             config_info = {
@@ -325,26 +300,22 @@ async def reindex_collection(
     quiz = validate_quiz_access(quiz_id, user_id)
 
     try:
-        # Delete existing collection if it exists
         if quiz.collection_name and qdrant_manager.collection_exists(
             quiz.collection_name
         ):
             qdrant_manager.delete_collection(quiz.collection_name)
 
-        # Reset quiz status
         from ..database.crud import update_quiz_collection, update_quiz_status
 
         update_quiz_collection(quiz_id, None)
         update_quiz_status(quiz_id, "documents_uploaded")
 
-        # Mark all documents as not indexed
         from ..database.crud import get_documents_by_quiz, update_document_indexed
 
         documents = get_documents_by_quiz(quiz_id)
         for doc in documents:
             update_document_indexed(doc.doc_id, False)
 
-        # Trigger reindexing
         indexing_result = await document_service.index_quiz_documents(quiz_id, db)
 
         log_activity(
@@ -377,7 +348,6 @@ async def get_collections_stats(request: Request, db: Session = Depends(get_db))
     user_id = get_user_id(request)
 
     try:
-        # Get user's collections
         user_collections = []
         user_quizzes = get_quizzes_by_user(db, user_id)
 

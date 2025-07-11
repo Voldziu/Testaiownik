@@ -1,7 +1,6 @@
 # tests/Agent/Quiz/test_nodes.py
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, patch
 
 from src.Testaiownik.Agent.Quiz.nodes import (
     initialize_quiz,
@@ -13,7 +12,6 @@ from src.Testaiownik.Agent.Quiz.nodes import (
     finalize_results,
     route_next,
     _process_user_questions,
-    _generate_questions_for_topic,
     _remove_duplicate_questions,
     _create_fallback_questions,
     _format_question_for_user,
@@ -28,9 +26,8 @@ from src.Testaiownik.Agent.Quiz.models import (
     UserAnswer,
     QuizResults,
     UserQuestionResponse,
-    WeightedTopic,  # TO ENSURE COMPATIBILITY WITH CODE
+    WeightedTopic,  
 )
-from src.Testaiownik.Agent.Quiz.state import QuizState
 
 
 class TestInitializeQuiz:
@@ -62,10 +59,9 @@ class TestInitializeQuiz:
         assert result["quiz_session"].difficulty == "medium"
         assert result["next_node"] == "load_or_generate_questions"
 
-        # Check questions per topic calculation
         questions_per_topic = result["quiz_session"].questions_per_topic
-        assert questions_per_topic["Algorithms"] == 6  # 0.6 * 10 = 6
-        assert questions_per_topic["Data Structures"] == 4  # 0.4 * 10 = 4
+        assert questions_per_topic["Algorithms"] == 6 
+        assert questions_per_topic["Data Structures"] == 4  
 
     def test_initialize_quiz_no_config(self):
         state = {"quiz_config": None}
@@ -93,10 +89,8 @@ class TestInitializeQuiz:
         result = initialize_quiz(state)
         questions_per_topic = result["quiz_session"].questions_per_topic
 
-        # Minimum 1 question per topic
         assert questions_per_topic["Topic1"] >= 1
         assert questions_per_topic["Topic2"] >= 1
-        # Topic1 should get most questions
         assert questions_per_topic["Topic1"] > questions_per_topic["Topic2"]
 
 
@@ -124,7 +118,6 @@ class TestLoadOrGenerateQuestions:
 
             result = load_or_generate_questions(state)
 
-            # Currently falls back to fresh generation
             assert result["next_node"] == "generate_all_questions"
 
     def test_load_invalid_mode(self, quiz_session):
@@ -171,7 +164,6 @@ class TestGenerateAllQuestions:
     def test_generate_all_questions_with_user_questions(
         self, mock_generate, mock_process_user, quiz_session, quiz_config
     ):
-        # Mock user question processing
         user_question = Question(
             topic="Algorithms",
             question_text="What is recursion?",
@@ -183,7 +175,6 @@ class TestGenerateAllQuestions:
         )
         mock_process_user.return_value = [user_question]
 
-        # Mock LLM question generation
         llm_questions = [
             Question(
                 topic="Algorithms",
@@ -199,21 +190,18 @@ class TestGenerateAllQuestions:
 
         state = {
             "quiz_session": quiz_session,
-            "questions_to_generate": {"Algorithms": 1},  # 1 LLM question needed
+            "questions_to_generate": {"Algorithms": 1},  
             "quiz_config": quiz_config,
         }
 
         result = generate_all_questions(state)
 
-        # Should process user questions
         mock_process_user.assert_called_once_with(
             ["What is recursion?"], quiz_session.topics, quiz_session.difficulty
         )
 
-        # Should generate 1 LLM question
         mock_generate.assert_called_once()
 
-        # Should have both questions in session
         session = result["quiz_session"]
         assert len(session.all_generated_questions) == 2
         assert len(session.active_question_pool) == 2
@@ -221,13 +209,12 @@ class TestGenerateAllQuestions:
 
     @patch("src.Testaiownik.Agent.Quiz.nodes._generate_questions_for_topic")
     def test_generate_all_questions_batching(self, mock_generate, quiz_session):
-        # Need 5 questions, batch size 2, so should make 3 calls (2+2+1)
         quiz_session.batch_size = 2
 
         mock_generate.side_effect = [
-            [Mock(), Mock()],  # First batch: 2 questions
-            [Mock(), Mock()],  # Second batch: 2 questions
-            [Mock()],  # Third batch: 1 question
+            [Mock(), Mock()], 
+            [Mock(), Mock()],  
+            [Mock()],  
         ]
         mock_generate.return_value = [
             Question(
@@ -249,17 +236,15 @@ class TestGenerateAllQuestions:
 
         generate_all_questions(state)
 
-        # Should call generate 3 times for batching
         assert mock_generate.call_count == 3
 
-        # Check batch sizes
         call_args = [call[1]["count"] for call in mock_generate.call_args_list]
         assert call_args == [2, 2, 1]
 
     def test_generate_all_questions_no_questions_needed(self, quiz_session):
         state = {
             "quiz_session": quiz_session,
-            "questions_to_generate": {},  # No questions to generate
+            "questions_to_generate": {},  
             "quiz_config": None,
         }
 
@@ -317,7 +302,6 @@ class TestPresentQuestion:
             questions_per_topic={"Test": 1},
         )
 
-        # No questions in pool
         session.active_question_pool = []
 
         state = {"quiz_session": session}
@@ -368,14 +352,14 @@ class TestProcessAnswer:
         state = {
             "quiz_session": session,
             "current_question": question,
-            "user_input": [0, 2],  # Correct answer indices
+            "user_input": [0, 2], 
         }
 
         result = process_answer(state)
 
         assert len(session.user_answers) == 1
         assert session.user_answers[0].is_correct == True
-        assert session.current_question_index == 1  # Advanced
+        assert session.current_question_index == 1 
         assert "✓ Correct!" in result["feedback_request"]
         assert result["next_node"] == "check_completion"
 
@@ -385,15 +369,14 @@ class TestProcessAnswer:
         state = {
             "quiz_session": session,
             "current_question": question,
-            "user_input": [1],  # Incorrect answer
+            "user_input": [1],  
         }
 
         result = process_answer(state)
 
         assert session.user_answers[0].is_correct == False
         assert "✗ Incorrect" in result["feedback_request"]
-        # Question should be added for recycling
-        assert question.id in session.active_question_pool[2:]  # Added to end
+        assert question.id in session.active_question_pool[2:]  
 
     def test_process_answer_no_input(self, question_and_session):
         question, session = question_and_session
@@ -415,7 +398,7 @@ class TestProcessAnswer:
         state = {
             "quiz_session": session,
             "current_question": question,
-            "user_input": [5],  # Out of range
+            "user_input": [5],  
         }
 
         with pytest.raises(ValueError, match="Index 5 out of range"):
@@ -449,7 +432,7 @@ class TestCheckCompletion:
             questions_per_topic={"Test": 1},
         )
         session.active_question_pool = ["q1", "q2"]
-        session.current_question_index = 1  # Still has questions
+        session.current_question_index = 1  
 
         state = {"quiz_session": session}
 
@@ -464,7 +447,7 @@ class TestCheckCompletion:
             questions_per_topic={"Test": 2},
         )
         session.active_question_pool = ["q1", "q2"]
-        session.current_question_index = 2  # Past the end
+        session.current_question_index = 2  
 
         state = {"quiz_session": session}
 
@@ -496,7 +479,6 @@ class TestFinalizeResults:
             questions_per_topic={"Algorithms": 1, "Data Structures": 1},
         )
 
-        # Add some questions
         q1 = Question(
             topic="Algorithms",
             question_text="Q1",
@@ -511,7 +493,6 @@ class TestFinalizeResults:
         )
         session.all_generated_questions = [q1, q2]
 
-        # Add answers
         session.user_answers = [
             UserAnswer(question_id=q1.id, selected_choice_indices=[0], is_correct=True),
             UserAnswer(
@@ -577,7 +558,7 @@ class TestRouteNext:
     def test_route_next_default_end(self):
         state = {"next_node": "some_invalid_node"}
         result = route_next(state)
-        assert result == "some_invalid_node"  # Passes through unknown nodes
+        assert result == "some_invalid_node"  
 
 
 class TestHelperFunctions:
@@ -603,7 +584,7 @@ class TestHelperFunctions:
         assert len(result) == 1
         assert result[0].question_text == "What is recursion?"
         assert result[0].topic == "Algorithms"
-        assert len(result[0].choices) >= 2  # 1 correct + 2 wrong
+        assert len(result[0].choices) >= 2  
 
     def test_remove_duplicate_questions(self):
         q1 = Question(
@@ -614,13 +595,13 @@ class TestHelperFunctions:
         )
         q2 = Question(
             topic="Test",
-            question_text="What is an algorithm exactly?",  # Very similar
+            question_text="What is an algorithm exactly?",  
             choices=[QuestionChoice(text="B", is_correct=True)],
             explanation="Test",
         )
         q3 = Question(
             topic="Test",
-            question_text="What is a data structure?",  # Different
+            question_text="What is a data structure?",  
             choices=[QuestionChoice(text="C", is_correct=True)],
             explanation="Test",
         )
@@ -628,7 +609,6 @@ class TestHelperFunctions:
         questions = [q1, q2, q3]
         result = _remove_duplicate_questions(questions)
 
-        # Should remove q2 as duplicate of q1
         assert len(result) == 2
         question_texts = [q.question_text for q in result]
         assert "What is an algorithm?" in question_texts
@@ -713,7 +693,7 @@ class TestHelperFunctions:
         assert "Quiz Complete!" in formatted
         assert "8/10 (80.0%)" in formatted
         assert "Algorithms: 5/6" in formatted
-        assert "🌟 Excellent work!" in formatted  # Score >= 80
+        assert "🌟 Excellent work!" in formatted  
 
 
 if __name__ == "__main__":

@@ -41,7 +41,6 @@ class TestProcessFeedbackStateLogic:
             "conversation_history": existing_history,
         }
 
-        # Mock LLM to return accept action
         with patch(
             "src.Testaiownik.Agent.TopicSelection.nodes.get_llm"
         ) as mock_get_llm:
@@ -58,7 +57,6 @@ class TestProcessFeedbackStateLogic:
 
             result = process_feedback(state)
 
-            # Should have both old and new history
             assert len(result["conversation_history"]) == 2
             assert result["conversation_history"][0]["user_feedback"] == "Old feedback"
             assert result["conversation_history"][1]["user_feedback"] == "New feedback"
@@ -141,7 +139,7 @@ class TestProcessFeedbackStateLogic:
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
                 action="accept",
-                accepted_topics=None,  # Empty response from LLM
+                accepted_topics=None,  
                 rejected_topics=[],
                 modification_request="",
             )
@@ -150,7 +148,6 @@ class TestProcessFeedbackStateLogic:
 
             result = process_feedback(state)
 
-            # Should fallback to suggested_topics
             expected_topics = [
                 {"topic": "Original1", "weight": 0.5},
                 {"topic": "Original2", "weight": 0.5},
@@ -170,7 +167,7 @@ class TestProcessFeedbackStateLogic:
             mock_llm = Mock()
             mock_interpretation = Mock()
             mock_interpretation.user_feedback = Mock(
-                action="unknown_action",  # Invalid action
+                action="unknown_action", 
                 accepted_topics=[],
                 rejected_topics=[],
                 modification_request="",
@@ -180,5 +177,4 @@ class TestProcessFeedbackStateLogic:
 
             result = process_feedback(state)
 
-            # Should route back to request_feedback for unknown actions
             assert result["next_node"] == "request_feedback"

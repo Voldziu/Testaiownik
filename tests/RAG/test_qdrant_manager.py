@@ -42,7 +42,7 @@ class TestQdrantManager:
             assert manager.last_used_id == 0
             mock_client.assert_called_once_with(
                 url="http://test:1234", timeout=None
-            )  # Added timeout=None
+            )  
             mock_get_model.assert_called_once()
 
     def test_create_collection_new(self, qdrant_manager):
@@ -138,7 +138,6 @@ class TestQdrantManager:
     def test_process_file_pdf(self, qdrant_manager):
         """Test processing PDF file."""
 
-        # Mock returns list of (text, page_number) tuples
         with patch(
             "src.Testaiownik.RAG.qdrant_manager.extract_text_from_pdf",
             return_value=[("PDF content", 1)],
@@ -173,7 +172,6 @@ class TestQdrantManager:
     def test_process_file_pptx(self, qdrant_manager):
         """Test processing PPTX file."""
 
-        # Mock returns list of (text, slide_number) tuples
         with patch(
             "src.Testaiownik.RAG.qdrant_manager.extract_text_from_pptx",
             return_value=[("PPTX content", 1)],

@@ -25,8 +25,6 @@ from ..database.crud import (
     create_quiz,
     get_quizzes_by_user,
     log_activity,
-    reset_quiz_execution,
-    soft_reset_quiz_execution,
 )
 from ..database.sql_database_connector import get_db
 
@@ -68,7 +66,6 @@ async def list_quizzes(
 
         quiz_items = []
         for quiz in quizzes:
-            # Count documents and topics (already included in dict)
             document_count = len(quiz.documents)
             topic_count = len(quiz.confirmed_topics or quiz.suggested_topics or [])
 
@@ -97,15 +94,12 @@ async def get_quiz_status(
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
     try:
-        # Get documents and calculate status
         documents = document_service.get_quiz_documents(quiz_id, db)
         document_count = len(documents)
         indexed_docs = sum(1 for doc in documents if doc.indexed)
 
-        # Count topics
         topic_count = len(quiz.confirmed_topics or quiz.suggested_topics or [])
 
-        # Quiz progress
         answered_questions = len(quiz.user_answers or [])
         total_questions = len(set(quiz.questions_data.get("active_question_pool")))
 
@@ -159,28 +153,25 @@ async def start_quiz(
     user_id = get_user_id(request)
     quiz = validate_quiz_access(quiz_id, user_id, db)
 
-    # Validate quiz is ready
     if quiz.status != "topic_ready":
         raise HTTPException(
             status_code=400,
             detail=f"Quiz is not ready to start. Current status: {quiz.status}",
         )
 
-    # Use provided topics or fall back to quiz's confirmed topics
     topics_to_use = request_data.confirmed_topics
     if topics_to_use is None:
         if not quiz.confirmed_topics:
             raise HTTPException(status_code=400, detail="No topics confirmed for quiz")
         topics_to_use = quiz.confirmed_topics
 
-    # Validate we have topics
     if not topics_to_use:
         raise HTTPException(status_code=400, detail="No topics available for quiz")
 
     try:
         success = await quiz_service.start_quiz(
             quiz_id=quiz_id,
-            confirmed_topics=topics_to_use,  # Use selected topics
+            confirmed_topics=topics_to_use,  
             total_questions=request_data.total_questions
             + len(request_data.user_questions or []),
             difficulty=request_data.difficulty,
@@ -243,7 +234,6 @@ async def submit_answer(
     if quiz.status != "quiz_active":
         raise HTTPException(status_code=400, detail="Quiz is not active")
 
-    # Validate that the question_id matches the current question
     try:
         questions_data = quiz.questions_data
         if not questions_data or not questions_data.get("active_question_pool"):
@@ -308,7 +298,6 @@ async def get_quiz_results(
         raise HTTPException(status_code=500, detail="Failed to get quiz results")
 
 
-# Quiz Management Endpoints
 @router.get("/{quiz_id}/preview")
 async def preview_quiz(quiz_id: str, request: Request, db: Session = Depends(get_db)):
     """Previews generated quiz before starting"""
@@ -399,7 +388,7 @@ async def resume_quiz(quiz_id: str, request: Request, db: Session = Depends(get_
 async def restart_quiz(
     quiz_id: str,
     request: Request,
-    hard: Optional[bool] = None,  # Add optional hard parameter
+    hard: Optional[bool] = None,  
     db: Session = Depends(get_db),
 ):
     """Restarts quiz - soft reset keeps questions, hard reset regenerates them"""
@@ -426,7 +415,7 @@ async def restart_quiz(
             "reset_type": restart_quiz_return_dict["reset_type"],
             "regenerated_questions": restart_quiz_return_dict["regenerated_questions"],
             "same_topics": True,
-            "same_questions": not hard,  # Questions preserved in soft reset
+            "same_questions": not hard, 
             "status": "topic_ready" if hard else "quiz_active",
             "message": restart_quiz_return_dict["message"],
         }

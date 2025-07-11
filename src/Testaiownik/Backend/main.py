@@ -8,7 +8,6 @@ from .api import api_router
 
 app = FastAPI(title="TESTAIOWNIK API", version="1.0.0")
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,10 +16,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add session middleware
 app.add_middleware(SessionMiddleware)
 
-# Include API routes
 app.include_router(api_router, prefix="/api")
 
 

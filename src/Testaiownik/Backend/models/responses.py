@@ -4,7 +4,6 @@ from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime
 
 
-# Base response models
 class BaseResponse(BaseModel):
     success: bool = True
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -16,7 +15,6 @@ class ErrorResponse(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
-# Quiz responses
 class QuizCreateResponse(BaseResponse):
     quiz_id: str
     created_at: datetime
@@ -36,7 +34,6 @@ class QuizListResponse(BaseResponse):
     total: int
 
 
-# Document responses
 class DocumentItem(BaseModel):
     doc_id: str
     filename: str
@@ -79,7 +76,6 @@ class DocumentIndexResponse(BaseResponse):
     indexing_time_seconds: float
 
 
-# Topic Selection responses
 class WeightedTopicResponse(BaseModel):
     topic: str
     weight: float
@@ -91,11 +87,11 @@ class TopicAnalysisStartResponse(BaseResponse):
     estimated_completion: Optional[datetime]
     suggested_topics: List[WeightedTopicResponse] = Field(
         default_factory=list
-    )  # Add this
+    )  
 
 
 class TopicSessionStatusResponse(BaseResponse):
-    quiz_id: str  # Changed from topic_session_id
+    quiz_id: str  
     status: str
     suggested_topics: List[WeightedTopicResponse]
     feedback_request: Optional[str]
@@ -139,7 +135,6 @@ class TopicSuggestionsResponse(BaseResponse):
     total_suggestions: int
 
 
-# Quiz execution responses
 class QuestionChoice(BaseModel):
     text: str
     is_correct: bool
@@ -172,7 +167,7 @@ class QuizProgressResponse(BaseModel):
 
 
 class QuizStartResponse(BaseResponse):
-    quiz_id: str  # Changed from quiz_session_id
+    quiz_id: str  
     status: str
     estimated_generation_time: int
     total_questions: int
@@ -200,7 +195,7 @@ class TopicScore(BaseModel):
 
 
 class QuizResults(BaseModel):
-    quiz_id: str  # Changed from session_id
+    quiz_id: str  
     total_questions: int
     correct_answers: int
     score_percentage: float
@@ -213,7 +208,6 @@ class QuizResultsResponse(BaseResponse):
     status: str
 
 
-# User/Session responses (simplified)
 class UserSessionResponse(BaseModel):
     user_id: str
     created_at: datetime
@@ -231,7 +225,6 @@ class UserDeleteResponse(BaseResponse):
     deleted_quizzes: int
 
 
-# Statistics responses
 class SystemStats(BaseModel):
     total_quizzes: int
     total_documents: int
@@ -250,7 +243,6 @@ class StatsResponse(BaseResponse):
     user_stats: UserStats
 
 
-# Collections responses
 class CollectionItem(BaseModel):
     name: str
     vector_count: int
@@ -268,7 +260,6 @@ class CollectionDeleteResponse(BaseResponse):
     vector_count_deleted: int
 
 
-# Search responses
 class SearchResultItem(BaseModel):
     text: str
     source: str

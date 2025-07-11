@@ -24,7 +24,6 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.now)
     last_activity = Column(DateTime, default=datetime.now)
 
-    # Relationships
     quizzes = relationship("Quiz", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -36,33 +35,27 @@ class Quiz(Base):
     quiz_id = Column(String(100), primary_key=True, index=True)
     user_id = Column(String(50), ForeignKey("users.user_id"), index=True)
 
-    # Status tracking - single status for entire quiz lifecycle
     status = Column(String(20), default="created")
-    # Possible statuses: created, documents_uploaded, documents_indexed,
-    # topic_analysis, topic_feedback, topic_ready, quiz_active, quiz_completed, failed
-
-    # Document management
+   
     collection_name = Column(String(100), nullable=True)
 
-    # Topic selection data (previously topic_sessions)
     desired_topic_count = Column(Integer, default=10)
-    suggested_topics = Column(JSON, nullable=True)  # List of WeightedTopic dicts
-    confirmed_topics = Column(JSON, nullable=True)  # Final confirmed topics
+    suggested_topics = Column(JSON, nullable=True) 
+    confirmed_topics = Column(JSON, nullable=True) 
     topic_feedback_request = Column(Text, nullable=True)
     topic_conversation_history = Column(JSON, default=list)
     langgraph_topic_state = Column(
         JSON, nullable=True
-    )  # Complete LangGraph state for topic selection
+    )  
 
-    # Quiz execution data (previously quiz_sessions)
+    
     total_questions = Column(Integer, nullable=True)
-    difficulty = Column(String(20), nullable=True)  # easy, medium, hard
+    difficulty = Column(String(20), nullable=True)  
     current_question_index = Column(Integer, default=0)
-    questions_data = Column(JSON, nullable=True)  # All generated questions
-    user_answers = Column(JSON, default=list)  # User's answers with timestamps
-    langgraph_quiz_state = Column(JSON, nullable=True)  # Complete quiz state
+    questions_data = Column(JSON, nullable=True)  
+    user_answers = Column(JSON, default=list) 
+    langgraph_quiz_state = Column(JSON, nullable=True) 
 
-    # Timestamps
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     topic_analysis_started_at = Column(DateTime, nullable=True)
@@ -70,7 +63,6 @@ class Quiz(Base):
     quiz_started_at = Column(DateTime, nullable=True)
     quiz_completed_at = Column(DateTime, nullable=True)
 
-    # Relationships
     user = relationship("User", back_populates="quizzes")
     documents = relationship(
         "Document", back_populates="quiz", cascade="all, delete-orphan"
@@ -87,11 +79,10 @@ class Document(Base):
     filename = Column(String(255), nullable=False)
     file_path = Column(String(500), nullable=False)
     size_bytes = Column(Integer)
-    file_type = Column(String(10))  # pdf, docx, txt, pptx
+    file_type = Column(String(10))  
     uploaded_at = Column(DateTime, default=datetime.now)
     indexed = Column(Boolean, default=False)
 
-    # Relationships
     quiz = relationship("Quiz", back_populates="documents")
 
 
@@ -104,6 +95,6 @@ class ActivityLog(Base):
     user_id = Column(String(50), index=True)
     action = Column(
         String(50)
-    )  # quiz_created, document_uploaded, topic_confirmed, quiz_completed, etc.
+    )  
     details = Column(JSON, nullable=True)
     timestamp = Column(DateTime, default=datetime.now)

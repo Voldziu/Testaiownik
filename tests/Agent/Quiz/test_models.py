@@ -1,7 +1,6 @@
 # tests/Agent/Quiz/test_models.py
 import pytest
 from datetime import datetime
-from unittest.mock import Mock
 
 from src.Testaiownik.Agent.Quiz.models import (
     QuestionChoice,
@@ -12,7 +11,7 @@ from src.Testaiownik.Agent.Quiz.models import (
     QuestionGeneration,
     QuizConfiguration,
     UserQuestionResponse,
-    WeightedTopic,  # TO ENSURE THAT WE HAVE THE CORRECT MODEL
+    WeightedTopic,  
 )
 
 
@@ -87,14 +86,14 @@ class TestQuestion:
         assert multi_choice_question.is_answer_correct([0, 2]) == True
         assert (
             multi_choice_question.is_answer_correct([2, 0]) == True
-        )  # Order doesn't matter
+        )  
 
     def test_is_answer_correct_multi_choice_incorrect(self, multi_choice_question):
-        assert multi_choice_question.is_answer_correct([0]) == False  # Partial correct
-        assert multi_choice_question.is_answer_correct([1, 3]) == False  # All wrong
+        assert multi_choice_question.is_answer_correct([0]) == False  
+        assert multi_choice_question.is_answer_correct([1, 3]) == False 
         assert (
             multi_choice_question.is_answer_correct([0, 1, 2]) == False
-        )  # Extra wrong
+        )  
 
     def test_question_has_id(self, sample_question):
         assert sample_question.id is not None
@@ -159,11 +158,9 @@ class TestQuizSession:
         assert len(quiz_session.all_generated_questions) == 0
 
     def test_get_current_question_empty_pool(self, quiz_session):
-        # No questions in pool yet
         assert quiz_session.get_current_question() is None
 
     def test_get_current_question_with_questions(self, quiz_session):
-        # Add a question and set it in the pool
         question = Question(
             topic="Algorithms",
             question_text="Test question",
@@ -201,16 +198,15 @@ class TestQuizSession:
             is_correct=False,
         )
 
-        quiz_session.active_question_pool = ["other-id"]  # Start with something
+        quiz_session.active_question_pool = ["other-id"]  
         quiz_session.add_answer(answer)
 
-        # Should add question to end for recycling
         assert "test-id" in quiz_session.active_question_pool
         assert quiz_session.incorrect_recycle_count["test-id"] == 1
 
     def test_add_answer_max_recycles_reached(self, quiz_session):
         quiz_session.max_incorrect_recycles = 2
-        quiz_session.incorrect_recycle_count["test-id"] = 2  # Already at max
+        quiz_session.incorrect_recycle_count["test-id"] = 2  
 
         answer = UserAnswer(
             question_id="test-id",
@@ -221,19 +217,18 @@ class TestQuizSession:
         initial_pool = quiz_session.active_question_pool.copy()
         quiz_session.add_answer(answer)
 
-        # Should NOT add question again
         assert quiz_session.active_question_pool == initial_pool
         assert quiz_session.incorrect_recycle_count["test-id"] == 2
 
     def test_is_completed_true(self, quiz_session):
         quiz_session.active_question_pool = ["q1", "q2"]
-        quiz_session.current_question_index = 2  # Past the end
+        quiz_session.current_question_index = 2  
 
         assert quiz_session.is_completed() == True
 
     def test_is_completed_false(self, quiz_session):
         quiz_session.active_question_pool = ["q1", "q2"]
-        quiz_session.current_question_index = 1  # Still has questions
+        quiz_session.current_question_index = 1  
 
         assert quiz_session.is_completed() == False
 
@@ -254,18 +249,17 @@ class TestQuizSession:
         quiz_session.all_generated_questions.extend([question1, question2])
         quiz_session.active_question_pool.extend([question1.id, question2.id])
 
-        # Should start at index 0, advance to 1
         next_q = quiz_session.get_next_question()
         assert quiz_session.current_question_index == 1
         assert next_q.id == question2.id
 
     def test_get_next_question_at_end(self, quiz_session):
         quiz_session.active_question_pool = ["q1"]
-        quiz_session.current_question_index = 1  # Already past end
+        quiz_session.current_question_index = 1 
 
         next_q = quiz_session.get_next_question()
         assert next_q is None
-        assert quiz_session.current_question_index == 1  # Stays the same
+        assert quiz_session.current_question_index == 1  
 
 
 class TestQuizResults:

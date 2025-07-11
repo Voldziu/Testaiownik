@@ -12,13 +12,10 @@ from components.topics_manager import render_topics_manager
 
 def main():
     """Main application flow"""
-    # Initialize user session
     init_user_id()
 
-    # Get current application phase
     phase = get_app_phase()
 
-    # Route to appropriate component based on phase
 
     if phase == "homepage":
         render_home_page()
@@ -30,8 +27,8 @@ def main():
         render_file_upload()
 
     elif phase == "indexing_setup":
-        render_file_upload()  # Same component handles indexing
-
+        render_file_upload() 
+        
     elif phase in ["topic_generation", "topic_management"]:
         render_topics_manager()
 

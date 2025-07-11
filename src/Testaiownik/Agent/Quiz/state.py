@@ -5,28 +5,22 @@ from RAG.Retrieval import DocumentRetriever
 
 
 class QuizState(TypedDict):
-    # PERSISTENT - serializable to database
     quiz_session: Optional[QuizSession]
-    session_snapshot: Optional[Dict[str, Any]]  # Full state backup for persistence
+    session_snapshot: Optional[Dict[str, Any]]  
 
-    # EPHEMERAL - only during execution
     current_question: Optional[Question]
-    user_input: Optional[str]  # User's answer to the current question
-    questions_to_generate: Optional[Dict[str, int]]  # topic -> remaining count
-    current_topic_batch: Optional[str]  # Currently generating topic
+    user_input: Optional[str]  
+    questions_to_generate: Optional[Dict[str, int]] 
+    current_topic_batch: Optional[str]  
 
-    # Results and completion
     quiz_results: Optional[QuizResults]
     quiz_complete: bool
 
-    # Navigation
     next_node: str
 
-    # Configuration (input from main graph)
     quiz_config: Optional[QuizConfiguration]
-    confirmed_topics: Optional[List[WeightedTopic]]  # From topic selection subgraph
+    confirmed_topics: Optional[List[WeightedTopic]] 
 
-    # Context for RAG integration
     retriever: Optional[DocumentRetriever]
 
 
@@ -56,23 +50,18 @@ def create_initial_quiz_state(
     )
 
     return QuizState(
-        # Persistent
-        quiz_session=None,  # Will be created in initialize_quiz node
+        quiz_session=None, 
         session_snapshot=None,
-        # Ephemeral
         current_question=None,
         user_input=None,
         questions_to_generate=None,
         current_topic_batch=None,
-        # Results
         quiz_results=None,
         quiz_complete=False,
-        # Navigation
         next_node="initialize_quiz",
-        # Configuration
         quiz_config=quiz_config,
         confirmed_topics=confirmed_topics,
-        retriever=None,  # Will be set in initialize_quiz node
+        retriever=None, 
     )
 
 
@@ -101,25 +90,20 @@ def restore_state_from_persistence(db_data: Dict[str, Any]) -> QuizState:
     snapshot = db_data.get("snapshot", {})
 
     return QuizState(
-        # Persistent
         quiz_session=quiz_session,
         session_snapshot=snapshot,
-        # Ephemeral - restore from snapshot
         current_question=quiz_session.get_current_question(),
         user_input=None,
         questions_to_generate=snapshot.get("questions_to_generate"),
         current_topic_batch=snapshot.get("current_topic_batch"),
-        # Results
         quiz_results=None,
         quiz_complete=snapshot.get("quiz_complete", False),
-        # Navigation
         next_node=(
             "present_question"
             if not snapshot.get("quiz_complete")
             else "finalize_results"
         ),
-        # Configuration
-        quiz_config=None,  # Not needed after initialization
+        quiz_config=None,  
         confirmed_topics=quiz_session.topics,
-        retriever=None,  # Will be set in initialize_quiz node
+        retriever=None,  
     )

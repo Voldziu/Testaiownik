@@ -1,4 +1,3 @@
-import time
 import streamlit as st
 from typing import List
 from components.quiz_manager import return_to_main_menu
@@ -47,7 +46,6 @@ def _render_upload_section():
         st.error("❌ Brak ID quizu. Wróć do tworzenia quizu.")
         return
 
-    # File uploader
     uploaded_files = st.file_uploader(
         "Wybierz pliki do uploadu",
         type=ALLOWED_FILE_TYPES,
@@ -58,12 +56,10 @@ def _render_upload_section():
     if uploaded_files:
         _display_selected_files(uploaded_files)
 
-        # Enable "Prześlij pliki" button only if files are uploaded
         if uploaded_files:
             if st.button("📤 Prześlij pliki", type="primary", use_container_width=True):
                 _upload_files(quiz_id, uploaded_files)
         else:
-            # Disable button if no files are uploaded
             st.button(
                 "📤 Prześlij pliki",
                 disabled=True,
@@ -71,7 +67,6 @@ def _render_upload_section():
                 use_container_width=True,
             )
 
-    # Show upload status if files were uploaded
 
     if is_files_uploaded():
         st.success("✅ Pliki zostały już przesłane!")
@@ -95,7 +90,6 @@ def _render_indexing_setup():
 
     quiz_id = get_quiz_id()
 
-    # Indexing explanation
     with st.expander("ℹ️ Co to jest indeksowanie?", expanded=False):
         st.markdown(
             """        
@@ -110,7 +104,6 @@ def _render_indexing_setup():
         """
         )
 
-    # Start indexing button
     col1, col2 = st.columns([2, 1])
     with col1:
         if st.button(
@@ -130,10 +123,8 @@ def _render_indexing_monitor():
 
     quiz_id = get_quiz_id()
 
-    # Show indexing status
     indexing_complete = render_indexing_status(quiz_id)
 
-    # Navigation buttons
     col1, col2 = st.columns([1, 1])
 
     with col1:
@@ -159,7 +150,7 @@ def _display_selected_files(files: List):
     total_size = 0
     with st.expander("📋 Lista plików", expanded=True):
         for i, file in enumerate(files, 1):
-            file_size = len(file.getvalue()) / 1024 / 1024  # Size in MB
+            file_size = len(file.getvalue()) / 1024 / 1024  
             total_size += file_size
 
             col1, col2 = st.columns([3, 1])
@@ -175,19 +166,15 @@ def _upload_files(quiz_id: str, files: List):
     """Handle file upload logic"""
     try:
         with st.spinner("Przesyłanie plików..."):
-            # Prepare files for upload
             files_data = [("files", (file.name, file)) for file in files]
 
-            # Upload via API
             api_client = get_api_client(get_user_id())
             result = api_client.upload_files(quiz_id, files_data)
 
-            # Update session state
             set_files_uploaded(True)
 
             st.success(f"✅ Pomyślnie przesłano {len(files)} plików!")
 
-            # Show upload summary
             if "uploaded_files" in result:
                 st.write("**Przesłane pliki:**")
                 for file_info in result["uploaded_files"]:

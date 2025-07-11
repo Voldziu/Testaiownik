@@ -54,10 +54,8 @@ def _display_indexing_stats(stats: dict) -> bool:
     indexed_documents = stats.get("indexed_documents", 0)
     indexing_progress = stats.get("indexing_progress", 0)
 
-    # Progress metrics
     st.subheader("📊 Statystyki indeksowania")
 
-    # Create metrics columns
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -79,24 +77,20 @@ def _display_indexing_stats(stats: dict) -> bool:
             ),
         )
 
-    # Progress bar
     progress_bar = st.progress(indexing_progress / 100)
 
-    # Status message
     if indexing_progress == 100:
         st.success("🎉 Indeksowanie zostało ukończone!")
         return True
     elif indexing_progress > 0:
         st.info(f"⏳ Indeksowanie w toku... {indexing_progress}%")
 
-        # Show estimated time if available
         if "estimated_time_remaining" in stats:
             estimated_time = stats["estimated_time_remaining"]
             st.write(f"⏱️ Szacowany czas pozostały: {estimated_time}")
     else:
         st.warning("⚠️ Indeksowanie nie zostało jeszcze rozpoczęte")
 
-    # Additional information
     if "processing_details" in stats:
         _display_processing_details(stats["processing_details"])
 
@@ -126,13 +120,10 @@ def render_quiz_summary(quiz_id: str):
     try:
         api_client = get_api_client(get_user_id())
 
-        # Get quiz info (you might need to add this endpoint)
-        # quiz_info = api_client.get_quiz_info(quiz_id)
 
         st.subheader("📋 Podsumowanie quizu")
         st.write(f"**Quiz ID:** {quiz_id}")
 
-        # Get indexing stats
         stats = api_client.get_indexing_stats(quiz_id)
 
         col1, col2 = st.columns(2)

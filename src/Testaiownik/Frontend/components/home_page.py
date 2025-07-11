@@ -2,17 +2,10 @@
 
 import streamlit as st
 from datetime import datetime
-
-from components.quiz_manager import restart_quiz
 from utils.session_manager import (
     reset_quiz_session,
-    set_files_uploaded,
     set_home_page_shown,
     get_user_id,
-    set_indexing_started,
-    set_questions_generated,
-    set_topics_confirmed,
-    set_topics_generated,
 )
 from services.api_client import get_api_client
 from typing import List, Dict, Any
@@ -23,16 +16,14 @@ def render_home_page():
     st.title("🏠 Strona Główna")
     st.subheader("Witaj w aplikacji TestAIownik!")
 
-    # Przycisk do generowania nowego quizu
     if st.button("🎯 Utwórz nowy quiz", use_container_width=True):
-        reset_quiz_session()  # Resetujemy sesję przed rozpoczęciem nowego quizu
+        reset_quiz_session()  
         set_home_page_shown()
         st.session_state["app_phase"] = (
-            "quiz_creation"  # Ustawiamy fazę aplikacji na quiz_creation
+            "quiz_creation"  
         )
         st.rerun()
 
-    # Automatyczne wyświetlanie listy quizów
     render_quiz_list()
 
 
@@ -41,7 +32,6 @@ def render_quiz_list():
     st.divider()
     st.subheader("📋 Moje testy")
 
-    # Load quizzes
     with st.spinner("Ładowanie twoich quizów..."):
         quizzes = load_user_quizzes()
 
@@ -51,7 +41,6 @@ def render_quiz_list():
 
     st.write(f"Znaleziono **{len(quizzes)}** quizów:")
 
-    # Display quizzes
     for quiz in quizzes:
         render_quiz_item(quiz)
 
@@ -75,17 +64,14 @@ def render_quiz_item(quiz: Dict[str, Any]):
     document_count = quiz.get("document_count", 0)
     topic_count = quiz.get("topic_count", 0)
 
-    # Extract quiz name from quiz_id (format: {name}_{uuid})
     quiz_name = "Quiz"
     if quiz_id and "_" in quiz_id:
         quiz_name = quiz_id.split("_")[0]
 
-    # Format creation date
     created_date = "Nieznana data"
     if created_at:
         try:
             if isinstance(created_at, str):
-                # Parse ISO format datetime
                 dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                 created_date = dt.strftime("%d.%m.%Y %H:%M")
             else:
@@ -93,7 +79,6 @@ def render_quiz_item(quiz: Dict[str, Any]):
         except:
             created_date = str(created_at)
 
-    # Updated status mapping with all statuses
     status_map = {
         "created": ("🆕", "Utworzony"),
         "documents_uploaded": ("📄", "Dokumenty przesłane"),
@@ -108,10 +93,8 @@ def render_quiz_item(quiz: Dict[str, Any]):
 
     status_icon, status_text = status_map.get(status, ("❓", status))
 
-    # Create expandable container for each quiz with quiz name
     with st.expander(f"{status_icon} {quiz_name} - {created_date}", expanded=False):
 
-        # Quiz details
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -125,8 +108,6 @@ def render_quiz_item(quiz: Dict[str, Any]):
 
         quiz_started = status in ["quiz_active", "quiz_completed"]
 
-        # Główny przycisk akcji - teraz na całą szerokość
-        # Determine button text and action based on status
         if status == "created":
             if st.button(
                 "📄 Prześlij dokumenty",
@@ -178,60 +159,45 @@ def render_quiz_item(quiz: Dict[str, Any]):
             ):
                 retry_quiz(quiz_id)
 
-        # Przycisk statystyk w osobnym rzędzie - szerszy i tylko dla rozpoczętych quizów
         if quiz_started:
-            st.markdown("---")  # Separator
+            st.markdown("---")  
 
-            # Klucz stanu dla statystyk tego quizu
             stats_state_key = f"stats_visible_{quiz_id}"
 
-            # Inicjalizujemy stan tylko jeśli nie istnieje
             if stats_state_key not in st.session_state:
                 st.session_state[stats_state_key] = False
 
-            # Pobieramy aktualny stan
             stats_visible = st.session_state[stats_state_key]
 
-            # Tekst przycisku na podstawie aktualnego stanu
             button_text = (
                 "📊 Ukryj statystyki" if stats_visible else "📊 Pokaż statystyki"
             )
 
-            # Przycisk do przełączania statystyk
             if st.button(
                 button_text, key=f"toggle_stats_{quiz_id}", use_container_width=True
             ):
-                # Przełączamy stan i od razu zapisujemy
                 st.session_state[stats_state_key] = not stats_visible
-                st.rerun()  # Wymuszamy odświeżenie żeby zobaczyć zmiany
+                st.rerun()  
 
-            # Pokazujemy statystyki na podstawie aktualnego stanu
             if st.session_state[stats_state_key]:
                 show_quiz_stats_inline(quiz_id)
 
 
-# Zmodyfikowana funkcja continue_quiz w home_page.py
 def continue_quiz(quiz_id: str, status: str):
     """Continue an existing quiz based on its current status"""
     try:
-        # Set quiz ID in session
         st.session_state["quiz_id"] = quiz_id
 
-        # Clear any existing quiz state
         if "quiz_state" in st.session_state:
             del st.session_state["quiz_state"]
 
-        # Import session manager function
         from utils.session_manager import set_session_flags_for_status
 
-        # Set appropriate session flags based on status
         set_session_flags_for_status(status)
 
-        # Clear any explicit app_phase to let normal flow take over
         if "app_phase" in st.session_state:
             del st.session_state["app_phase"]
 
-        # Success messages
         if status == "created":
             st.success(f"📄 Przechodzimy do przesyłania dokumentów...")
         elif status == "documents_uploaded":
@@ -257,10 +223,8 @@ def continue_quiz(quiz_id: str, status: str):
 def retry_quiz(quiz_id: str):
     """Retry a completed or failed quiz"""
     try:
-        # Set quiz ID in session
         st.session_state["quiz_id"] = quiz_id
 
-        # Set all session flags for completed quiz
         from utils.session_manager import (
             set_home_page_shown,
             set_files_uploaded,
@@ -277,15 +241,12 @@ def retry_quiz(quiz_id: str):
         set_topics_confirmed(True)
         set_questions_generated(True)
 
-        # Clear explicit app_phase to let normal flow work
         if "app_phase" in st.session_state:
             del st.session_state["app_phase"]
 
-        # Clear quiz state
         if "quiz_state" in st.session_state:
             del st.session_state["quiz_state"]
 
-        # Try to restart the quiz with soft reset
         api_client = get_api_client(get_user_id())
         response = api_client.restart_quiz(quiz_id, hard=False)
 
@@ -303,12 +264,10 @@ def retry_quiz(quiz_id: str):
 def configure_quiz(quiz_id: str):
     """Configure a created quiz (deprecated - use continue_quiz instead)"""
     try:
-        # Set quiz ID in session
         st.session_state["quiz_id"] = quiz_id
 
-        # Go to topic confirmation phase - FIXED to match session_manager.py and main.py
         st.session_state["app_phase"] = (
-            "topic_management"  # Changed from "topic_confirmation"
+            "topic_management"  
         )
 
         quiz_name = "Quiz"
@@ -327,13 +286,11 @@ def show_quiz_stats_inline(quiz_id: str):
     """Show quiz statistics inline within the quiz item"""
     try:
         api_client = get_api_client(get_user_id())
-        # Try to get quiz progress for statistics
         stats = api_client.get_quiz_progress(quiz_id)
 
         if stats and "progress" in stats:
             progress = stats["progress"]
 
-            # Stylizowany kontener na statystyki
             st.markdown(
                 f"""
             <div style="
@@ -353,7 +310,6 @@ def show_quiz_stats_inline(quiz_id: str):
                 unsafe_allow_html=True,
             )
 
-            # Basic stats w kartach
             col1, col2 = st.columns(2)
 
             with col1:
@@ -398,7 +354,6 @@ def show_quiz_stats_inline(quiz_id: str):
                     unsafe_allow_html=True,
                 )
 
-            # Performance metrics
             col1, col2 = st.columns(2)
 
             with col1:
@@ -442,7 +397,6 @@ def show_quiz_stats_inline(quiz_id: str):
                     unsafe_allow_html=True,
                 )
 
-            # Progress bar
             if progress.get("total_unique_questions", 0) > 0:
                 total_questions = progress.get("total_unique_questions", 0)
                 answered_questions = progress.get("unique_answered", 0)
@@ -468,13 +422,11 @@ def show_quiz_stats_inline(quiz_id: str):
 
 def show_quiz_stats(quiz_id: str):
     """Show quiz statistics in a modal-like container (deprecated - use show_quiz_stats_inline)"""
-    # Ta funkcja jest zachowana dla kompatybilności wstecznej
     show_quiz_stats_inline(quiz_id)
 
 
 def delete_quiz(quiz_id: str):
     """Delete a quiz with confirmation"""
-    # Show confirmation dialog
     st.warning(f"⚠️ Czy na pewno chcesz usunąć quiz {quiz_id[:8]}?")
     st.write("Ta operacja jest nieodwracalna!")
 
@@ -486,8 +438,6 @@ def delete_quiz(quiz_id: str):
         ):
             try:
                 api_client = get_api_client(get_user_id())
-                # Note: You'll need to implement delete_quiz method in your API client
-                # api_client.delete_quiz(quiz_id)
                 st.error(
                     "❌ Funkcja usuwania quizu nie jest jeszcze zaimplementowana w API."
                 )
@@ -499,4 +449,4 @@ def delete_quiz(quiz_id: str):
         if st.button(
             "❌ Anuluj", key=f"cancel_delete_{quiz_id}", use_container_width=True
         ):
-            st.rerun()  # Refresh to hide confirmation
+            st.rerun()  

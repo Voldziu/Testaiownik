@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 from src.Testaiownik.Backend.services.quiz_service import QuizService
 
 
@@ -10,35 +10,6 @@ class TestQuizService:
     def quiz_service(self):
         return QuizService()
 
-    # def test_start_topic_analysis_success(
-    #     self, quiz_service, mock_db_session, mock_quiz
-    # ):
-    #     """Test successful topic analysis start"""
-    #     quiz_id = "quiz_456"
-    #     user_id = "user_123"
-    #     desired_topic_count = 10
-
-    #     with patch(
-    #         "src.Testaiownik.Backend.services.quiz_service.get_quiz"
-    #     ) as mock_get_quiz:
-    #         with patch(
-    #             "src.Testaiownik.Backend.services.quiz_service.RAGRetriever"
-    #         ) as mock_rag:
-    #             with patch(
-    #                 "src.Testaiownik.Backend.services.quiz_service.create_agent_graph"
-    #             ) as mock_graph:
-    #                 mock_get_quiz.return_value = mock_quiz
-    #                 mock_retriever = Mock()
-    #                 mock_rag.return_value = mock_retriever
-    #                 mock_agent_graph = Mock()
-    #                 mock_graph.return_value = mock_agent_graph
-
-    #                 result = quiz_service.start_topic_analysis(
-    #                     quiz_id, user_id, mock_db_session, desired_topic_count
-    #                 )
-
-    #                 assert result["quiz_id"] == quiz_id
-    #                 assert result["status"] == "analyzing"
 
     def test_confirm_topics_success(self, quiz_service, mock_db_session, mock_quiz):
         """Test successful topic confirmation"""
@@ -138,19 +109,6 @@ class TestQuizService:
 
             assert result is None
 
-    # def test_get_quiz_preview_success(self, quiz_service, mock_db_session, mock_quiz):
-    #     """Test getting quiz preview"""
-    #     quiz_id = "quiz_456"
-
-    #     with patch(
-    #         "src.Testaiownik.Backend.services.quiz_service.get_quiz"
-    #     ) as mock_get_quiz:
-    #         mock_quiz.difficulty = "medium"
-    #         mock_get_quiz.return_value = mock_quiz
-
-    #         result = quiz_service.get_quiz_preview(quiz_id, mock_db_session)
-
-    #         assert len(result["topics"]) == 2
 
     def test_pause_quiz_success(self, quiz_service, mock_db_session):
         """Test pausing quiz"""

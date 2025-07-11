@@ -1,35 +1,27 @@
 # config/settings.py
 import os
 
-# Backend configuration
 BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
-# File upload settings
 ALLOWED_FILE_TYPES = ["pdf", "docx", "txt", "pptx"]
 MAX_FILE_SIZE_MB = 100
 
-# Quiz settings
 DEFAULT_TOPIC_RATIO = 10
 MIN_TOPIC_COUNT = 1
 ERROR_MAX_TOPICS = 50
 
-# Topic weight settings
 MIN_TOPIC_WEIGHT = 0.01
 MAX_TOPIC_WEIGHT = 1.0
 DEFAULT_TOPIC_WEIGHT = 0.1
 
-# questions settings
 MIN_QUESTIONS = 1
 DEFAULT_QUESTION_RATIO = 2
 ERROR_MAX_QUESTION = 50
-
-# timeouts
 
 BASIC_TIMEOUT = 1200
 SHORT_TIMEOUT = 30
 
 
-# API Headers template
 def get_api_headers(user_id: str) -> dict:
     """Generate standard API headers with user authentication"""
     return {
@@ -39,7 +31,6 @@ def get_api_headers(user_id: str) -> dict:
     }
 
 
-# Session state keys
 class SessionKeys:
     USER_ID = "user_id"
     QUIZ_ID = "quiz_id"

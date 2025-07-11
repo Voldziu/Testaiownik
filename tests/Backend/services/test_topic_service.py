@@ -26,9 +26,8 @@ class TestTopicService:
         ]
         result = topic_service.normalize_weights(topics)
 
-        # Should assign equal weights
         for topic in result:
-            assert abs(topic["weight"] - 0.33) < 0.1  # Approximately 1/3
+            assert abs(topic["weight"] - 0.33) < 0.1
 
     def test_normalize_weights_already_normalized(self, topic_service):
         """Test normalizing already normalized weights"""
@@ -38,7 +37,6 @@ class TestTopicService:
         ]
         result = topic_service.normalize_weights(topics)
 
-        # Should remain unchanged
         assert result[0]["weight"] == 0.4
         assert result[1]["weight"] == 0.6
 
@@ -50,7 +48,6 @@ class TestTopicService:
         ]
         result = topic_service.normalize_weights(topics)
 
-        # Should be normalized to sum to 1.0
         total_weight = sum(topic["weight"] for topic in result)
         assert abs(total_weight - 1.0) < 0.01
 
@@ -79,12 +76,12 @@ class TestTopicService:
 
                     assert result["success"] is True
                     assert result["added_topic"]["topic"] == topic_name
-                    assert result["total_topics"] == 3  # 2 existing + 1 new
+                    assert result["total_topics"] == 3  
 
     def test_add_topic_already_exists(self, topic_service, mock_db_session, mock_quiz):
         """Test adding topic that already exists"""
         quiz_id = "quiz_456"
-        topic_name = "Algorithms"  # Already exists in mock_quiz
+        topic_name = "Algorithms"  
         weight = 0.2
         user_id = "user_123"
 
@@ -139,7 +136,7 @@ class TestTopicService:
 
                     assert result["success"] is True
                     assert result["deleted_topic"] == topic_name
-                    assert result["remaining_topics"] == 1  # 2 - 1 = 1
+                    assert result["remaining_topics"] == 1  
 
     def test_delete_topic_not_found(self, topic_service, mock_db_session, mock_quiz):
         """Test deleting topic that doesn't exist"""
@@ -271,7 +268,7 @@ class TestTopicService:
     def test_validate_topics_invalid_format(self, topic_service):
         """Test topic validation with invalid format"""
         topics = [
-            {"name": "Topic1", "weight": 0.4},  # Missing 'topic' key
+            {"name": "Topic1", "weight": 0.4},  
             {"topic": "Topic2", "weight": 0.6},
         ]
 
@@ -281,7 +278,7 @@ class TestTopicService:
     def test_validate_topics_invalid_weights(self, topic_service):
         """Test topic validation with invalid weights"""
         topics = [
-            {"topic": "Topic1", "weight": -0.1},  # Negative weight
+            {"topic": "Topic1", "weight": -0.1},  
             {"topic": "Topic2", "weight": 0.6},
         ]
 
@@ -332,7 +329,7 @@ class TestTopicService:
         """Test importing topics with invalid data"""
         quiz_id = "quiz_456"
         user_id = "user_123"
-        topics_data = {"invalid": "data"}  # Missing suggested_topics
+        topics_data = {"invalid": "data"}  
 
         with pytest.raises(ValueError, match="Invalid topics data"):
             topic_service.import_topics(quiz_id, topics_data, user_id, mock_db_session)

@@ -1,7 +1,6 @@
-from typing import Dict, Any, List
+from typing import List
 import random
-from datetime import datetime
-from .state import QuizState, prepare_state_for_persistence
+from .state import QuizState
 from .models import (
     QuizSession,
     Question,
@@ -29,7 +28,6 @@ def initialize_quiz(state: QuizState) -> QuizState:
         f"Initializing quiz with {config.total_questions} questions, difficulty: {config.difficulty}"
     )
 
-    # Calculate questions per topic based on weights
     questions_per_topic = {}
     for topic in config.topics:
         count = max(1, round(config.total_questions * topic.weight))
@@ -40,13 +38,12 @@ def initialize_quiz(state: QuizState) -> QuizState:
         logger.info(f"Preserving existing session: {existing_session.session_id}")
         return {
             **state,
-            "quiz_session": existing_session,  # Keep the existing session
-            "questions_to_generate": {},  # Questions already exist
+            "quiz_session": existing_session,  
+            "questions_to_generate": {},  
             "current_topic_batch": None,
             "next_node": "load_or_generate_questions",
         }
 
-    # Create quiz session
     quiz_session = QuizSession(
         topics=config.topics,
         total_questions=config.total_questions,
@@ -79,7 +76,6 @@ def load_or_generate_questions(state: QuizState) -> QuizState:
         logger.info("Starting fresh question generation")
         return {**state, "next_node": "generate_all_questions"}
     elif session.quiz_mode in ["retry_same", "retry_failed"]:
-        # Check if questions already exist in the session
         logger.debug(f"Session: {session}")
         if (
             session.all_generated_questions
@@ -94,7 +90,6 @@ def load_or_generate_questions(state: QuizState) -> QuizState:
             )
             return {**state, "next_node": "present_question"}
         else:
-            # No existing questions found, generate new ones
             logger.info(
                 f"Quiz mode {session.quiz_mode} - no existing questions found, generating new ones"
             )
@@ -116,7 +111,6 @@ def generate_all_questions(
 
     logger.info("Starting complete question generation for all topics")
 
-    # 1. Process user-provided questions first
     user_questions = []
     if config and config.user_questions:
         logger.info(f"Processing {len(config.user_questions)} user-provided questions")
@@ -126,15 +120,12 @@ def generate_all_questions(
         session.all_generated_questions.extend(user_questions)
         logger.info(f"Added {len(user_questions)} user questions")
 
-    # 2. Generate LLM questions in batches for each topic
-    # Track questions per topic to prevent cross-batch duplicates
     topic_questions_tracker = {}
     all_generated = []
     for topic, count in questions_to_generate.items():
         logger.info(f"Generating {count} questions for topic: {topic}")
         topic_questions_tracker[topic] = []
 
-        # Generate in batches to avoid token limits
         remaining = count
         while remaining > 0:
             batch_size = min(session.batch_size, remaining)
@@ -146,10 +137,9 @@ def generate_all_questions(
                 retriever=retriever,
                 existing_questions=topic_questions_tracker[
                     topic
-                ].copy(),  # Pass existing questions to avoid duplicates
+                ].copy(),  
             )
 
-            # Update the tracker with newly generated questions
             topic_questions_tracker[topic].extend(
                 [q.question_text for q in batch_questions]
             )
@@ -160,16 +150,13 @@ def generate_all_questions(
                 f"Generated {batch_size} questions for {topic}, {remaining} remaining"
             )
 
-    # 3. Add all generated questions to session
     session.all_generated_questions.extend(all_generated)
 
-    # Reassign unique sequential IDs: q1, q2, q3, ...
     for idx, question in enumerate(session.all_generated_questions, start=1):
         question.id = f"q{idx}"
 
-    # 4. Create shuffled active question pool
     all_question_ids = [q.id for q in session.all_generated_questions]
-    random.shuffle(all_question_ids)  # Shuffle for better question distribution
+    random.shuffle(all_question_ids)  
     session.active_question_pool = all_question_ids
 
     logger.info(
@@ -183,7 +170,7 @@ def generate_all_questions(
     return {
         **state,
         "quiz_session": session,
-        "questions_to_generate": {},  # All done
+        "questions_to_generate": {},  
         "current_topic_batch": None,
         "next_node": "present_question",
     }
@@ -202,7 +189,6 @@ def present_question(state: QuizState) -> QuizState:
 
     session.status = "active"
 
-    # Format question for presentation
     question_text = _format_question_for_user(current_question)
 
     logger.info(
@@ -223,7 +209,7 @@ def process_answer(state: QuizState) -> QuizState:
 
     session = state["quiz_session"]
     current_question = state["current_question"]
-    user_input = state.get("user_input")  # Expecting list of ints
+    user_input = state.get("user_input")  
 
     if not session or not current_question:
         return {**state, "next_node": "present_question"}
@@ -232,7 +218,6 @@ def process_answer(state: QuizState) -> QuizState:
         logger.warning("No user input provided")
         return {**state, "next_node": "present_question"}
 
-    # Validate list of indices
     if not isinstance(user_input, list):
         logger.warning(f"User input not a list type")
         return {
@@ -249,7 +234,6 @@ def process_answer(state: QuizState) -> QuizState:
             raise ValueError(f"Index {index} out of range")
         selected_indices.append(index)
 
-    # Remove duplicates and sort
     selected_indices = sorted(list(set(selected_indices)))
 
     if not selected_indices:
@@ -260,10 +244,8 @@ def process_answer(state: QuizState) -> QuizState:
             "next_node": "present_question",
         }
 
-    # Check if answer is correct using Question's built-in method
     is_correct = current_question.is_answer_correct(selected_indices)
 
-    # Create answer record - simplified attempt number logic
     attempt_number = (
         len([a for a in session.user_answers if a.question_id == current_question.id])
         + 1
@@ -276,13 +258,10 @@ def process_answer(state: QuizState) -> QuizState:
         attempt_number=attempt_number,
     )
 
-    # Add answer and handle recycling (now adds multiple copies if incorrect)
     session.add_answer(answer)
 
-    # Prepare feedback
     feedback = _create_answer_feedback(current_question, selected_indices, is_correct)
 
-    # Move to next question
     session.get_next_question()
 
     logger.info(
@@ -319,7 +298,6 @@ def finalize_results(state: QuizState) -> QuizState:
     if not session:
         raise ValueError("Quiz session not initialized")
 
-    # Calculate results
     total_answered = len([a for a in session.user_answers if a.attempt_number == 1])
     correct_answers = len(
         [a for a in session.user_answers if a.is_correct and a.attempt_number == 1]
@@ -328,7 +306,6 @@ def finalize_results(state: QuizState) -> QuizState:
         (correct_answers / total_answered * 100) if total_answered > 0 else 0
     )
 
-    # Calculate per-topic scores
     topic_scores = {}
     for topic in session.topics:
         topic_questions = [
@@ -359,7 +336,6 @@ def finalize_results(state: QuizState) -> QuizState:
 
     session.status = "completed"
 
-    # Format results for user
     results_text = _format_quiz_results(quiz_results)
 
     logger.info(
@@ -376,10 +352,7 @@ def finalize_results(state: QuizState) -> QuizState:
     }
 
 
-# Helper functions
 
-
-# TODO: optimze calling llm (batch it)
 def _process_user_questions(
     user_questions: List[str],
     topics: List[WeightedTopic],
@@ -392,7 +365,6 @@ def _process_user_questions(
 
     logger.info(f"Processing {len(user_questions)} user questions")
 
-    # Use LLM with structured output to process user questions
     llm = get_llm().with_structured_output(UserQuestionResponse)
 
     processed_questions = []
@@ -432,30 +404,23 @@ Provide structured response."""
 
             response = llm.invoke(prompt)
 
-            # Create choices from structured response
             choices = []
 
-            # Add correct answers
             for correct_answer in response.correct_answers:
                 choices.append(QuestionChoice(text=correct_answer, is_correct=True))
 
-            # Add wrong options
             for wrong_option in response.wrong_options:
                 choices.append(QuestionChoice(text=wrong_option, is_correct=False))
 
-            # Ensure at least 2 choices
             if len(choices) < 2:
                 choices.append(QuestionChoice(text="False", is_correct=False))
 
-            # Search for relevant document context using the user's question
             source_metadata = None
             if retriever:
                 search_results = retriever.search_in_collection(
                     query=question_text, limit=1
-                )  # Search using user's question text
-
+                )  
                 if search_results:
-                    # Get metadata from the best matching document chunk
                     best_match = search_results[0].payload
 
                     source_metadata = SourceMetadata(
@@ -480,7 +445,6 @@ Provide structured response."""
 
         except Exception as e:
             logger.error(f"Failed to process user question '{question_text}': {e}")
-            # Create fallback question - also try to get source metadata
             fallback_source_metadata = None
             if retriever:
                 try:
@@ -527,7 +491,6 @@ def _generate_questions_for_topic(
     """Generate questions for a specific topic using LLM with RAG context"""
     llm = get_llm().with_structured_output(QuestionGeneration)
 
-    # Get relevant context using RAG search
     context_text = ""
     if retriever:
         search_results = retriever.search_in_collection(query=f"{topic}", limit=20)
@@ -549,7 +512,6 @@ def _generate_questions_for_topic(
             f"RAG not available, generating questions for {topic} without context"
         )
 
-    # Create blacklist section if we have existing questions
     created_questions_text = ""
     if existing_questions:
         created_questions_text = f"""
@@ -601,46 +563,36 @@ Output exactly {count} unique questions following above specifications."""
         questions = []
 
         for i, q in enumerate(result.questions):
-            # Ensure proper structure
             q.topic = topic
             q.difficulty = difficulty
 
-            # Initialize source metadata as None
             source_metadata = None
 
-            # Use search_in_collection with the question as query
             if retriever:
                 search_results = retriever.search_in_collection(
                     query=q.question_text, limit=1
-                )  # Search using question text and limit to 1 result
+                )  
 
                 if search_results:
-                    # The best match is the first result (since limit=1)
                     best_match = search_results[0].payload
 
-                    # Create source metadata object
                     source_metadata = SourceMetadata(
                         source=best_match.get("source", "Unknown source"),
                         page=best_match.get("page", None),
                         slide=best_match.get("slide", None),
                         chunk_text=best_match.get(
                             "text", None
-                        ),  # Store original chunk text
+                        ), 
                     )
 
-            # Assign the metadata to the question
             q.source_metadata = source_metadata
             logger.debug(f"Source metadata: {source_metadata}")
 
-            # Keep the original LLM explanation clean - no metadata concatenation
-            # q.explanation remains as generated by the LLM
 
             questions.append(q)
 
-        # Remove duplicates post-processing
         unique_questions = _remove_duplicate_questions(questions)
 
-        # If we lost questions due to duplicates, log it
         if len(unique_questions) < len(questions):
             logger.warning(
                 f"Removed {len(questions) - len(unique_questions)} duplicate questions"
@@ -665,12 +617,11 @@ def _remove_duplicate_questions(questions: List[Question]) -> List[Question]:
         is_duplicate = False
 
         for seen_q in seen_questions:
-            # Check question text similarity
             similarity = SequenceMatcher(
                 None, question.question_text.lower().strip(), seen_q.lower().strip()
             ).ratio()
 
-            if similarity > 0.7:  # 70% similarity threshold
+            if similarity > 0.7: 
                 is_duplicate = True
                 break
 
@@ -688,7 +639,6 @@ def _create_fallback_questions(
     questions = []
     for i in range(count):
         if i % 3 == 0:
-            # Simple choice (like True/False)
             question = Question(
                 topic=topic,
                 question_text=f"{topic} Fallback true/false",
@@ -701,7 +651,6 @@ def _create_fallback_questions(
                 is_multi_choice=False,
             )
         else:
-            # Multi-choice
             question = Question(
                 topic=topic,
                 question_text=f"{topic} Fallback multi-choice",
