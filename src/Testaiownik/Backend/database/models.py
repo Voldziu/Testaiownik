@@ -33,7 +33,7 @@ class Quiz(Base):
 
     __tablename__ = "quizzes"
 
-    quiz_id = Column(String(50), primary_key=True, index=True)
+    quiz_id = Column(String(100), primary_key=True, index=True)
     user_id = Column(String(50), ForeignKey("users.user_id"), index=True)
 
     # Status tracking - single status for entire quiz lifecycle
